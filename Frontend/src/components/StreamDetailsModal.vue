@@ -1,0 +1,390 @@
+<template>
+  <div class="modal-overlay" @click.self="$emit('close')">
+    <div class="modal-content">
+      <button class="modal-close" @click="$emit('close')" v-wave>
+        <font-awesome-icon icon="times" />
+      </button>
+      <div class="modal-header">
+        <h3>{{ stream.streamer_username }}</h3>
+        <div class="stream-tags">
+          <span class="tag platform">{{ stream.platform }}</span>
+          <span class="tag agent">
+            {{ (stream.assignments[0]?.agent?.username || 'Unassigned') }}
+          </span>
+          <span class="tag stream-id">ID: {{ stream.id }}</span>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="stream-player-container">
+          <VideoPlayer 
+            :key="videoPlayerKey"
+            :platform="stream.platform.toLowerCase()"
+            :streamer-name="stream.streamer_username"
+          />
+        </div>
+        <div v-if="detections.length > 0" class="detections-section">
+          <h4>Recent Detections</h4>
+          <div class="detections-grid">
+            <div 
+              v-for="(alert, index) in detections" 
+              :key="index"
+              class="detection-card"
+            >
+              <img :src="alert.image_url" alt="Detection" class="detection-image" />
+              <div class="detection-info">
+                <div class="detection-class">{{ alert.class }}</div>
+                <div class="detection-confidence">
+                  {{ (alert.confidence * 100).toFixed(1) }}% confidence
+                </div>
+                <div class="detection-time">{{ formatTime(alert.timestamp) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-if="refreshError" class="error-banner">
+          {{ refreshError }}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button 
+          @click="$emit('assign')" 
+          class="action-button" 
+          v-wave
+          :disabled="isRefreshing"
+        >
+          Assign Agent
+        </button>
+        <button 
+          @click="handleRefresh" 
+          class="action-button" 
+          v-wave
+          :disabled="isRefreshing"
+        >
+          <span v-if="isRefreshing">
+            <font-awesome-icon icon="spinner" spin />
+            Refreshing...
+          </span>
+          <span v-else>
+            Refresh Stream
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import VideoPlayer from './VideoPlayer.vue'
+import { ref } from 'vue'
+
+export default {
+  name: 'StreamDetailsModal',
+  components: {
+    VideoPlayer
+  },
+  props: {
+    stream: {
+      type: Object,
+      required: true
+    },
+    detections: {
+      type: Array,
+      default: () => []
+    },
+    isRefreshing: {
+      type: Boolean,
+      default: false
+    }
+  },
+  emits: ['close', 'assign', 'refresh'],
+  setup(props, { emit }) {
+    const refreshError = ref(null)
+    const videoPlayerKey = ref(Date.now())
+
+    const formatTime = (timestamp) => {
+      return new Date(timestamp).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    }
+
+    const handleRefresh = () => {
+      refreshError.value = null
+      videoPlayerKey.value = Date.now()
+      emit('refresh')
+    }
+
+    return {
+      formatTime,
+      handleRefresh,
+      refreshError,
+      videoPlayerKey
+    }
+  }
+}
+</script>
+
+<style scoped>
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn 0.3s ease;
+}
+
+.modal-content {
+  background-color: var(--input-bg);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 800px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  animation: slideUp 0.3s ease;
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: none;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 1.2rem;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+  padding: 8px;
+}
+
+.modal-close:hover {
+  opacity: 1;
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--input-border);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--text-color);
+}
+
+.stream-tags {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.tag {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.tag.platform {
+  background-color: rgba(0, 123, 255, 0.2);
+  color: var(--primary-color);
+}
+
+.tag.agent {
+  background-color: rgba(40, 167, 69, 0.2);
+  color: #28a745;
+}
+
+.tag.stream-id {
+  background-color: rgba(108, 117, 125, 0.2);
+  color: #6c757d;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.stream-player-container {
+  width: 100%;
+  height: 300px;
+  background-color: black;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.detections-section h4 {
+  margin: 20px 0 15px 0;
+  font-size: 1.2rem;
+  color: var(--text-color);
+}
+
+.detections-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 15px;
+}
+
+.detection-card {
+  background-color: var(--hover-bg);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+
+.detection-card:hover {
+  transform: translateY(-2px);
+}
+
+.detection-image {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  background-color: var(--input-bg);
+}
+
+.detection-info {
+  padding: 10px;
+}
+
+.detection-class {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 3px;
+  color: var(--text-color);
+}
+
+.detection-confidence {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  color: var(--text-secondary);
+}
+
+.detection-time {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  margin-top: 5px;
+  color: var(--text-secondary);
+}
+
+.modal-footer {
+  padding: 15px 20px;
+  border-top: 1px solid var(--input-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.action-button {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.action-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  background-color: var(--disabled-bg);
+}
+
+.error-banner {
+  background-color: #ffebee;
+  color: #b71c1c;
+  padding: 12px;
+  border-radius: 4px;
+  margin-top: 20px;
+  border: 1px solid #ffcdd2;
+  font-size: 0.9rem;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { 
+    transform: translateY(20px); 
+    opacity: 0; 
+  }
+  to { 
+    transform: translateY(0); 
+    opacity: 1; 
+  }
+}
+
+@keyframes spin {
+  from { 
+    transform: rotate(0deg); 
+  }
+  to { 
+    transform: rotate(360deg); 
+  }
+}
+
+@media (max-width: 576px) {
+  .modal-content {
+    max-height: 85vh;
+  }
+  
+  .stream-player-container {
+    height: 250px;
+  }
+  
+  .modal-footer {
+    flex-direction: column;
+  }
+  
+  .action-button {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .detections-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 400px) {
+  .modal-header h3 {
+    font-size: 1.2rem;
+  }
+  
+  .stream-tags {
+    gap: 6px;
+  }
+  
+  .tag {
+    font-size: 0.7rem;
+  }
+}
+</style>
