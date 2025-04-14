@@ -18,7 +18,7 @@
         <AgentDashboard v-else-if="userRole === 'agent'" key="agent" ref="dashboard" />
       </transition>
       
-      <button @click="logout" class="logout-button" ref="logoutButton">Logout</button>
+     
     </div>
   </div>
 </template>

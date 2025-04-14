@@ -59,6 +59,11 @@
           v-if="activeTab === 'messages'"
           :user="user"
         />
+        <NotificationsPage
+          v-if="activeTab === 'notifications'"
+          :user="user"
+        />
+
       </template>
     </main>
 
@@ -94,6 +99,14 @@
       @close="confirmationModal.show = false"
       @confirm="confirmAction"
     />
+    <SettingsModals 
+  :darkMode="isDarkTheme"
+  @notification="handleNotification" 
+  @update:keywords="fetchKeywords"
+  @update:objects="fetchObjects"
+  @update:telegramRecipients="fetchTelegramRecipients"
+  @modal-closed="handleModalClosed"
+/>
   </div>
 </template>
 
@@ -107,6 +120,7 @@ import { useModalActions } from '@/composables/useModalActions'
 import { useMessageData } from '@/composables/useMessageData'
 import anime from 'animejs/lib/anime.es.js'
 
+
 // Components
 import AdminSidebar from './AdminSidebar.vue'
 import DashboardTab from './DashboardTab.vue'
@@ -117,6 +131,8 @@ import StreamDetailsModal from './StreamDetailsModal.vue'
 import CreateStreamModal from './CreateStreamModal.vue'
 import CreateAgentModal from './CreateAgentModal.vue'
 import ConfirmationModal from './ConfirmationModal.vue'
+import SettingsModals from './SettingsModals.vue'
+import NotificationsPage from './NotificationsPage.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 export default {
@@ -131,7 +147,9 @@ export default {
     CreateStreamModal,
     CreateAgentModal,
     ConfirmationModal,
-    FontAwesomeIcon
+    SettingsModals,
+    FontAwesomeIcon,
+    NotificationsPage
   },
   setup() {
     const router = useRouter()

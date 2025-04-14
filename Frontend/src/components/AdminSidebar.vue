@@ -15,8 +15,6 @@
         v-for="(tab, index) in tabs" 
         :key="tab.id"
         class="nav-item-wrapper"
-        @mouseenter="handleMouseEnter(index)"
-        @mouseleave="handleMouseLeave(index)"
       >
         <button 
           :class="{ active: activeTab === tab.id }"
@@ -28,24 +26,12 @@
             <font-awesome-icon :icon="tab.icon" />
           </span>
           <span 
-            v-if="tab.id === 'notifications' && unreadCount > 0" 
-            class="notification-badge"
-          >
-            {{ unreadCount }}
-          </span>
-          <span 
             v-if="tab.id === 'messages' && messageUnreadCount > 0" 
             class="notification-badge"
           >
             {{ messageUnreadCount }}
           </span>
         </button>
-        <div class="hover-pill" :ref="el => { if (el) pillRefs[index] = el }">
-          <span class="pill-icon">
-            <font-awesome-icon :icon="tab.icon" />
-          </span>
-          <span class="pill-label">{{ tab.label }}</span>
-        </div>
       </div>
     </nav>
     
@@ -61,39 +47,33 @@
 
   <!-- Settings Popup -->
   <div class="settings-popup" v-if="showSettings" ref="settingsPopupRef">
-    <div class="user-info">
-      <div class="user-avatar">{{ userInitials }}</div>
-      <div class="user-details">
-        <div class="user-email">{{ user?.email || 'user@example.com' }}</div>
-        <div class="user-plan">
-          <span class="plan-name">{{ user?.plan?.name || 'Personal' }}</span>
-          <span class="plan-type">{{ user?.plan?.type || 'Free plan' }}</span>
-        </div>
-      </div>
-      <div class="user-check" v-if="user?.plan?.active">
-        <font-awesome-icon :icon="['fas', 'check']" />
-      </div>
-    </div>
     <div class="settings-menu">
-      <button class="settings-item" @click="goToSettings">
-        <span>Settings</span>
+      <div class="settings-section-title">Detection</div>
+      <button 
+        class="settings-item flag-item" 
+        @click="openAddKeywordModal"
+        ref="keywordButtonRef"
+      >
+        <span>Add Keyword</span>
+        <font-awesome-icon :icon="['fas', 'plus']" class="right-icon" />
       </button>
-      <button class="settings-item" @click="viewPlans">
-        <span>View all plans</span>
-        <span class="new-tag">New</span>
+      <button 
+        class="settings-item flag-item" 
+        @click="openAddObjectModal"
+        ref="objectButtonRef"
+      >
+        <span>Add Object Detection</span>
+        <font-awesome-icon :icon="['fas', 'plus']" class="right-icon" />
       </button>
-      <button class="settings-item" @click="changeLanguage">
-        <span>Language</span>
-        <span class="beta-tag">BETA</span>
-        <font-awesome-icon :icon="['fas', 'chevron-right']" class="right-icon" />
+      <button 
+        class="settings-item flag-item" 
+        @click="openAddTelegramModal"
+        ref="telegramButtonRef"
+      >
+        <span>Add Telegram Recipient</span>
+        <font-awesome-icon :icon="['fas', 'plus']" class="right-icon" />
       </button>
-      <button class="settings-item" @click="getHelp">
-        <span>Get help</span>
-      </button>
-      <button class="settings-item" @click="learnMore">
-        <span>Learn more</span>
-        <font-awesome-icon :icon="['fas', 'chevron-right']" class="right-icon" />
-      </button>
+     
       <button class="settings-item logout" @click="logout">
         <span>Log out</span>
       </button>
@@ -113,22 +93,43 @@
       <span class="nav-icon">
         <font-awesome-icon :icon="tab.icon" />
       </span>
-      <span v-if="tab.id === 'notifications' && unreadCount > 0" class="mobile-notification-badge">
-        {{ unreadCount }}
-      </span>
       <span v-if="tab.id === 'messages' && messageUnreadCount > 0" class="mobile-notification-badge">
         {{ messageUnreadCount }}
       </span>
     </button>
   </div>
+  
+  <!-- Toast Notification -->
+  <div class="toast-notification" v-if="showToast" :class="toastType" ref="toastRef">
+    <font-awesome-icon :icon="toastIcon" class="toast-icon" />
+    <span class="toast-message">{{ toastMessage }}</span>
+  </div>
+  
+  <!-- Modal Components -->
+  <SettingsModals
+    ref="modalsRef"
+    @notification="showToastNotification"
+    @update:keywords="fetchKeywords"
+    @update:objects="fetchObjects"
+    @update:telegramRecipients="fetchTelegramRecipients"
+    :isMobile="isMobile"
+  />
+  
+  <!-- Content Tabs -->
+  <div class="content-tabs" v-if="activeTab === 'streams'">
+    
+  </div>
+  
+  
 </template>
 
 <script>
-import { computed, ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import anime from 'animejs/lib/anime.es.js'
 import axios from 'axios'
+import SettingsModals from './SettingsModals.vue'
 import { 
   faTachometerAlt, 
   faVideo, 
@@ -137,7 +138,13 @@ import {
   faCog,
   faComments,
   faCheck,
-  faChevronRight
+  faChevronRight,
+  faPlus,
+  faExclamationCircle,
+  faCheckCircle,
+  faInfoCircle,
+  faEdit,
+  faTrash
 } from '@fortawesome/free-solid-svg-icons'
 
 library.add(
@@ -148,19 +155,25 @@ library.add(
   faCog,
   faComments,
   faCheck,
-  faChevronRight
+  faChevronRight,
+  faPlus,
+  faExclamationCircle,
+  faCheckCircle,
+  faInfoCircle,
+  faEdit,
+  faTrash
 )
 
 export default {
   name: 'AdminSidebar',
   components: {
-    FontAwesomeIcon
+    FontAwesomeIcon,
+    SettingsModals
   },
   props: {
     activeTab: String,
     user: Object,
     isOnline: Boolean,
-    notifications: Array,
     messages: Array,
     messageUnreadCount: {
       type: Number,
@@ -172,60 +185,37 @@ export default {
     const isMobile = ref(false)
     const windowWidth = ref(window.innerWidth)
     const navButtons = ref([])
-    const pillRefs = ref([])
     const mobileNavButtons = ref([])
     const sidebarRef = ref(null)
     const settingsToggleRef = ref(null)
     const settingsPopupRef = ref(null)
-    const animationInProgress = ref(false)
-    const activeAnimationIndex = ref(null)
     const showSettings = ref(false)
+    const modalsRef = ref(null)
+    const footerRef = ref(null)
+    const headerRef = ref(null)
+    
+  
+    
+    // New refs for modal buttons
+    const keywordButtonRef = ref(null)
+    const objectButtonRef = ref(null)
+    const telegramButtonRef = ref(null)
+    
+    // Toast notification
+    const toastRef = ref(null)
+    const showToast = ref(false)
+    const toastMessage = ref('')
+    const toastType = ref('success')
+    const toastTimeout = ref(null)
+    
+    // Data for settings
+    const chatKeywords = ref([])
+    const flaggedObjects = ref([])
+    const telegramRecipients = ref([])
 
     const checkMobile = () => {
       windowWidth.value = window.innerWidth
       isMobile.value = windowWidth.value <= 768
-    }
-
-    const handleMouseEnter = (index) => {
-      const pill = pillRefs.value[index]
-      if (!pill || (animationInProgress.value && activeAnimationIndex.value !== index)) return
-      
-      activeAnimationIndex.value = index
-      animationInProgress.value = true
-      
-      anime.remove(pill)
-      anime({
-        targets: pill,
-        width: ['70px', '200px'],
-        opacity: [0, 1],
-        easing: 'easeOutQuad',
-        duration: 300,
-        begin: () => {
-          pill.style.display = 'flex'
-        },
-        complete: () => {
-          animationInProgress.value = false
-        }
-      })
-    }
-
-    const handleMouseLeave = (index) => {
-      const pill = pillRefs.value[index]
-      if (!pill) return
-      
-      anime.remove(pill)
-      anime({
-        targets: pill,
-        width: ['200px', '70px'],
-        opacity: [1, 0],
-        easing: 'easeOutQuad',
-        duration: 200,
-        complete: () => {
-          pill.style.display = 'none'
-          animationInProgress.value = false
-          activeAnimationIndex.value = null
-        }
-      })
     }
 
     const changeTab = (tabId, event) => {
@@ -245,11 +235,33 @@ export default {
       showSettings.value = !showSettings.value
       
       if (showSettings.value) {
-        // Position the popup to align with gear icon
+        // Position the popup relative to the gear icon
         nextTick(() => {
           if (settingsToggleRef.value && settingsPopupRef.value) {
             const toggleRect = settingsToggleRef.value.getBoundingClientRect()
-            settingsPopupRef.value.style.bottom = `${window.innerHeight - toggleRect.top}px`
+            
+            if (isMobile.value) {
+              // For mobile, position above the bottom navigation
+              settingsPopupRef.value.style.bottom = '70px'
+              settingsPopupRef.value.style.left = '16px'
+              settingsPopupRef.value.style.right = '16px'
+            } else {
+              const sidebarRect = sidebarRef.value.getBoundingClientRect()
+              
+              // Position to the right of the sidebar
+              settingsPopupRef.value.style.left = `${sidebarRect.width + 10}px`
+              // Align with gear icon vertically
+              settingsPopupRef.value.style.bottom = `${window.innerHeight - toggleRect.bottom}px`
+            }
+            
+            // Animate popup entrance
+            anime({
+              targets: settingsPopupRef.value,
+              translateX: ['-20px', '0px'],
+              opacity: [0, 1],
+              duration: 300,
+              easing: 'easeOutCubic'
+            })
           }
         })
         
@@ -260,6 +272,23 @@ export default {
           easing: 'easeInOutQuad'
         })
       } else {
+        // Animate popup exit
+        if (settingsPopupRef.value) {
+          anime({
+            targets: settingsPopupRef.value,
+            translateX: ['0px', '-20px'],
+            opacity: [1, 0],
+            duration: 250,
+            easing: 'easeInQuad',
+            complete: () => {
+              // Reset styles after animation completes
+              if (settingsPopupRef.value) {
+                settingsPopupRef.value.style.transform = ''
+              }
+            }
+          })
+        }
+        
         anime({
           targets: settingsToggleRef.value,
           rotate: '-=90',
@@ -268,131 +297,239 @@ export default {
         })
       }
     }
-    
-    const closeSettingsOnOutsideClick = (event) => {
-      if (showSettings.value && 
-          settingsPopupRef.value && 
-          !settingsPopupRef.value.contains(event.target) &&
-          settingsToggleRef.value && 
-          !settingsToggleRef.value.contains(event.target)) {
-        showSettings.value = false
-      }
-    }
-    
-    const goToSettings = () => {
-      emit('settings', 'general')
-      showSettings.value = false
-    }
-    
-    const viewPlans = () => {
-      emit('settings', 'plans')
-      showSettings.value = false
-    }
-    
-    const changeLanguage = () => {
-      emit('settings', 'language')
-      showSettings.value = false
-    }
-    
-    const getHelp = () => {
-      emit('settings', 'help')
-      showSettings.value = false
-    }
-    
-    const learnMore = () => {
-      emit('settings', 'learn')
-      showSettings.value = false
-    }
-    
-    const logout = async (callApi = true) => {
-      if (callApi) {
-        try {
-          await axios.post('/api/logout')
-        } catch (error) {
-          console.error('Logout failed:', error)
-        }
-      }
-      emit('logout')
-      showSettings.value = false
-    }
 
-    onMounted(() => {
-      checkMobile()
-      window.addEventListener('resize', checkMobile)
-      document.addEventListener('click', closeSettingsOnOutsideClick)
+    // Update the logout function to redirect to login page
+    const logout = async (callApi = true) => {
+      // First close the settings popup with animation
+      if (showSettings.value) {
+        anime({
+          targets: settingsPopupRef.value,
+          translateX: ['0px', '-20px'],
+          opacity: [1, 0],
+          duration: 250,
+          easing: 'easeInQuad'
+        })
+        
+        anime({
+          targets: settingsToggleRef.value,
+          rotate: '-=90',
+          duration: 400,
+          easing: 'easeInOutQuad'
+        })
+      }
       
-      // Initialize pills to be hidden
-      pillRefs.value.forEach(pill => {
-        if (pill) {
-          pill.style.opacity = 0
-          pill.style.display = 'none'
-          pill.style.width = '70px'
+      // Create an exit animation for the sidebar elements
+      const tl = anime.timeline({
+        easing: 'easeInOutSine',
+        duration: 300
+      })
+      
+      // Animate out the header, nav items, and footer
+      tl.add({
+        targets: [headerRef.value, footerRef.value],
+        opacity: [1, 0],
+        translateY: [0, -10],
+        duration: 200
+      })
+      .add({
+        targets: navButtons.value,
+        opacity: [1, 0],
+        translateX: [0, -20],
+        delay: anime.stagger(50),
+        duration: 200
+      }, '-=100')
+      
+      // After animations, perform actual logout
+      setTimeout(async () => {
+        if (callApi) {
+          try {
+            await axios.post('/api/logout')
+          } catch (error) {
+            console.error('Logout failed:', error)
+          }
+        }
+        
+        // Reset state and redirect to login
+        emit('logout')
+        showSettings.value = false
+      }, 500)
+    }
+    
+    // Toast notification functions
+    const showToastNotification = (message, type = 'success') => {
+      if (toastTimeout.value) {
+        clearTimeout(toastTimeout.value)
+      }
+      
+      toastMessage.value = message
+      toastType.value = type
+      showToast.value = true
+      
+      nextTick(() => {
+        if (toastRef.value) {
+          anime.remove(toastRef.value)
+          anime({
+            targets: toastRef.value,
+            translateY: ['100%', '0%'],
+            opacity: [0, 1],
+            duration: 500,
+            easing: 'easeOutElastic(1, .6)'
+          })
         }
       })
-    })
+
+      toastTimeout.value = setTimeout(() => {
+        if (toastRef.value) {
+          anime({
+            targets: toastRef.value,
+            translateY: ['0%', '100%'],
+            opacity: [1, 0],
+            duration: 300,
+            easing: 'easeInBack',
+            complete: () => {
+              showToast.value = false
+            }
+          })
+        }
+      }, 3000)
+    }
+
+    // Modal functions - modified to keep settings popup visible
+    const openAddKeywordModal = () => {
+      modalsRef.value?.openKeywordModal(keywordButtonRef.value)
+    }
     
-    onUnmounted(() => {
-      window.removeEventListener('resize', checkMobile)
-      document.removeEventListener('click', closeSettingsOnOutsideClick)
-    })
+    const openAddObjectModal = () => {
+      modalsRef.value?.openObjectModal(objectButtonRef.value)
+    }
+    
+    const openAddTelegramModal = () => {
+      modalsRef.value?.openTelegramModal(telegramButtonRef.value)
+    }
+    
+    // Stream and Agent CRUD operations
+    const createStream = () => {
+      showToastNotification('Create Stream Modal Open', 'info')
+    }
+    
+    const editStream = (stream) => {
+      showToastNotification(`Editing stream: ${stream.streamer_username}`, 'info')
+    }
+    
+    const deleteStream = (stream) => {
+      showToastNotification(`Deleting stream: ${stream.streamer_username}`, 'error')
+    }
+    
+    const createAgent = () => {
+      showToastNotification('Create Agent Modal Open', 'info')
+    }
+    
+    const editAgent = (agent) => {
+      showToastNotification(`Editing agent: ${agent.username}`, 'info')
+    }
+    
+    const deleteAgent = (agent) => {
+      showToastNotification(`Deleting agent: ${agent.username}`, 'error')
+    }
+    
+    const fetchKeywords = async () => {
+      try {
+        const response = await axios.get('/api/keywords')
+        chatKeywords.value = response.data
+      } catch (error) {
+        console.error('Error fetching keywords:', error)
+      }
+    }
+    
+    const fetchObjects = async () => {
+      try {
+        const response = await axios.get('/api/objects')
+        flaggedObjects.value = response.data
+      } catch (error) {
+        console.error('Error fetching objects:', error)
+      }
+    }
+    
+    const fetchTelegramRecipients = async () => {
+      try {
+        const response = await axios.get('/api/telegram_recipients')
+        telegramRecipients.value = response.data
+      } catch (error) {
+        console.error('Error fetching telegram recipients:', error)
+      }
+    }
 
     const tabs = [
       { id: 'dashboard', label: 'Dashboard', icon: ['fas', 'tachometer-alt'] },
       { id: 'streams', label: 'Streams', icon: ['fas', 'video'] },
       { id: 'agents', label: 'Agents', icon: ['fas', 'users'] },
-      { id: 'messages', label: 'Messages', icon: ['fas', 'comments'] },
-      { id: 'notifications', label: 'Notifications', icon: ['fas', 'bell'] }
+      { id: 'messages', label: 'Messages', icon: ['fas', 'comments'] }
     ]
     
-    const unreadCount = computed(() => {
-      return props.notifications?.filter(n => !n.read).length || 0
+    onMounted(() => {
+      checkMobile()
+      window.addEventListener('resize', checkMobile)
+      fetchKeywords()
+      fetchObjects()
+      fetchTelegramRecipients()
     })
     
-    const userInitials = computed(() => {
-      if (!props.user || !props.user.name) return 'KM'
-      
-      const names = props.user.name.split(' ')
-      if (names.length >= 2) {
-        return (names[0][0] + names[1][0]).toUpperCase()
-      }
-      return names[0].substring(0, 2).toUpperCase()
+    onUnmounted(() => {
+      window.removeEventListener('resize', checkMobile)
     })
     
-    watch(() => showSettings.value, (newValue) => {
-      if (newValue) {
-        anime({
-          targets: settingsPopupRef.value,
-          opacity: [0, 1],
-          translateY: ['-10px', '0px'],
-          duration: 200,
-          easing: 'easeOutQuad'
-        })
+    // Animation for toast icon based on type
+    const toastIcon = computed(() => {
+      switch (toastType.value) {
+        case 'error': return ['fas', 'exclamation-circle']
+        case 'success': return ['fas', 'check-circle']
+        default: return ['fas', 'info-circle']
       }
     })
     
     return {
-      tabs,
-      unreadCount,
-      toggleSettings,
       isMobile,
-      windowWidth,
-      changeTab,
+      tabs,
       navButtons,
       mobileNavButtons,
       sidebarRef,
       settingsToggleRef,
-      handleMouseEnter,
-      handleMouseLeave,
-      pillRefs,
-      showSettings,
       settingsPopupRef,
-      userInitials,
-      goToSettings,
-      viewPlans,
-      changeLanguage,
-      getHelp,
-      learnMore,
-      logout
+      showSettings,
+      changeTab,
+      toggleSettings,
+      logout,
+      
+      // Modal controls
+      openAddKeywordModal,
+      openAddObjectModal,
+      openAddTelegramModal,
+      modalsRef,
+      
+      // New refs for modal buttons
+      keywordButtonRef,
+      objectButtonRef,
+      telegramButtonRef,
+      
+      // Toast notification
+      showToast,
+      toastMessage,
+      toastType,
+      toastRef,
+      showToastNotification,
+      toastIcon,
+      
+      // Footer ref
+      footerRef,
+      headerRef,
+      
+      // Streams and Agents
+       createStream,
+      editStream,
+      deleteStream,
+      createAgent,
+      editAgent,
+      deleteAgent
     }
   }
 }
@@ -400,56 +537,80 @@ export default {
 
 <style scoped>
 .sidebar {
-  width: 70px;
-  height: 100vh;
-  background-color: var(--hover-bg);
-  border-right: 1px solid var(--input-border);
-  display: flex;
-  flex-direction: column;
   position: fixed;
   left: 0;
   top: 0;
-  z-index: 1100;
+  bottom: 0;
+  width: 72px;
+  background-color: var(--bg-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  transition: width 0.3s ease;
   overflow: hidden;
+  border-right: 1px solid var(--input-border);
 }
 
 .sidebar-header {
-  padding: 25px 0;
+  width: 100%;
+  height: 80px;
   display: flex;
   justify-content: center;
+  align-items: center;
+  padding: 16px 0;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .logo img {
-  width: 40px;
-  height: 40px;
+  width: 100%;
+  height: auto;
   object-fit: contain;
 }
 
 .sidebar-nav {
   flex: 1;
-  padding: 15px 0;
-  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: 20px 0;
 }
 
 .nav-item-wrapper {
   position: relative;
-  margin: 5px 0;
-  overflow: visible;
-  height: 50px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
 }
 
 .nav-button {
-  width: 100%;
-  height: 50px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   background: transparent;
   border: none;
-  color: var(--text-color);
   cursor: pointer;
   position: relative;
+  color: var(--text-color);
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.nav-button:hover {
+  background-color: var(--hover-bg);
 }
 
 .nav-button.active {
@@ -457,215 +618,230 @@ export default {
   color: white;
 }
 
-.nav-button.active .nav-icon {
-  color: white;
-}
-
 .nav-icon {
-  font-size: 20px;
-}
-
-.hover-pill {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 50px;
-  width: 70px;
-  background-color: var(--primary-color);
-  color: white;
-  border-radius: 0 25px 25px 0;
-  font-size: 0.9rem;
-  white-space: nowrap;
-  opacity: 0;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  pointer-events: none;
-  z-index: 1101;
-  display: none;
-  align-items: center;
-  overflow: hidden;
-}
-
-.pill-icon {
-  width: 70px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 20px;
-}
-
-.pill-label {
-  padding-right: 20px;
-  font-weight: 500;
+  font-size: 1.2rem;
 }
 
 .notification-badge {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  background-color: #dc3545;
+  top: 5px;
+  right: 2px;
+  background-color: var(--notification-bg);
   color: white;
   border-radius: 50%;
   width: 18px;
   height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   font-size: 0.7rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   font-weight: bold;
-  z-index: 1102;
 }
 
 .sidebar-footer {
-  padding: 15px 0;
+  width: 100%;
+  height: 80px;
   display: flex;
-  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 15px;
-  margin-bottom: 10px;
+  padding: 20px 0;
+  position: relative;
+}
+
+.status-indicator {
+  position: absolute;
+  left: 16px;
+  display: flex;
+  align-items: center;
 }
 
 .status-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background-color: #6c757d;
+  background-color: #8e8e8e;
+  transition: background-color 0.3s;
 }
 
 .status-dot.online {
-  background-color: #28a745;
+  background-color: #4caf50;
 }
 
 .settings-toggle {
-  background: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: transparent;
   border: none;
   color: var(--text-color);
+  display: flex;
+  justify-content: center;
+  align-items: center;
   cursor: pointer;
-  font-size: 1.2rem;
-  padding: 8px;
-  border-radius: 50%;
   transition: background-color 0.2s;
 }
 
 .settings-toggle:hover {
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: var(--hover-bg);
 }
 
-/* Settings Popup Styles */
+/* Settings Popup */
 .settings-popup {
-  position: fixed;
-  left: 70px;
-  width: 280px;
-  background-color: var(--bg-color, #ffffff);
-  border-radius: 8px;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
-  z-index: 1200;
+  position: absolute;
+  right: 16px;
+  background-color: var(--bg-color);
+  border: 1px solid var(--input-border);
+  border-radius: 12px;
+  width: 320px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  z-index: 1100;
   overflow: hidden;
-  opacity: 1;
-  transform: translateY(0);
-  display: flex;
-  flex-direction: column;
-}
-
-.user-info {
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--input-border, #e0e0e0);
-}
-
-.user-avatar {
-  width: 36px;
-  height: 36px;
-  background-color: #333;
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  margin-right: 12px;
-  font-size: 0.9rem;
-}
-
-.user-details {
-  flex: 1;
-}
-
-.user-email {
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--text-color, #333);
-  margin-bottom: 2px;
-}
-
-.user-plan {
-  display: flex;
-  flex-direction: column;
-}
-
-.plan-name {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-color, #333);
-}
-
-.plan-type {
-  font-size: 0.8rem;
-  color: var(--text-secondary, #666);
-}
-
-.user-check {
-  color: #0088ff;
-  font-size: 1.2rem;
-  margin-left: 8px;
 }
 
 .settings-menu {
-  display: flex;
-  flex-direction: column;
+  padding: 8px 0;
 }
 
 .settings-item {
-  padding: 14px 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  background: none;
-  border: none;
+  padding: 12px 16px;
+  width: 100%;
   text-align: left;
-  font-size: 0.9rem;
-  color: var(--text-color, #333);
+  background: transparent;
+  border: none;
   cursor: pointer;
+  color: var(--text-color);
+  font-size: 0.9rem;
+  position: relative;
   transition: background-color 0.2s;
 }
 
 .settings-item:hover {
-  background-color: var(--hover-bg, #f5f5f5);
+  background-color: var(--hover-bg);
 }
 
-.settings-item.logout {
-  border-top: 1px solid var(--input-border, #e0e0e0);
-  margin-top: 4px;
-}
-
-.new-tag {
+.settings-section-title {
+  padding: 16px 16px 8px;
   font-size: 0.75rem;
-  color: #0088ff;
-  font-weight: 500;
-}
-
-.beta-tag {
-  font-size: 0.7rem;
-  background-color: rgba(0, 0, 0, 0.1);
-  color: var(--text-secondary, #666);
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-left: 8px;
+  font-weight: 600;
+  color: #8e8e8e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .right-icon {
+  margin-left: auto;
   font-size: 0.8rem;
-  color: var(--text-secondary, #666);
+  opacity: 0.6;
+}
+
+.flag-item {
+  display: flex;
+  justify-content: space-between;
+}
+
+.settings-item.logout {
+  border-top: 1px solid var(--input-border);
+  margin-top: 8px;
+  color: #f44336;
+}
+
+/* Mobile Bottom Navigation */
+.mobile-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background-color: var(--bg-color);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  border-top: 1px solid var(--input-border);
+  z-index: 1000;
+}
+
+.mobile-nav-button {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  position: relative;
+  cursor: pointer;
+}
+
+.mobile-nav-button.active {
+  color: var(--primary-color);
+}
+
+.mobile-notification-badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background-color: var(--notification-bg);
+  color: white;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 0.7rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+}
+
+/* Toast Notification */
+.toast-notification {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  border-radius: 8px;
+  background-color: #4caf50;
+  color: white;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 2000;
+  min-width: 280px;
+  max-width: 400px;
+}
+
+.toast-notification.error {
+  background-color: #f44336;
+}
+
+.toast-notification.info {
+  background-color: #2196f3;
+}
+
+.toast-icon {
+  margin-right: 12px;
+  font-size: 1.2rem;
+}
+
+.toast-message {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* Content Tabs */
+.content-tabs {
+  margin-left: 72px;
+  padding: 20px;
+  animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @media (max-width: 768px) {
@@ -673,76 +849,26 @@ export default {
     display: none;
   }
   
+  .content-tabs {
+    margin-left: 0;
+    padding: 16px;
+    padding-bottom: 70px;
+  }
+  
   .settings-popup {
-    left: 16px;
-  }
-  
-  .mobile-nav {
-    display: flex;
     position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 65px;
-    background-color: var(--hover-bg);
-    border-top: 1px solid var(--input-border);
-    justify-content: space-around;
-    align-items: center;
+    bottom: 70px;
+    left: 16px;
+    right: 16px;
+    width: auto;
   }
   
-  .mobile-nav-button {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    background: transparent;
-    border: none;
-    color: var(--text-color);
-    height: 65px;
-    width: 100%;
-    position: relative;
+  .toast-notification {
+    left: 16px;
+    right: 16px;
+    width: calc(100% - 32px);
+    transform: none;
+    bottom: 70px;
   }
-  
-  .mobile-nav-button.active {
-    color: var(--primary-color);
-  }
-  
-  .mobile-notification-badge {
-    position: absolute;
-    top: 8px;
-    right: calc(50% - 15px);
-    background-color: #dc3545;
-    color: white;
-    border-radius: 50%;
-    width: 20px;
-    height: 20px;
-    font-size: 0.75rem;
-  }
-}
-
-:root[data-theme="dark"] .sidebar,
-:root[data-theme="dark"] .mobile-nav {
-  background-color: #1e1e2d;
-}
-
-:root[data-theme="light"] .sidebar,
-:root[data-theme="light"] .mobile-nav {
-  background-color: #ffffff;
-}
-
-:root[data-theme="dark"] .settings-popup {
-  background-color: #1e1e2d;
-  border: 1px solid #2d2d3f;
-}
-
-:root[data-theme="dark"] .settings-item:hover {
-  background-color: #2d2d3f;
-}
-
-:root[data-theme="dark"] .user-info {
-  border-bottom-color: #2d2d3f;
-}
-
-:root[data-theme="dark"] .settings-item.logout {
-  border-top-color: #2d2d3f;
 }
 </style>
