@@ -17,7 +17,7 @@ load_dotenv()
 app = create_app()
 
 # Configure CORS from environment variables
-allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8080').split(',')
+allowed_origins = os.getenv('ALLOWED_ORIGINS', '*').split(',')
 CORS(app, supports_credentials=True, origins=allowed_origins)
 
 # Configure logging

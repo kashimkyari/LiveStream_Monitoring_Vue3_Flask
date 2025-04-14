@@ -747,11 +747,7 @@ def scrape_stripchat_data(url, progress_callback=None):
         except Exception as e:
             # Save debug information in case of an error
             timestamp = int(time.time())
-            try:
-                driver.save_screenshot(f"stripchat_error_{timestamp}.png")
-            except Exception as ss_err:
-                logging.error(f"Failed to save screenshot: {ss_err}")
-            page_source = driver.page_source
+            
             
 
         finally:

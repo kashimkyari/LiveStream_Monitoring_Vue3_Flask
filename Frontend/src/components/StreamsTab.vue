@@ -29,7 +29,7 @@
               </td>
               
               <td>
-                {{ stream.assignments.length > 0 ? stream.assignments[0].agent.username : 'Unassigned' }}
+                {{ getAssignedAgentUsername(stream) }}
               </td>
               <td>
                 <span class="status-badge" :class="{ active: stream.is_live }">
@@ -59,7 +59,19 @@ export default {
     streams: Array,
     agents: Array
   },
-  emits: ['create', 'edit', 'delete']
+  emits: ['create', 'edit', 'delete'],
+  methods: {
+    getAssignedAgentUsername(stream) {
+      // Safely check if stream.assignments exists, has at least one element, and that element has an agent with username
+      if (stream.assignments && 
+          stream.assignments.length > 0 && 
+          stream.assignments[0].agent && 
+          stream.assignments[0].agent.username) {
+        return stream.assignments[0].agent.username;
+      }
+      return 'Unassigned';
+    }
+  }
 }
 </script>
 
