@@ -16,7 +16,6 @@
             <tr>
               <th>Username</th>
               <th>Assigned Streams</th>
-              <th class="text-center">Status</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -29,11 +28,6 @@
                 </div>
               </td>
               <td>{{ agent.assignments?.length || 0 }}</td>
-              <td class="text-center">
-                <span class="status-badge" :class="agent.online ? 'active' : 'inactive'">
-                  {{ agent.online ? 'Online' : 'Offline' }}
-                </span>
-              </td>
               <td class="actions">
                 <button @click.stop="$emit('edit', agent)" class="icon-button edit" title="Edit Agent" v-wave>
                   <font-awesome-icon icon="edit" />
