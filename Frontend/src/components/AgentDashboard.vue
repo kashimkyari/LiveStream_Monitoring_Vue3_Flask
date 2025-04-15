@@ -279,139 +279,88 @@ export default {
       }
     }
     
-    // Fetch keywords from API
-    const fetchKeywords = async () => {
-      try {
-        const response = await axios.get('/api/keywords')
-        chatKeywords.value = response.data
-      } catch (error) {
-        console.error('Error fetching keywords:', error)
-        errors.value.keywords = 'Failed to fetch keywords'
-      }
-    }
+    // Fetch keywords from API - updated to use real endpoint
+   // Update these functions to use the correct endpoints
+const fetchKeywords = async () => {
+  try {
+    const response = await axios.get('/api/agent/keywords')
+    chatKeywords.value = response.data
+  } catch (error) {
+    console.error('Error fetching keywords:', error)
+    errors.value.keywords = 'Failed to fetch keywords'
+    chatKeywords.value = []
+  }
+}
+
+const fetchObjects = async () => {
+  try {
+    const response = await axios.get('/api/agent/objects')
+    flaggedObjects.value = response.data
+  } catch (error) {
+    console.error('Error fetching objects:', error)
+    errors.value.objects = 'Failed to fetch objects'
+    flaggedObjects.value = []
+  }
+}
+
+const fetchTelegramRecipients = async () => {
+  try {
+    const response = await axios.get('/api/agent/telegram_recipients')
+    telegramRecipients.value = response.data
+  } catch (error) {
+    console.error('Error fetching telegram recipients:', error)
+    errors.value.telegram = 'Failed to fetch recipients'
+    telegramRecipients.value = []
+  }
+}
+
+const fetchRecentLogs = async () => {
+  try {
+    const response = await axios.get('/api/agent/logs')
     
-    // Fetch detection objects from API
-    const fetchObjects = async () => {
-      try {
-        const response = await axios.get('/api/objects')
-        flaggedObjects.value = response.data
-      } catch (error) {
-        console.error('Error fetching objects:', error)
-        errors.value.objects = 'Failed to fetch flagged objects'
-      }
-    }
+    recentAlerts.value = response.data.map(log => {
+      // existing code
+    }).slice(0, 5)
+  } catch (error) {
+    console.error('Error fetching recent logs:', error)
+    errors.value.logs = 'Failed to fetch recent alerts'
+    recentAlerts.value = []
+  }
+}
+    // Fetch active streams - we need to create this endpoint
+   const fetchActiveStreams = async () => {
+  try {
+    const response = await axios.get('/api/agent/dashboard')
+    activeStreams.value = response.data.assignments
+      .filter(a => a.stream) // Ensure stream exists
+      .map(assignment => ({
+        ...assignment.stream,
+        isLive: true, // Assume streams are live
+        assigned_agent: 'You' // Since these are agent's own assignments
+      }))
+  } catch (error) {
+    console.error('Error fetching active streams:', error)
+    errors.value.streams = 'Failed to fetch active streams'
+    activeStreams.value = []
+  }
+}
     
-    // Fetch telegram recipients from API
-    const fetchTelegramRecipients = async () => {
-      try {
-        const response = await axios.get('/api/telegram_recipients')
-        telegramRecipients.value = response.data.map(recipient => ({
-          ...recipient,
-          active: true // Assuming all recipients in the system are active
-        }))
-      } catch (error) {
-        console.error('Error fetching telegram recipients:', error)
-        errors.value.telegram = 'Failed to fetch telegram recipients'
-      }
-    }
-    
-    // Fetch active streams
-    const fetchActiveStreams = async () => {
-      try {
-        // This endpoint would need to be created in the backend
-        const response = await axios.get('/api/streams/active')
-        activeStreams.value = response.data.map(stream => ({
-          ...stream,
-          isLive: true // Assuming all fetched streams are live
-        }))
-      } catch (error) {
-        console.error('Error fetching active streams:', error)
-        errors.value.streams = 'Failed to fetch active streams'
-        
-        // Fallback - simulate some active streams for display
-        activeStreams.value = [
-          {
-            streamer_username: 'Stream 1',
-            type: 'chaturbate',
-            isLive: true,
-            assigned_agent: 'Agent Smith'
-          },
-          {
-            streamer_username: 'Stream 2',
-            type: 'myfreecams',
-            isLive: true,
-            assigned_agent: 'Agent Johnson'
-          }
-        ]
-      }
-    }
-    
-    // Fetch recent detection logs
-    const fetchRecentLogs = async () => {
-      try {
-        // This endpoint would need to be created in the backend
-        const response = await axios.get('/api/logs/recent')
-        
-        // Transform the logs into alerts format
-        recentAlerts.value = response.data.map(log => {
-          let level = 'info'
-          let title = 'Unknown Event'
-          
-          if (log.event_type === 'object_detection') {
-            level = 'critical'
-            title = 'Object Detected'
-          } else if (log.event_type === 'audio_detection') {
-            level = 'warning'
-            title = 'Audio Keyword Detected'
-          } else if (log.event_type === 'chat_detection') {
-            level = 'warning'
-            title = 'Chat Keyword Detected'
-          }
-          
-          return {
-            level,
-            title,
-            description: getLogDescription(log),
-            timestamp: log.timestamp || new Date().toISOString()
-          }
-        })
-      } catch (error) {
-        console.error('Error fetching recent logs:', error)
-        errors.value.logs = 'Failed to fetch recent logs'
-        
-        // Fallback - create some example alerts
-        recentAlerts.value = [
-          {
-            level: 'critical',
-            title: 'Object Detected',
-            description: 'Restricted object detected in stream',
-            timestamp: new Date().toISOString()
-          },
-          {
-            level: 'warning',
-            title: 'Keyword Alert',
-            description: 'Flagged keyword detected in chat',
-            timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString()
-          }
-        ]
-      }
-    }
-    
+   
     // Update stats based on fetched data
     const updateStats = () => {
       stats.value = {
         activeStreams: activeStreams.value.length,
         flaggedEvents: recentAlerts.value.length,
-        pendingTasks: 0, // This would need to come from a tasks endpoint
-        unreadMessages: countUnreadMessages()
+        pendingTasks: 0, // No endpoint available
+        unreadMessages: 0 // No endpoint available
       }
     }
     
     // Count unread messages (would need a proper API endpoint)
-    const countUnreadMessages = () => {
-      // This is a placeholder - in real implementation, fetch from API
-      return Math.floor(Math.random() * 10)
-    }
+    // const countUnreadMessages = () => {
+    //   // This is a placeholder - in real implementation, fetch from API
+    //   return Math.floor(Math.random() * 10)
+    // }
     
     // Format log description based on event type
     const getLogDescription = (log) => {
@@ -538,20 +487,35 @@ export default {
       return platforms[type.toLowerCase()] || type
     }
     
-    // These methods provide artificial variety in the display
+    // These methods provide consistent coloring based on priority
     const getPriorityClass = (index) => {
-      const classes = ['high', 'medium', 'low']
-      return classes[index % 3]
+      // Use a more deterministic approach
+      if (chatKeywords.value[index]?.keyword?.toLowerCase().includes('payment')) {
+        return 'high'
+      } else if (chatKeywords.value[index]?.keyword?.toLowerCase().includes('private')) {
+        return 'medium'
+      }
+      return 'low'
     }
     
     const getPriorityLabel = (index) => {
-      const labels = ['high', 'medium', 'low']
-      return labels[index % 3]
+      if (chatKeywords.value[index]?.keyword?.toLowerCase().includes('payment')) {
+        return 'high'
+      } else if (chatKeywords.value[index]?.keyword?.toLowerCase().includes('private')) {
+        return 'medium'
+      }
+      return 'low'
     }
     
     const getRandomConfidence = () => {
-      const confidences = [95, 88, 75, 82, 91]
-      return confidences[Math.floor(Math.random() * confidences.length)]
+      // Make this more deterministic based on object type
+      if (!flaggedObjects.value[0]) return 95
+      
+      const obj = flaggedObjects.value[0].object_name?.toLowerCase() || ''
+      if (obj.includes('weapon')) return 95
+      if (obj.includes('mask')) return 88
+      if (obj.includes('package')) return 75
+      return 82
     }
     
     const refreshDashboard = async () => {
@@ -784,7 +748,7 @@ export default {
 .agent-app {
   display: flex;
   min-height: 100vh;
-  background-color: var(--bg-color-light, #f5f7fa);
+  background-color: var(--bg-color-light);
 }
 
 .agent-dashboard {
@@ -915,15 +879,15 @@ export default {
 }
 
 .dashboard-card {
-  background-color: white;
+  background-color: var(--card-bg-color);
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--card-shadow);
   overflow: hidden;
   transition: all 0.3s ease;
 }
 
 .dashboard-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--card-shadow-hover);
   transform: translateY(-2px);
 }
 
@@ -979,7 +943,7 @@ export default {
 }
 
 .stat-item:hover {
-  background-color: rgba(var(--primary-color-rgb), 0.05);
+  background-color: var(--hover-bg-color);
 }
 
 .stat-value {
@@ -1014,7 +978,7 @@ export default {
 }
 
 .alert-item:hover {
-  background-color: rgba(var(--primary-color-rgb), 0.03);
+  background-color: var(--hover-bg-color);
 }
 
 .alert-icon {
@@ -1074,7 +1038,7 @@ export default {
 }
 
 .stream-item:hover {
-  background-color: rgba(var(--primary-color-rgb), 0.03);
+  background-color: var(--hover-bg-color);
 }
 
 .stream-preview {
@@ -1090,7 +1054,7 @@ export default {
   height: 10px;
   border-radius: 50%;
   background-color: #8e8e8e;
-  border: 2px solid white;
+  border: 2px solid var(--card-bg-color);
   z-index: 1;
 }
 
@@ -1102,8 +1066,8 @@ export default {
   width: 48px;
   height: 48px;
   border-radius: 8px;
-  background-color: var(--bg-color-dark);
-  background-image: linear-gradient(45deg, rgba(0, 0, 0, 0.1) 25%, transparent 25%, transparent 50%, rgba(0, 0, 0, 0.1) 50%, rgba(0, 0, 0, 0.1) 75%, transparent 75%, transparent);
+  background-color: var(--thumbnail-bg-color);
+  background-image: linear-gradient(45deg, var(--thumbnail-pattern-color) 25%, transparent 25%, transparent 50%, var(--thumbnail-pattern-color) 50%, var(--thumbnail-pattern-color) 75%, transparent 75%, transparent);
   background-size: 8px 8px;
 }
 
@@ -1142,12 +1106,12 @@ export default {
   width: 100%;
   padding: 10px 12px;
   border-radius: 6px;
-  background-color: var(--bg-color-light);
+  background-color: var(--item-bg-color);
   transition: all 0.2s ease;
 }
 
 .keyword-item:hover {
-  background-color: rgba(var(--primary-color-rgb), 0.05);
+  background-color: var(--hover-bg-color);
 }
 
 .keyword-name {
@@ -1165,17 +1129,17 @@ export default {
 }
 
 .keyword-badge.high {
-  background-color: rgba(var(--danger-color-rgb), 0.1);
+  background-color: rgba(var(--danger-color-rgb), 0.2);
   color: var(--danger-color);
 }
 
 .keyword-badge.medium {
-  background-color: rgba(var(--warning-color-rgb), 0.1);
+  background-color: rgba(var(--warning-color-rgb), 0.2);
   color: var(--warning-color);
 }
 
 .keyword-badge.low {
-  background-color: rgba(var(--success-color-rgb), 0.1);
+  background-color: rgba(var(--success-color-rgb), 0.2);
   color: var(--success-color);
 }
 
@@ -1197,12 +1161,12 @@ export default {
   justify-content: space-between;
   padding: 10px 12px;
   border-radius: 6px;
-  background-color: var(--bg-color-light);
+  background-color: var(--item-bg-color);
   transition: all 0.2s ease;
 }
 
 .object-item:hover {
-  background-color: rgba(var(--primary-color-rgb), 0.05);
+  background-color: var(--hover-bg-color);
 }
 
 .object-icon {
@@ -1228,21 +1192,19 @@ export default {
   font-weight: 600;
   padding: 4px 8px;
   border-radius: 12px;
+  color: white;
 }
 
 .object-badge.high {
   background-color: var(--success-color);
-  color: white;
 }
 
 .object-badge.medium {
   background-color: var(--primary-color);
-  color: white;
 }
 
 .object-badge.low {
   background-color: var(--text-color-light);
-  color: white;
 }
 
 /* Telegram card */
@@ -1262,21 +1224,21 @@ export default {
   align-items: center;
   padding: 10px 12px;
   border-radius: 6px;
-  background-color: var(--bg-color-light);
+  background-color: var(--item-bg-color);
   transition: all 0.2s ease;
 }
 
 .recipient-item:hover {
-  background-color: rgba(var(--primary-color-rgb), 0.05);
+  background-color: var(--hover-bg-color);
 }
 
 .recipient-avatar {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background-color: var(--bg-color-dark);
+  background-color: var(--thumbnail-bg-color);
   margin-right: 12px;
-  background-image: linear-gradient(45deg, rgba(0, 0, 0, 0.1) 25%, transparent 25%, transparent 50%, rgba(0, 0, 0, 0.1) 50%, rgba(0, 0, 0, 0.1) 75%, transparent 75%, transparent);
+  background-image: linear-gradient(45deg, var(--thumbnail-pattern-color) 25%, transparent 25%, transparent 50%, var(--thumbnail-pattern-color) 50%, var(--thumbnail-pattern-color) 75%, transparent 75%, transparent);
   background-size: 8px 8px;
 }
 
@@ -1296,12 +1258,12 @@ export default {
 }
 
 .recipient-status.active {
-  background-color: rgba(var(--success-color-rgb), 0.1);
+  background-color: rgba(var(--success-color-rgb), 0.2);
   color: var(--success-color);
 }
 
 .recipient-status.inactive {
-  background-color: rgba(var(--text-color-lighter-rgb), 0.1);
+  background-color: rgba(var(--text-color-lighter-rgb), 0.2);
   color: var(--text-color-lighter);
 }
 
@@ -1337,9 +1299,9 @@ export default {
   justify-content: center;
   padding: 80px 20px;
   text-align: center;
-  background-color: white;
+  background-color: var(--card-bg-color);
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--card-shadow);
 }
 
 .placeholder-icon {
@@ -1410,8 +1372,9 @@ export default {
   }
 }
 
-/* CSS Variables */
+/* CSS Variables - With Light and Dark mode support */
 :root {
+  /* Colors that remain consistent in both modes */
   --primary-color: #1976d2;
   --primary-color-rgb: 25, 118, 210;
   --danger-color: #f44336;
@@ -1423,14 +1386,59 @@ export default {
   --info-color: #2196f3;
   --info-color-rgb: 33, 150, 243;
   
+  /* Light mode specific */
   --text-color: #333333;
   --text-color-light: #666666;
   --text-color-lighter: #999999;
   --text-color-lighter-rgb: 153, 153, 153;
-  
   --bg-color-light: #f5f7fa;
-  --bg-color-dark: #e0e0e0;
   --border-color-light: #eeeeee;
+  --card-bg-color: white;
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --item-bg-color: #f5f7fa;
+  --hover-bg-color: rgba(25, 118, 210, 0.05);
+  --thumbnail-bg-color: #e0e0e0;
+  --thumbnail-pattern-color: rgba(0, 0, 0, 0.1);
 }
 
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text-color: #e0e0e0;
+    --text-color-light: #b0b0b0;
+    --text-color-lighter: #808080;
+    --text-color-lighter-rgb: 128, 128, 128;
+    --bg-color-light: #1a1a1a;
+    --border-color-light: #333333;
+    --card-bg-color: #2a2a2a;
+    --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    --card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.3);
+    --item-bg-color: #333333;
+    --hover-bg-color: rgba(25, 118, 210, 0.15);
+    --thumbnail-bg-color: #444444;
+    --thumbnail-pattern-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Improve contrast for badges in dark mode */
+  .keyword-badge.high {
+    background-color: rgba(var(--danger-color-rgb), 0.3);
+  }
+  
+  .keyword-badge.medium {
+    background-color: rgba(var(--warning-color-rgb), 0.3);
+  }
+  
+  .keyword-badge.low {
+    background-color: rgba(var(--success-color-rgb), 0.3);
+  }
+  
+  .recipient-status.active {
+    background-color: rgba(var(--success-color-rgb), 0.3);
+  }
+  
+  .recipient-status.inactive {
+    background-color: rgba(var(--text-color-lighter-rgb), 0.3);
+  }
+}
 </style>
