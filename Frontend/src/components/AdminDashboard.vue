@@ -13,7 +13,7 @@
 
     <main 
       class="main-content" 
-      :class="{ 'sidebar-expanded': !sidebarMinimized, 'sidebar-collapsed': sidebarMinimized }"
+      :class="{ 'sidebar-minimized': sidebarMinimized }"
       ref="mainContent"
     >
       <div v-if="loading" class="loading-state">
@@ -35,6 +35,7 @@
           :dashboard-stats="dashboardStats"
           :streams="streams"
           :detections="detections"
+          :stream-count="streams.length"  
           @open-stream="openStreamDetails"
         />
 
@@ -209,47 +210,41 @@ export default {
     } = useMessageData(user)
 
     // Enhanced sidebar toggle handler with animations
-    const handleSidebarToggle = (isMinimized) => {
-      originalHandleSidebarToggle(isMinimized)
-      nextTick(() => {
-        if (mainContent.value) {
-          // Calculate margin values based on device width using CSS variables
-          const expandedMargin = window.innerWidth <= 768 ? '0' : 'var(--sidebar-width-expanded)'
-          const collapsedMargin = window.innerWidth <= 768 ? '0' : 'var(--sidebar-width-collapsed)'
+    // Enhanced sidebar toggle handler with animations
+const handleSidebarToggle = (isMinimized) => {
+  originalHandleSidebarToggle(isMinimized)
+  nextTick(() => {
+    if (mainContent.value) {
+      // Animate the main content margin directly with the appropriate values
+      anime({
+        targets: mainContent.value,
+        marginLeft: isMinimized 
+          ? (window.innerWidth <= 768 ? '0' : 'var(--sidebar-width-collapsed)')
+          : (window.innerWidth <= 768 ? '0' : 'var(--sidebar-width-expanded)'),
+        duration: 300,
+        easing: 'easeOutQuad'
+      })
 
-          // Animate the main content margin so it starts exactly after the sidebar
-          anime({
-            targets: mainContent.value,
-            marginLeft: isMinimized ? collapsedMargin : expandedMargin,
-            duration: 300,
-            easing: 'easeOutQuad'
-          })
-
-          // Optionally animate other content properties
-          anime({
-            targets: mainContent.value.querySelector(':scope > div'),
-            opacity: [0.9, 1],
-            translateX: [isMinimized ? '-10px' : '10px', '0'],
-            duration: 350,
-            easing: 'spring(1, 80, 12, 0)'
-          })
-        }
+      // Optionally animate other content properties
+      anime({
+        targets: mainContent.value.querySelector(':scope > div'),
+        opacity: [0.9, 1],
+        translateX: [isMinimized ? '-10px' : '10px', '0'],
+        duration: 350,
+        easing: 'spring(1, 80, 12, 0)'
       })
     }
+  })
+}
 
     // Lifecycle hooks
     onMounted(() => {
       fetchDashboardData()
       fetchMessages()
 
-      const refreshInterval = setInterval(() => {
-        fetchDashboardData()
-        fetchMessages()
-      }, 30000)
+      
 
-      window.addEventListener('online', () => isOnline.value = true)
-      window.addEventListener('offline', () => isOnline.value = false)
-      isOnline.value = navigator.onLine
+      
 
       // Initial animation for page load
       if (mainContent.value) {
@@ -263,7 +258,6 @@ export default {
       }
 
       return () => {
-        clearInterval(refreshInterval)
         window.removeEventListener('online', () => isOnline.value = true)
         window.removeEventListener('offline', () => isOnline.value = false)
       }
@@ -324,37 +318,40 @@ export default {
 
 <style>
 /* Define CSS variables to control sidebar width and mobile height */
+/* Add this to your <style> section */
 :root {
+  /* Existing variables */
   --sidebar-width-expanded: 280px;
-  --sidebar-width-collapsed: 70px;
+  --sidebar-width-collapsed: 50px;
   --sidebar-mobile-height: 65px;
+  
+  /* New variables for stream sizing */
+  --stream-base-width: 480px;
+  --stream-base-height: 360px;
+  --stream-min-width: 240px;
+  --stream-min-height: 180px;
 }
 
 .admin-container {
-  display: flex;
+  top: 5;
   min-height: 100vh;
   background-color: var(--bg-color);
   color: var(--text-color);
   overflow-x: hidden; /* Prevent horizontal scrollbar during animations */
 }
 
-/* Main content starts right after the sidebar using CSS variables */
+.main-content.sidebar-minimized {
+  margin-left: var(--sidebar-width-collapsed);
+}
+
 .main-content {
+  /* Default state is expanded */
+  margin-left: var(--sidebar-width-expanded);
   flex: 1;
   padding: 1rem;
-  transition: margin-left 0.3s ease; /* Smooth transition for margin */
-  height: 100vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  will-change: margin-left, transform; /* Optimize for animations */
-}
-
-.main-content.sidebar-expanded {
-  margin-left: var(--sidebar-width-expanded);
-}
-
-.main-content.sidebar-collapsed {
-  margin-left: var(--sidebar-width-collapsed);
+  transition: margin-left 0.3s ease;
+  height: 90%;
+  will-change: margin-left, transform;
 }
 
 .loading-state {
@@ -473,4 +470,6 @@ export default {
     padding: 2rem 2.5rem;
   }
 }
+
+
 </style>

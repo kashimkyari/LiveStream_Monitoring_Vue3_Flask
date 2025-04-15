@@ -1,5 +1,5 @@
 <template>
-  <div class="video-container">
+  <div class="video-container" :class="{ 'dark-mode': isDarkMode, 'light-mode': !isDarkMode }">
     <!-- Loading State -->
     <div v-if="loading" class="loading-message">
       <div class="loading-spinner"></div>
@@ -8,21 +8,22 @@
     
     <!-- Offline State -->
     <div v-else-if="!loading && !isOnline" class="error-message">
-      <div class="error-icon">⚠️</div>
+      <div class="error-icon">
+        <i class="fas fa-exclamation-triangle"></i>
+      </div>
       <div>{{ platform }} stream is offline.</div>
       <button class="retry-button" @click="refreshStream">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="16" height="16">
-          <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-        </svg>
+        <i class="fas fa-sync-alt"></i>
         Retry
       </button>
     </div>
     
-    <!-- Thumbnail View (optional) -->
+    <!-- Thumbnail View -->
     <div 
       v-else-if="!loading && isOnline && thumbnail && !isModalOpen" 
       class="thumbnail-wrapper"
       @click="toggleModal"
+      ref="thumbnailEl"
     >
       <img
         :src="thumbnail"
@@ -53,8 +54,8 @@
 
     <!-- Modal Player -->
     <teleport to="body">
-      <div v-if="isModalOpen" class="modal-overlay" @click="toggleModal">
-        <div class="modal-content" @click.stop>
+      <div v-if="isModalOpen" class="modal-overlay" @click="toggleModal" ref="modalOverlay">
+        <div class="modal-content" @click.stop ref="modalContent" :class="{ 'dark-mode': isDarkMode, 'light-mode': !isDarkMode }">
           <hls-player
             v-if="m3u8Url"
             :m3u8-url="m3u8Url"
@@ -65,9 +66,7 @@
             @refresh-stream="refreshStream"
           />
           <button class="close-modal" @click="toggleModal">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24" height="24">
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-            </svg>
+            <i class="fas fa-times"></i>
           </button>
         </div>
       </div>
@@ -76,9 +75,10 @@
 </template>
 
 <script>
-import { ref, onMounted, defineComponent, watch, onBeforeUnmount } from 'vue';
+import { ref, onMounted, defineComponent, watch, onBeforeUnmount, nextTick, inject } from 'vue';
 import axios from 'axios';
 import { useToast } from 'vue-toastification';
+import anime from 'animejs/lib/anime.es.js';
 
 // HLS Player Component
 const HlsPlayer = defineComponent({
@@ -93,6 +93,7 @@ const HlsPlayer = defineComponent({
   emits: ['refresh-stream'],
   setup(props, { emit }) {
     const videoRef = ref(null);
+    const controlsRef = ref(null);
     const isStreamLoaded = ref(false);
     const isLoading = ref(true);
     const hasError = ref(false);
@@ -100,6 +101,10 @@ const HlsPlayer = defineComponent({
     const isMuted = ref(true);
     const volume = ref(0.5);
     const retryAttempts = ref(0);
+    const isPlaying = ref(false);
+    const showControls = ref(false);
+    const controlsTimeout = ref(null);
+    const isDarkMode = inject('isDarkMode', ref(true));
     const MAX_RETRIES = 3;
     let hls = null;
     
@@ -136,7 +141,12 @@ const HlsPlayer = defineComponent({
           
           videoElement.muted = isMuted.value;
           videoElement.volume = volume.value;
-          videoElement.play().catch(err => console.warn("Autoplay prevented:", err));
+          videoElement.play()
+            .then(() => {
+              isPlaying.value = true;
+              animatePlayerStart();
+            })
+            .catch(err => console.warn("Autoplay prevented:", err));
         });
         
         // Error handling
@@ -168,7 +178,7 @@ const HlsPlayer = defineComponent({
               default:
                 hasError.value = true;
                 isLoading.value = false;
-                errorMessage.value = "Fatal playback error";
+                errorMessage.value = data.details || "Fatal playback error";
                 break;
             }
           }
@@ -182,7 +192,12 @@ const HlsPlayer = defineComponent({
           isStreamLoaded.value = true;
           videoElement.muted = isMuted.value;
           videoElement.volume = volume.value;
-          videoElement.play().catch(console.error);
+          videoElement.play()
+            .then(() => {
+              isPlaying.value = true;
+              animatePlayerStart();
+            })
+            .catch(console.error);
         });
         
         videoElement.addEventListener('error', () => {
@@ -219,6 +234,15 @@ const HlsPlayer = defineComponent({
           volume.value = 0.5;
           videoRef.value.volume = volume.value;
         }
+        
+        // Animate mute icon
+        anime({
+          targets: '.mute-button i',
+          scale: [1.2, 1],
+          opacity: [0.5, 1],
+          easing: 'easeOutElastic(1, .6)',
+          duration: 500
+        });
       }
     };
     
@@ -229,6 +253,43 @@ const HlsPlayer = defineComponent({
         videoRef.value.volume = newVolume;
         isMuted.value = newVolume === 0;
         videoRef.value.muted = isMuted.value;
+      }
+    };
+    
+    // Handle play/pause
+    const togglePlayPause = () => {
+      if (!videoRef.value) return;
+      
+      if (videoRef.value.paused) {
+        videoRef.value.play()
+          .then(() => { isPlaying.value = true; })
+          .catch(console.error);
+      } else {
+        videoRef.value.pause();
+        isPlaying.value = false;
+      }
+      
+      // Animate play/pause button
+      anime({
+        targets: '.play-pause-button i',
+        rotateZ: '+=360',
+        easing: 'easeInOutSine',
+        duration: 300
+      });
+    };
+    
+    // Show/hide controls
+    const handleMouseMove = () => {
+      showControls.value = true;
+      
+      if (controlsTimeout.value) {
+        clearTimeout(controlsTimeout.value);
+      }
+      
+      if (isPlaying.value) {
+        controlsTimeout.value = setTimeout(() => {
+          showControls.value = false;
+        }, 3000);
       }
     };
     
@@ -251,6 +312,35 @@ const HlsPlayer = defineComponent({
     // Handle refresh request
     const handleRefresh = () => {
       emit('refresh-stream');
+      
+      // Animate refresh button
+      anime({
+        targets: '.retry-button i',
+        rotateZ: '+=360',
+        easing: 'easeInOutQuad',
+        duration: 800
+      });
+    };
+    
+    // Animation for player start
+    const animatePlayerStart = () => {
+      anime({
+        targets: videoRef.value,
+        opacity: [0, 1],
+        scale: [0.95, 1],
+        easing: 'easeOutCubic',
+        duration: 400
+      });
+      
+      // Animate live indicator entrance
+      anime({
+        targets: '.live-indicator',
+        translateX: [-20, 0],
+        opacity: [0, 1],
+        easing: 'easeOutBack',
+        duration: 600,
+        delay: 200
+      });
     };
     
     // Watch for stream loaded state to trigger analytics
@@ -266,28 +356,93 @@ const HlsPlayer = defineComponent({
       isLoading.value = true;
       errorMessage.value = "";
       
-      // Use nextTick to ensure DOM is updated
       requestAnimationFrame(initializePlayer);
     }, { immediate: true });
     
+    // Toggle fullscreen
+    const toggleFullscreen = () => {
+      const container = videoRef.value?.closest('.hls-player-container');
+      if (!container) return;
+      
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(err => console.error(err));
+      } else {
+        container.requestFullscreen().catch(err => console.error(err));
+      }
+      
+      // Animate fullscreen button
+      anime({
+        targets: '.fullscreen-button i',
+        scale: [1.2, 1],
+        opacity: [0.5, 1],
+        easing: 'easeOutElastic(1, .6)',
+        duration: 500
+      });
+    };
+    
+    // Monitor playback state
+    const setUpPlaybackStateMonitor = () => {
+      if (!videoRef.value) return;
+      
+      videoRef.value.addEventListener('play', () => {
+        isPlaying.value = true;
+      });
+      
+      videoRef.value.addEventListener('pause', () => {
+        isPlaying.value = false;
+      });
+      
+      videoRef.value.addEventListener('ended', () => {
+        isPlaying.value = false;
+      });
+    };
+    
+    onMounted(() => {
+      setUpPlaybackStateMonitor();
+      
+      // Add hover effects for controls
+      if (controlsRef.value) {
+        controlsRef.value.addEventListener('mouseenter', () => {
+          if (controlsTimeout.value) {
+            clearTimeout(controlsTimeout.value);
+          }
+          showControls.value = true;
+        });
+      }
+    });
+    
     // Clean up on component unmount
-    onBeforeUnmount(destroyPlayer);
+    onBeforeUnmount(() => {
+      destroyPlayer();
+      if (controlsTimeout.value) {
+        clearTimeout(controlsTimeout.value);
+      }
+    });
     
     return {
       videoRef,
+      controlsRef,
       isStreamLoaded,
       isLoading,
       hasError,
       errorMessage,
       isMuted,
       volume,
+      isPlaying,
+      showControls,
+      isDarkMode,
       toggleMute,
       handleVolumeChange,
+      togglePlayPause,
+      handleMouseMove,
+      toggleFullscreen,
       handleRefresh
     };
   },
   template: `
-    <div class="hls-player-container">
+    <div class="hls-player-container" 
+         @mousemove="handleMouseMove" 
+         :class="{ 'dark-mode': isDarkMode, 'light-mode': !isDarkMode }">
       <!-- Live Indicator -->
       <div v-if="isStreamLoaded && !hasError" class="live-indicator">
         <div class="red-dot"></div>
@@ -302,11 +457,14 @@ const HlsPlayer = defineComponent({
       
       <!-- Error Display -->
       <div v-if="hasError" class="error-overlay">
-        <div class="error-icon">⚠️</div>
+        <div class="error-icon">
+          <i class="fas fa-exclamation-triangle"></i>
+        </div>
         <div class="error-text">Stream unavailable</div>
         <button v-if="errorMessage.includes('Network') || errorMessage.includes('manifest')" 
                 class="retry-button" 
                 @click="handleRefresh">
+          <i class="fas fa-sync-alt"></i>
           Refresh Stream
         </button>
       </div>
@@ -321,15 +479,17 @@ const HlsPlayer = defineComponent({
         class="video-element"
       ></video>
       
-      <!-- Controls (shown based on modal state) -->
-      <div v-if="isModalOpen" class="video-controls">
-        <button class="mute-button control-button" @click="toggleMute">
-          <svg v-if="isMuted" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="20" height="20">
-            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
-          </svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="20" height="20">
-            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-          </svg>
+      <!-- Controls -->
+      <div v-if="isModalOpen || showControls" 
+           class="video-controls" 
+           ref="controlsRef"
+           :class="{ 'visible': isModalOpen || showControls }">
+        <button class="control-button play-pause-button" @click="togglePlayPause">
+          <i :class="[isPlaying ? 'fas fa-pause' : 'fas fa-play']"></i>
+        </button>
+        
+        <button class="control-button mute-button" @click="toggleMute">
+          <i :class="[isMuted ? 'fas fa-volume-mute' : (volume > 0.5 ? 'fas fa-volume-up' : 'fas fa-volume-down')]"></i>
         </button>
         
         <input
@@ -342,25 +502,18 @@ const HlsPlayer = defineComponent({
           @input="e => handleVolumeChange(parseFloat(e.target.value))"
         />
         
-        <button 
-          class="fullscreen-button control-button"
-          @click="videoRef && videoRef.requestFullscreen()"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="20" height="20">
-            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-          </svg>
+        <button class="control-button fullscreen-button" @click="toggleFullscreen">
+          <i class="fas fa-expand"></i>
         </button>
       </div>
       
-      <!-- Play button for autoplay blocked situations -->
+      <!-- Large Play Button for Autoplay Blocked -->
       <div 
         v-if="isStreamLoaded && !hasError && videoRef && videoRef.paused" 
         class="play-overlay" 
-        @click="videoRef.play()"
+        @click="togglePlayPause"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="48" height="48">
-          <path d="M8 5v14l11-7z"/>
-        </svg>
+        <i class="fas fa-play fa-3x"></i>
       </div>
     </div>
   `
@@ -381,12 +534,23 @@ export default defineComponent({
       type: String,
       required: true
     },
+    streamerUid: {
+      type: String,
+      default: null
+    },
     staticThumbnail: {
       type: String,
+      default: null
+    },
+    onDetection: {
+      type: Function,
       default: null
     }
   },
   setup(props) {
+    // Get theme mode from parent app or use dark mode as default
+    const isDarkMode = inject('isDarkMode', ref(true));
+    
     // Initialize toast
     const toast = useToast();
     
@@ -397,14 +561,60 @@ export default defineComponent({
     const posterUrl = ref(null);
     const thumbnail = ref(props.staticThumbnail);
     const refreshInProgress = ref(false);
+    const fetchedStreamerUsername = ref(null);
+    const thumbnailEl = ref(null);
+    const modalOverlay = ref(null);
+    const modalContent = ref(null);
     
     let refreshTimeout = null;
     
-    // Toggle modal state
+    // Toggle modal state with animation
     const toggleModal = () => {
       if (!isOnline.value) return;
-      isModalOpen.value = !isModalOpen.value;
-      document.body.style.overflow = isModalOpen.value ? 'hidden' : '';
+      
+      if (!isModalOpen.value) {
+        isModalOpen.value = true;
+        document.body.style.overflow = 'hidden';
+        
+        // Wait for modal to be in DOM
+        nextTick(() => {
+          // Animate modal opening
+          anime({
+            targets: modalOverlay.value,
+            opacity: [0, 1],
+            duration: 300,
+            easing: 'easeOutQuad'
+          });
+          
+          anime({
+            targets: modalContent.value,
+            scale: [0.9, 1],
+            opacity: [0, 1],
+            duration: 400,
+            easing: 'easeOutCubic'
+          });
+        });
+      } else {
+        // Animate modal closing
+        anime({
+          targets: modalOverlay.value,
+          opacity: 0,
+          duration: 300,
+          easing: 'easeOutQuad',
+          complete: () => {
+            isModalOpen.value = false;
+            document.body.style.overflow = '';
+          }
+        });
+        
+        anime({
+          targets: modalContent.value,
+          scale: 0.9,
+          opacity: 0,
+          duration: 300,
+          easing: 'easeOutQuad'
+        });
+      }
     };
     
     // Handle thumbnail error
@@ -434,23 +644,29 @@ export default defineComponent({
           if (platformLower === 'chaturbate' && stream.chaturbate_m3u8_url) {
             m3u8Url.value = stream.chaturbate_m3u8_url;
             posterUrl.value = `https://roomimg.stream.highwebmedia.com/ri/${encodeURIComponent(props.streamerName)}.jpg?${Date.now()}`;
+            fetchedStreamerUsername.value = stream.streamer_username || props.streamerName;
             
             // If no static thumbnail, try to get one
             if (!thumbnail.value) {
               thumbnail.value = posterUrl.value;
             }
+            
+            isOnline.value = true;
+            animateThumbnail();
           } else if (platformLower === 'stripchat' && stream.stripchat_m3u8_url) {
             m3u8Url.value = stream.stripchat_m3u8_url;
+            fetchedStreamerUsername.value = stream.streamer_username || props.streamerName;
             
             // If no static thumbnail for Stripchat, could generate one
             if (!thumbnail.value) {
               thumbnail.value = null; // No standard thumbnail URL for Stripchat
             }
+            
+            isOnline.value = true;
+            animateThumbnail();
           } else {
             throw new Error(`No ${platformLower}_m3u8_url found in stream data`);
           }
-          
-          isOnline.value = true;
         } else {
           isOnline.value = false;
           if (platformLower === 'chaturbate') {
@@ -472,12 +688,43 @@ export default defineComponent({
       }
     };
 
+    // Animate thumbnail entrance
+    const animateThumbnail = () => {
+      if (!thumbnailEl.value) return;
+      
+      anime({
+        targets: thumbnailEl.value,
+        opacity: [0, 1],
+        translateY: [20, 0],
+        easing: 'easeOutCubic',
+        duration: 600
+      });
+      
+      // Animate live indicator
+      anime({
+        targets: '.thumbnail-live-indicator',
+        translateX: [-20, 0],
+        opacity: [0, 1],
+        easing: 'easeOutBack',
+        duration: 600,
+        delay: 300
+      });
+    };
+
     // Refresh stream with toast notifications
     const refreshStream = async () => {
       if (refreshInProgress.value) return;
       
       loading.value = true;
       refreshInProgress.value = true;
+      
+      // Animate refresh attempt
+      anime({
+        targets: '.retry-button i',
+        rotateZ: '+=360',
+        easing: 'easeInOutQuad',
+        duration: 800
+      });
       
       // Show toast notification for refresh start
       toast.info(`Refreshing ${props.platform} stream...`, {
@@ -507,6 +754,7 @@ export default defineComponent({
           let newM3u8Url = null;
           if (platformLower === 'chaturbate' && response.data.chaturbate_m3u8_url) {
             newM3u8Url = response.data.chaturbate_m3u8_url;
+            posterUrl.value = `https://roomimg.stream.highwebmedia.com/ri/${encodeURIComponent(props.streamerName)}.jpg?${Date.now()}`;
           } else if (platformLower === 'stripchat' && response.data.stripchat_m3u8_url) {
             newM3u8Url = response.data.stripchat_m3u8_url;
           } else if (response.data.m3u8_url) {
@@ -518,12 +766,18 @@ export default defineComponent({
             m3u8Url.value = newM3u8Url;
             isOnline.value = true;
             
-            // Success toast notification
+            // Success toast with animation
             toast.success(`${props.platform} stream refreshed successfully!`, {
               timeout: 3000,
               position: "top-right",
               icon: "✅"
             });
+            
+            // If previously not online, animate the new player
+            if (!isOnline.value) {
+              isOnline.value = true;
+              setTimeout(() => animateThumbnail(), 100);
+            }
           } else {
             isOnline.value = false;
             
@@ -552,7 +806,7 @@ export default defineComponent({
           posterUrl.value = `https://roomimg.stream.highwebmedia.com/ri/${encodeURIComponent(props.streamerName)}.jpg?${Date.now()}`;
         }
         
-        // Error toast notification
+        // Error toast notification with animation
         toast.error(`Failed to refresh stream: ${error.message || 'Unknown error'}`, {
           timeout: 5000,
           position: "top-right",
@@ -580,6 +834,15 @@ export default defineComponent({
     onMounted(() => {
       fetchStreamData();
       window.addEventListener('keydown', handleKeyDown);
+      
+      // Animate loading spinner
+      anime({
+        targets: '.loading-spinner',
+        rotateZ: '360deg',
+        easing: 'linear',
+        duration: 1000,
+        loop: true
+      });
     });
     
     onBeforeUnmount(() => {
@@ -605,6 +868,11 @@ export default defineComponent({
       m3u8Url,
       posterUrl,
       thumbnail,
+      fetchedStreamerUsername,
+      isDarkMode,
+      thumbnailEl,
+      modalOverlay,
+      modalContent,
       toggleModal,
       refreshStream,
       handleThumbnailError
@@ -619,10 +887,21 @@ export default defineComponent({
   width: 100%;
   height: 0;
   padding-top: 56.25%; /* 16:9 aspect ratio */
-  background: #000;
   border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+/* Theme modes */
+.dark-mode {
+  background: #121212;
+  color: #fff;
+}
+
+.light-mode {
+  background: #f5f5f5;
+  color: #121212;
 }
 
 .loading-message, .error-message {
@@ -633,43 +912,65 @@ export default defineComponent({
   height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  color: white;
-  background: rgba(0, 0, 0, 0.8);
-  gap: 16px;
-  z-index: 5;
+  align-items: center;
+  z-index: 10;
+  gap: 15px;
+}
+
+.dark-mode .loading-message, .dark-mode .error-message {
+  background: rgba(18, 18, 18, 0.85);
+}
+
+.light-mode .loading-message, .light-mode .error-message {
+  background: rgba(245, 245, 245, 0.85);
 }
 
 .loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid rgba(255, 255, 255, 0.2);
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-top-color: #ff4d4d;
   border-radius: 50%;
-  border-top-color: white;
   animation: spin 1s infinite linear;
 }
 
+.dark-mode .loading-spinner {
+  border-color: rgba(255, 255, 255, 0.1);
+  border-top-color: #ff4d4d;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .error-icon {
-  font-size: 28px;
+  font-size: 24px;
+  color: #ff4d4d;
+  margin-bottom: 10px;
 }
 
 .retry-button {
+  background: #ff4d4d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: 500;
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 68, 68, 0.8);
-  border: none;
-  border-radius: 4px;
-  color: white;
-  padding: 8px 16px;
-  font-size: 14px;
-  cursor: pointer;
+  margin-top: 15px;
   transition: background 0.2s ease;
 }
 
 .retry-button:hover {
-  background: rgba(255, 68, 68, 1);
+  background: #ff3333;
+}
+
+.retry-button i {
+  font-size: 14px;
 }
 
 .thumbnail-wrapper {
@@ -680,6 +981,12 @@ export default defineComponent({
   height: 100%;
   cursor: pointer;
   overflow: hidden;
+  border-radius: 8px;
+  transition: transform 0.2s ease;
+}
+
+.thumbnail-wrapper:hover {
+  transform: scale(1.02);
 }
 
 .thumbnail-image {
@@ -690,18 +997,31 @@ export default defineComponent({
 
 .thumbnail-live-indicator {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 4px;
+  padding: 5px 10px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 5px 10px;
-  border-radius: 4px;
-  z-index: 2;
-  color: white;
+  gap: 5px;
   font-size: 12px;
   font-weight: bold;
+  color: white;
+}
+
+.red-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff4d4d;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
 }
 
 .inline-player {
@@ -710,62 +1030,64 @@ export default defineComponent({
   left: 0;
   width: 100%;
   height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
-/* Modal styles */
 .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
   z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
 }
 
 .modal-content {
-  position: relative;
-  width: 80%;
-  max-width: 1000px;
-  height: 0;
-  padding-top: 45%; /* More compact ratio for modal */
-  background: #000;
+  width: 90%;
+  max-width: 1200px;
+  max-height: 90vh;
   border-radius: 8px;
   overflow: hidden;
+  position: relative;
+  aspect-ratio: 16/9;
 }
 
 .close-modal {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 15px;
+  right: 15px;
   background: rgba(0, 0, 0, 0.7);
   border: none;
-  border-radius: 50%;
+  color: white;
+  font-size: 20px;
   width: 36px;
   height: 36px;
+  border-radius: 50%;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   cursor: pointer;
   z-index: 100;
   transition: background 0.2s ease;
 }
 
 .close-modal:hover {
-  background: rgba(255, 68, 68, 0.8);
+  background: rgba(0, 0, 0, 0.9);
 }
 
 /* HLS Player styles */
 .hls-player-container {
-  position: absolute;
-  top: 0;
-  left: 0;
+  position: relative;
   width: 100%;
   height: 100%;
   background: #000;
+  overflow: hidden;
 }
 
 .video-element {
@@ -776,93 +1098,116 @@ export default defineComponent({
 
 .live-indicator {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 15px;
+  left: 15px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 4px;
+  padding: 5px 10px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 5px 10px;
-  border-radius: 4px;
-  z-index: 2;
-}
-
-.red-dot {
-  width: 8px;
-  height: 8px;
-  background-color: #f00;
-  border-radius: 50%;
-  animation: blink 1.5s infinite;
-}
-
-.live-text {
-  color: #fff;
+  gap: 5px;
   font-size: 12px;
   font-weight: bold;
+  color: white;
+  z-index: 10;
 }
 
-.loading-overlay, .error-overlay {
+.loading-overlay {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.7);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 12px;
-  z-index: 2;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 20;
+  gap: 15px;
 }
 
-.loading-text, .error-text {
+.loading-text {
   color: white;
   font-size: 14px;
 }
 
+.error-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 20;
+  color: white;
+  gap: 10px;
+}
+
+.error-text {
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
 .video-controls {
   position: absolute;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 0;
+  left: 0;
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 6px 10px;
-  border-radius: 4px;
-  z-index: 3;
-  opacity: 0.5;
+  padding: 15px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+  z-index: 15;
+  gap: 15px;
+  opacity: 0;
   transition: opacity 0.3s ease;
 }
 
-.video-controls:hover {
+.video-controls.visible {
   opacity: 1;
 }
 
 .control-button {
-  background: none;
+  background: transparent;
   border: none;
   color: white;
   cursor: pointer;
+  font-size: 18px;
+  width: 32px;
+  height: 32px;
   display: flex;
-  align-items: center;
   justify-content: center;
-  padding: 4px;
-  border-radius: 4px;
+  align-items: center;
+  border-radius: 50%;
   transition: background 0.2s ease;
 }
 
 .control-button:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .volume-slider {
-  width: 70px;
-  cursor: pointer;
+  width: 80px;
+  height: 4px;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  outline: none;
 }
 
+.volume-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+}
 
 .play-overlay {
   position: absolute;
@@ -871,36 +1216,54 @@ export default defineComponent({
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
+  align-items: center;
+  background: rgba(0, 0, 0, 0.4);
+  color: white;
   cursor: pointer;
-  z-index: 2;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
-@keyframes blink {
-  0% { opacity: 1; }
-  50% { opacity: 0.5; }
-  100% { opacity: 1; }
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* CSS containment for better performance */
-.hls-player-container {
-  contain: layout paint;
-}
-
-/* Reduce paint operations for animated elements */
-.loading-spinner, .red-dot {
-  will-change: opacity, transform;
-}
-
-/* Make video controls visible when hovering over the player */
-.hls-player-container:hover .video-controls {
+.play-overlay:hover {
   opacity: 1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .volume-slider {
+    width: 60px;
+  }
+  
+  .control-button {
+    font-size: 16px;
+    width: 28px;
+    height: 28px;
+  }
+  
+  .modal-content {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    height: 50vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .volume-slider {
+    display: none;
+  }
+  
+  .video-controls {
+    padding: 10px;
+    gap: 10px;
+  }
+  
+  .control-button {
+    font-size: 14px;
+    width: 24px;
+    height: 24px;
+  }
 }
 </style>

@@ -1,6 +1,6 @@
 <template>
   <div id="app" :data-theme="isDarkTheme ? 'dark' : 'light'" ref="appContainer">
-    <!-- Theme toggle when not logged in, notifications bell when logged in -->
+    <!-- Theme toggle -->
     <div class="header-controls">
       <div ref="themeToggle" class="theme-toggle" @click="toggleTheme">
         <font-awesome-icon :icon="isDarkTheme ? 'moon' : 'sun'" />
@@ -15,8 +15,6 @@
       />
       
       <div v-else class="dashboard" key="dashboard" ref="dashboardContainer">
-        
-        
         <div class="content-area">
           <AdminDashboard v-if="userRole === 'admin'" key="admin" ref="dashboard" />
           <AgentDashboard v-else-if="userRole === 'agent'" key="agent" ref="dashboard" />
@@ -31,7 +29,7 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { 
-  faMoon, faSun, faBell, faSignOutAlt, faBroadcastTower,
+  faMoon, faSun, faSignOutAlt, faBroadcastTower,
   faTachometerAlt, faVideo, faExclamationTriangle, faChartLine, faCog
 } from '@fortawesome/free-solid-svg-icons'
 import axios from 'axios'
@@ -41,7 +39,7 @@ import AdminDashboard from './components/AdminDashboard.vue'
 import AgentDashboard from './components/AgentDashboard.vue'
 
 library.add(
-  faMoon, faSun, faBell, faSignOutAlt, faBroadcastTower,
+  faMoon, faSun, faSignOutAlt, faBroadcastTower,
   faTachometerAlt, faVideo, faExclamationTriangle, faChartLine, faCog
 )
 
@@ -57,14 +55,12 @@ export default {
     const isDarkTheme = ref(true)
     const isLoggedIn = ref(false)
     const userRole = ref(null)
-    const unreadNotificationCount = ref(0)
     const appContainer = ref(null)
     const themeToggle = ref(null)
     const sidebar = ref(null)
     const logoutButton = ref(null)
     const dashboard = ref(null)
     const dashboardContainer = ref(null)
-    const notificationPollInterval = ref(null)
     
     // Initial setup
     onMounted(() => {
@@ -88,7 +84,6 @@ export default {
     
     onBeforeUnmount(() => {
       window.removeEventListener('resize', handleResize)
-      stopNotificationPolling()
     })
     
     // Watch for theme changes
@@ -100,57 +95,85 @@ export default {
     
     // Methods
     const toggleTheme = () => {
-      // Determine the new background based on current theme
-      const newBackground = isDarkTheme.value ? '#f8f9fa' : '#121212'
-      const newTextColor = isDarkTheme.value ? '#2d3748' : '#f0f0f0'
+      // Create a circular overlay element for the animation
+      const overlay = document.createElement('div')
+      overlay.className = 'theme-overlay'
+      overlay.style.position = 'fixed'
+      overlay.style.zIndex = '-1'
+      overlay.style.borderRadius = '50%'
+      overlay.style.transform = 'scale(0)'
       
-      // Create an animation timeline for a fluid transition
-      const tl = anime.timeline({
-        easing: 'easeInOutSine',
-        duration: 500
-      })
+      // Get the toggle button position to make the animation start from there
+      const toggleRect = themeToggle.value.getBoundingClientRect()
+      const centerX = toggleRect.left + toggleRect.width / 2
+      const centerY = toggleRect.top + toggleRect.height / 2
       
-      tl.add({
+      overlay.style.top = `${centerY}px`
+      overlay.style.left = `${centerX}px`
+      
+      // Set the color for the opposite theme
+      overlay.style.backgroundColor = isDarkTheme.value ? '#f8f9fa' : '#121212'
+      
+      // Add to DOM
+      document.body.appendChild(overlay)
+      
+      // Animate the toggle icon
+      anime({
         targets: themeToggle.value,
         rotate: '+=360',
         scale: [1, 1.2, 1],
-        duration: 800
-      }).add({
-        targets: ['html', 'body', '#app'],
-        backgroundColor: newBackground,
-        color: newTextColor,
-        duration: 500
-      }, '-=400')
-      
-      // Add ripple effect animation
-      const ripple = document.createElement('div')
-      ripple.className = 'theme-toggle-ripple'
-      ripple.style.position = 'fixed'
-      ripple.style.borderRadius = '50%'
-      ripple.style.backgroundColor = isDarkTheme.value ? '#f8f9fa' : '#121212'
-      ripple.style.opacity = '0.3'
-      ripple.style.transform = 'scale(0)'
-      ripple.style.top = '1rem'
-      ripple.style.right = '1rem'
-      ripple.style.width = '1px'
-      ripple.style.height = '1px'
-      ripple.style.zIndex = '-1'
-      document.body.appendChild(ripple)
-      
-      anime({
-        targets: ripple,
-        scale: [0, 30],
-        opacity: [0.5, 0],
         duration: 800,
-        easing: 'easeOutExpo',
+        easing: 'easeInOutBack'
+      })
+      
+      // Calculate the maximum dimension to ensure the circle covers the entire screen
+      const maxDim = Math.max(
+        window.innerWidth * 2,
+        window.innerHeight * 2
+      )
+      
+      // Animate the overlay
+      anime({
+        targets: overlay,
+        scale: [0, Math.ceil(maxDim / 100)],
+        opacity: [0.8, 1],
+        duration: 700,
+        easing: 'easeOutQuad',
         complete: () => {
-          document.body.removeChild(ripple)
+          // Change theme state
+          isDarkTheme.value = !isDarkTheme.value
+          localStorage.setItem('themePreference', isDarkTheme.value ? 'dark' : 'light')
+          
+          // Update text color for elements
+          const newTextColor = isDarkTheme.value ? '#f0f0f0' : '#2d3748'
+          anime({
+            targets: ['body', '#app'],
+            color: newTextColor,
+            duration: 300,
+            easing: 'easeOutQuad'
+          })
+          
+          // Fade out and remove the overlay
+          anime({
+            targets: overlay,
+            opacity: 0,
+            duration: 400,
+            easing: 'easeInQuad',
+            delay: 200,
+            complete: () => {
+              document.body.removeChild(overlay)
+            }
+          })
+          
+          // Apply subtle fade animation to all content
+          anime({
+            targets: '.content-area, .sidebar, .header-controls',
+            opacity: [0.85, 1],
+            duration: 500,
+            easing: 'easeOutExpo'
+          })
         }
       })
-
-      // Toggle theme state and save preference
-      isDarkTheme.value = !isDarkTheme.value
-      localStorage.setItem('themePreference', isDarkTheme.value ? 'dark' : 'light')
     }
     
     const animateControls = () => {
@@ -206,10 +229,6 @@ export default {
           userRole.value = response.data.user.role
           localStorage.setItem('userRole', response.data.user.role)
           
-          // Fetch notifications and start polling
-          fetchNotificationCount()
-          startNotificationPolling()
-          
           // Apply animations after login state is confirmed
           setTimeout(() => {
             animateControls()
@@ -220,34 +239,6 @@ export default {
       } catch (error) {
         console.error('Authentication check failed:', error)
         logout(false)
-      }
-    }
-    
-    const fetchNotificationCount = async () => {
-      try {
-        // In a real implementation, this would fetch the count from your API
-        // const response = await axios.get('/api/notifications/count')
-        // unreadNotificationCount.value = response.data.unreadCount
-        
-        // For demo purposes, we'll use a random count between 1-5
-        unreadNotificationCount.value = Math.floor(Math.random() * 5) + 1
-      } catch (error) {
-        console.error('Failed to fetch notification count:', error)
-      }
-    }
-    
-    const startNotificationPolling = () => {
-      // Poll for new notifications every 30 seconds
-      notificationPollInterval.value = setInterval(() => {
-        if (isLoggedIn.value) {
-          fetchNotificationCount()
-        }
-      }, 30000)
-    }
-    
-    const stopNotificationPolling = () => {
-      if (notificationPollInterval.value) {
-        clearInterval(notificationPollInterval.value)
       }
     }
     
@@ -264,9 +255,6 @@ export default {
         duration: 600,
         easing: 'easeOutQuad'
       })
-      
-      fetchNotificationCount()
-      startNotificationPolling()
       
       // Animate dashboard appearance after login
       setTimeout(() => {
@@ -301,12 +289,10 @@ export default {
     }
     
     const resetUserState = () => {
-      // Reset user authentication state and stop polling
+      // Reset user authentication state
       localStorage.removeItem('userRole')
       isLoggedIn.value = false
       userRole.value = null
-      unreadNotificationCount.value = 0
-      stopNotificationPolling()
     }
     
     const handleResize = () => {
@@ -324,7 +310,6 @@ export default {
       isDarkTheme,
       isLoggedIn,
       userRole,
-      unreadNotificationCount,
       appContainer,
       themeToggle,
       sidebar,
@@ -334,9 +319,6 @@ export default {
       toggleTheme,
       animateControls,
       checkAuthentication,
-      fetchNotificationCount,
-      startNotificationPolling,
-      stopNotificationPolling,
       handleLoginSuccess,
       logout,
       resetUserState,
@@ -362,7 +344,6 @@ export default {
   --error-border: #4d0000;
   --success-color: #10b981;
   --warning-color: #f59e0b;
-  --notification-bg: #ff3860;
   --sidebar-width: 260px;
   --sidebar-collapsed-width: 70px;
   --header-height: 60px;
@@ -387,7 +368,6 @@ export default {
   --card-border: #e2e8f0;
   --error-bg: #fff5f5;
   --error-border: #fed7d7;
-  --notification-bg: #ff3860;
 }
 
 /* Fix for dark mode white area issue */
@@ -446,6 +426,12 @@ html, body {
   background: var(--input-bg);
   transform: translateY(-2px) scale(1.05);
   box-shadow: var(--shadow-lg);
+}
+
+.theme-overlay {
+  pointer-events: none;
+  transition: transform 0.7s ease-out;
+  will-change: transform, opacity;
 }
 
 /* Dashboard layout */
@@ -550,10 +536,9 @@ html, body {
 
 .content-area {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  
   padding: 1rem;
-  padding-top: calc(var(--header-height) + 1rem);
+  
 }
 
 /* Page transitions */
@@ -608,7 +593,7 @@ html, body {
 @media (max-width: 576px) {
   .content-area {
     padding: 0.5rem;
-    padding-top: calc(var(--header-height) + 0.5rem);
+    
   }
 }
 

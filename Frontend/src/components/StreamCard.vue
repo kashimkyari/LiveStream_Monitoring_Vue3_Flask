@@ -1,13 +1,7 @@
 <template>
-  <div class="stream-card" @click="$emit('click', $event)">
-    <div class="stream-thumbnail">
-      <VideoPlayer
-        :platform="stream.platform.toLowerCase()"
-        :streamer-uid="stream.streamer_uid"
-        :streamer-name="stream.streamer_username"
-        :alerts="[]"
-        thumbnail-only
-      />
+  <div class="stream-card" @click="$emit('click', $event)" ref="streamCard">
+    <div class="video-container">
+      <video ref="videoPlayer" class="video-player"></video>
       <DetectionBadge v-if="detectionCount > 0" :count="detectionCount" />
     </div>
     <div class="stream-info">
@@ -25,20 +19,133 @@
 </template>
 
 <script>
-import VideoPlayer from './VideoPlayer.vue'
+import Hls from 'hls.js'
+import anime from 'animejs'
 import DetectionBadge from './DetectionBadge.vue'
 
 export default {
   name: 'StreamCard',
   components: {
-    VideoPlayer,
     DetectionBadge
   },
   props: {
     stream: Object,
     detectionCount: Number
   },
-  emits: ['click']
+  emits: ['click'],
+  data() {
+    return {
+      hls: null
+    }
+  },
+  mounted() {
+    this.initializeVideo()
+    this.addEntranceAnimation()
+  },
+  beforeUnmount() {
+    this.destroyHls()
+  },
+  methods: {
+    initializeVideo() {
+      // Get the correct m3u8 URL directly from the stream object
+      let m3u8Url = null
+      
+      if (this.stream.platform.toLowerCase() === 'chaturbate' && this.stream.chaturbate_m3u8_url) {
+        m3u8Url = this.stream.chaturbate_m3u8_url
+      } else if (this.stream.platform.toLowerCase() === 'stripchat' && this.stream.stripchat_m3u8_url) {
+        m3u8Url = this.stream.stripchat_m3u8_url
+      }
+      
+      if (!m3u8Url) {
+        console.error('No HLS URL available for this stream')
+        return
+      }
+      
+      // Initialize HLS.js if supported
+      if (Hls.isSupported()) {
+        this.destroyHls() // Clean up any existing instance
+        
+        this.hls = new Hls({
+          startLevel: 0,
+          capLevelToPlayerSize: true,
+          maxBufferLength: 30
+        })
+        
+        this.hls.loadSource(m3u8Url)
+        this.hls.attachMedia(this.$refs.videoPlayer)
+        
+        this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          this.$refs.videoPlayer.muted = true // Muted for autoplay
+          this.$refs.videoPlayer.play().catch(e => {
+            console.warn('Autoplay prevented:', e)
+          })
+        })
+        
+        this.hls.on(Hls.Events.ERROR, (event, data) => {
+          console.error('HLS error:', data)
+          if (data.fatal) {
+            switch(data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                this.hls.startLoad()
+                break
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                this.hls.recoverMediaError()
+                break
+              default:
+                this.destroyHls()
+                break
+            }
+          }
+        })
+      } 
+      // Fallback for browsers with native HLS support
+      else if (this.$refs.videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+        this.$refs.videoPlayer.src = m3u8Url
+        this.$refs.videoPlayer.addEventListener('loadedmetadata', () => {
+          this.$refs.videoPlayer.muted = true // Muted for autoplay
+          this.$refs.videoPlayer.play().catch(e => {
+            console.warn('Autoplay prevented:', e)
+          })
+        })
+      }
+    },
+    destroyHls() {
+      if (this.hls) {
+        this.hls.destroy()
+        this.hls = null
+      }
+    },
+    addEntranceAnimation() {
+      // Add fancy entrance animation with anime.js
+      anime({
+        targets: this.$refs.streamCard,
+        translateY: [20, 0],
+        opacity: [0, 1],
+        scale: [0.95, 1],
+        easing: 'easeOutElastic(1, .8)',
+        duration: 800,
+        delay: this.stream.id * 100 % 500 // Stagger based on stream ID
+      })
+    },
+    addHoverAnimation() {
+      anime({
+        targets: this.$refs.streamCard,
+        scale: 1.05,
+        boxShadow: '0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22)',
+        duration: 300,
+        easing: 'easeOutQuad'
+      })
+    },
+    removeHoverAnimation() {
+      anime({
+        targets: this.$refs.streamCard,
+        scale: 1,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+        duration: 300,
+        easing: 'easeOutQuad'
+      })
+    }
+  }
 }
 </script>
 
@@ -47,9 +154,10 @@ export default {
   background-color: var(--input-bg);
   border-radius: 10px;
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
   border: 1px solid var(--input-border);
   cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
 }
 
 .stream-card:hover {
@@ -58,22 +166,18 @@ export default {
   border-color: var(--primary-color);
 }
 
-.stream-thumbnail {
+.video-container {
   position: relative;
   width: 100%;
-  height: 150px;
+  aspect-ratio: 16/9;
   overflow: hidden;
 }
 
-.stream-thumbnail::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.1), rgba(0,0,0,0.5));
-  z-index: 1;
+.video-player {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background-color: #000;
 }
 
 .stream-info {

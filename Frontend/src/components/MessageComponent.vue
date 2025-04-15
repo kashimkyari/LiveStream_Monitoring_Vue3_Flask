@@ -1,4 +1,3 @@
-
 <template>
   <div class="messaging-container">
     <!-- Floating Action Button for mobile -->
@@ -55,12 +54,12 @@
 
       <div class="users-list" ref="usersList">
         <div 
-  v-for="user in filteredUsers" 
-  :key="user.id"
-  :class="['user-card', {'active': selectedUser?.id === user.id}]"
-  @click="handleUserSelect(user)"
-  ref="userCard"
->
+          v-for="user in filteredUsers" 
+          :key="user.id"
+          :class="['user-card', {'active': selectedUser?.id === user.id}]"
+          @click="handleUserSelect(user)"
+          ref="userCard"
+        >
           <div class="user-avatar" :style="getAvatarGradient(user.username)">
             <span>{{ user.username[0].toUpperCase() }}</span>
             <div :class="['status-indicator', user.online ? 'online' : 'offline']"></div>
@@ -94,7 +93,7 @@
           </div>
           <div class="user-details">
             <h2>{{ selectedUser.username }}</h2>
-            <p>{{ selectedUser.online ? 'Online' : 'Last seen ' + getRandomTime() }}</p>
+            <p>{{ selectedUser.online ? 'Online' : 'Last seen ' + formatLastActive(selectedUser.last_active) }}</p>
           </div>
           <div class="chat-actions">
             <button class="action-btn">
@@ -171,9 +170,10 @@
               v-model="inputMessage" 
               placeholder="Type a message..." 
               @keydown.enter.prevent="sendMessage"
+              @input="autoGrow"
+              @keydown="handleTyping"
               ref="messageInput"
               rows="1"
-              @input="autoGrow"
             ></textarea>
           </div>
           <button 
@@ -223,20 +223,13 @@
         
         <div class="info-section">
           <h4>About</h4>
-          <p>{{ getRandomBio() }}</p>
-        </div>
-        
-        <div class="info-section">
-          <h4>Media</h4>
-          <div class="media-grid">
-            <div class="media-item" v-for="i in 5" :key="i"></div>
-          </div>
+          <p>{{ selectedUser.bio || "No bio available" }}</p>
         </div>
         
         <div class="actions-group">
-          <button class="info-action">
-            <font-awesome-icon icon="user-slash" />
-            <span>Block User</span>
+          <button class="info-action" @click="forwardDetection" v-if="user.role === 'admin'">
+            <font-awesome-icon icon="share" />
+            <span>Forward Alert</span>
           </button>
           <button class="info-action danger">
             <font-awesome-icon icon="trash-alt" />
@@ -264,11 +257,11 @@
           <div class="alert-meta">
             <div class="meta-item">
               <font-awesome-icon icon="desktop" />
-              <span>{{ notificationDetails.platform }}</span>
+              <span>{{ notificationDetails.platform || 'Unknown Platform' }}</span>
             </div>
             <div class="meta-item">
               <font-awesome-icon icon="user" />
-              <span>{{ notificationDetails.streamer }}</span>
+              <span>{{ notificationDetails.streamer || 'Unknown User' }}</span>
             </div>
             <div class="meta-item">
               <font-awesome-icon icon="clock" />
@@ -338,23 +331,23 @@
 </template>
 
 <script>
-  /* eslint-disable */
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import axios from 'axios';
-import { format, formatDistanceToNow, formatRelative } from 'date-fns';
+import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import anime from 'animejs';
+import { io } from 'socket.io-client';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import { 
   faSearch, faArrowLeft, faPhone, faVideo, faInfoCircle, 
   faPaperclip, faPaperPlane, faComments, faTimes, faUserSlash,
-  faTrashAlt, faBell, faDesktop, faUser, faClock, faVolumeUp 
+  faTrashAlt, faBell, faDesktop, faUser, faClock, faVolumeUp, faShare
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 
 library.add(
   faSearch, faArrowLeft, faPhone, faVideo, faInfoCircle,
   faPaperclip, faPaperPlane, faComments, faTimes, faUserSlash,
-  faTrashAlt, faBell, faDesktop, faUser, faClock, faVolumeUp
+  faTrashAlt, faBell, faDesktop, faUser, faClock, faVolumeUp, faShare
 );
 
 export default {
@@ -369,6 +362,9 @@ export default {
     }
   },
   setup(props) {
+    // Socket.io connection
+    const socket = ref(null);
+
     // Responsive state
     const isMobile = ref(window.innerWidth < 768);
     const showSidebar = ref(!isMobile.value);
@@ -387,7 +383,6 @@ export default {
     const selectedUser = ref(null);
     const inputMessage = ref('');
     const unreadCounts = reactive({});
-    const pollingInterval = ref(null);
     const typingTimeout = ref(null);
     const lastMessages = reactive({});
     
@@ -448,12 +443,12 @@ export default {
       
       // Add a showTimestamp flag to messages that should display a time header
       let lastTime = null;
-      result.forEach((message, index) => {
+      result.forEach((message) => { // Removed unused index parameter
         const msgDate = new Date(message.timestamp);
         const msgHour = msgDate.getHours();
         
         if (!lastTime || lastTime.getHours() !== msgHour || 
-            (msgDate - lastTime) > 30 * 60 * 1000) { // 30 minutes difference
+            (msgDate - lastTime) > 30 * 60 * 1000) {
           message.showTimestamp = true;
         } else {
           message.showTimestamp = false;
@@ -465,6 +460,104 @@ export default {
       return result;
     });
 
+    // Socket.io setup
+    const setupSocket = () => {
+      // Initialize socket connection
+      socket.value = io();
+      
+      // Handle connect event
+      socket.value.on('connect', () => {
+        console.log('Connected to socket server');
+        fetchOnlineUsers();
+      });
+      
+      // Handle receiving messages
+      socket.value.on('receive_message', (message) => {
+        if (message.sender_id !== props.user.id) {
+          // Mark as unread if it's not from the current user
+          if (!selectedUser.value || selectedUser.value.id !== message.sender_id) {
+            unreadCounts[message.sender_id] = (unreadCounts[message.sender_id] || 0) + 1;
+          } else {
+            // If chat is open with this user, mark as read
+            markMessageAsRead(message.id);
+          }
+          
+          // Add typing indicator briefly before showing the message
+          if (selectedUser.value && selectedUser.value.id === message.sender_id) {
+            isTyping.value = true;
+            setTimeout(() => {
+              isTyping.value = false;
+              
+              // Add message to messages array
+              if (messages.value.findIndex(m => m.id === message.id) === -1) {
+                messages.value.push(message);
+                
+                // Update last message for this conversation
+                lastMessages[message.sender_id] = message;
+                
+                // Scroll to bottom and animate
+                nextTick(() => {
+                  scrollToBottom();
+                  animateNewMessage();
+                });
+              }
+            }, 1000);
+          } else {
+            // For users we're not chatting with, just update last messages
+            if (messages.value.findIndex(m => m.id === message.id) === -1) {
+              lastMessages[message.sender_id] = message;
+            }
+          }
+        } else {
+          // Message from current user (confirmation of sent message)
+          if (messages.value.findIndex(m => m.id === message.id) === -1) {
+            messages.value.push(message);
+            
+            // Update last message for this conversation
+            if (selectedUser.value) {
+              lastMessages[selectedUser.value.id] = message;
+            }
+            
+            // Scroll to bottom and animate
+            nextTick(() => {
+              scrollToBottom();
+              animateNewMessage();
+            });
+          }
+        }
+      });
+      
+      // Handle typing status updates
+      socket.value.on('typing', (data) => {
+        if (selectedUser.value && data.sender_username === selectedUser.value.username) {
+          isTyping.value = data.typing;
+        }
+      });
+      
+      // Handle user status updates
+      socket.value.on('user_status', (data) => {
+        const userIndex = onlineUsers.value.findIndex(u => u.id === data.userId);
+        if (userIndex !== -1) {
+          onlineUsers.value[userIndex].online = data.online;
+          
+          // If it's the selected user, update UI
+          if (selectedUser.value && selectedUser.value.id === data.userId) {
+            selectedUser.value.online = data.online;
+          }
+        }
+      });
+      
+      // If admin, subscribe to admin room
+      if (props.user.role === 'admin') {
+        socket.value.emit('admin_subscribe');
+        
+        socket.value.on('notification_forwarded', (data) => {
+          console.log('Notification forwarded:', data);
+          // Could show a toast notification here
+        });
+      }
+    };
+
     // Methods for data fetching
     const fetchMessages = async (receiverId) => {
       try {
@@ -472,11 +565,23 @@ export default {
         if (res.data) {
           messages.value = res.data;
           
+          // Mark received messages as read
+          const receivedMsgIds = res.data
+            .filter(msg => msg.sender_id === receiverId && !msg.read)
+            .map(msg => msg.id);
+          
+          if (receivedMsgIds.length > 0) {
+            markMessagesRead(receivedMsgIds);
+          }
+          
           // Update last messages for this user
           if (res.data.length > 0) {
             const latestMsg = res.data[res.data.length - 1];
             lastMessages[receiverId] = latestMsg;
           }
+          
+          // Reset unread count for this user
+          unreadCounts[receiverId] = 0;
           
           nextTick(() => {
             scrollToBottom();
@@ -490,43 +595,29 @@ export default {
 
     const fetchOnlineUsers = async () => {
       try {
-        // In a real app, this would be from your API
-        // For demo, we'll create some mock users
-        const mockUsers = [
-          { id: 1, username: 'Sarah', role: 'Admin', online: true },
-          { id: 2, username: 'John', role: 'Moderator', online: true },
-          { id: 3, username: 'Emily', role: 'Agent', online: false },
-          { id: 4, username: 'Michael', role: 'Support', online: true },
-          { id: 5, username: 'David', role: 'Developer', online: false },
-          { id: 6, username: 'Jessica', role: 'Analyst', online: true }
-        ];
+        const res = await axios.get('/api/online-users');
+        onlineUsers.value = res.data;
         
-        onlineUsers.value = mockUsers;
-        
-        // Generate some random unread counts
-        mockUsers.forEach(user => {
-          if (Math.random() > 0.6 && user.id !== selectedUser.value?.id) {
-            unreadCounts[user.id] = Math.floor(Math.random() * 5) + 1;
-          }
-        });
-        
-        // Generate some random last messages
-        mockUsers.forEach(user => {
+        // Update unread counts
+        for (const user of onlineUsers.value) {
           if (!lastMessages[user.id]) {
-            const messages = [
-              'Hey there!',
-              'Can we discuss the project later?',
-              'I sent you the files',
-              'Have you seen the alert?',
-              'Are you available for a call?'
-            ];
-            lastMessages[user.id] = {
-              message: messages[Math.floor(Math.random() * messages.length)],
-              timestamp: new Date(Date.now() - Math.random() * 86400000).toISOString(),
-              sender_id: Math.random() > 0.5 ? user.id : props.user.id
-            };
+            // Fetch last message for each user
+            try {
+              const msgRes = await axios.get(`/api/messages/${user.id}?limit=1`);
+              if (msgRes.data && msgRes.data.length > 0) {
+                lastMessages[user.id] = msgRes.data[0];
+                
+                // Count unread messages
+                const unreadRes = await axios.get(`/api/messages/${user.id}/unread/count`);
+                if (unreadRes.data && unreadRes.data.count) {
+                  unreadCounts[user.id] = unreadRes.data.count;
+                }
+              }
+            } catch (e) {
+              console.error(`Error fetching data for user ${user.id}:`, e);
+            }
           }
-        });
+        }
         
         nextTick(() => {
           animateUserCards();
@@ -536,101 +627,117 @@ export default {
       }
     };
     
-    const sendMessage = async () => {
-      const content = inputMessage.value.trim();
-      if (!content || !selectedUser.value) return;
-
-      // Create a new message object
-      const newMessage = {
-        id: Date.now(),
-        sender_id: props.user.id,
-        receiver_id: selectedUser.value.id,
-        message: content,
-        timestamp: new Date().toISOString(),
-        read: false
-      };
-      
-      // Add to messages array immediately for UI response
-      messages.value.push(newMessage);
-      
-      // Update last message for this conversation
-      lastMessages[selectedUser.value.id] = newMessage;
-      
-      // Clear input
-      inputMessage.value = '';
-      
-      // Reset textarea height
-      if (messageInput.value) {
-        messageInput.value.style.height = 'auto';
-      }
-      
-      // Scroll to bottom and animate
-      nextTick(() => {
-        scrollToBottom();
-        animateNewMessage();
-      });
-      
-      // Simulate typing response after a random delay (1-3 seconds)
-      setTimeout(() => {
-        isTyping.value = true;
-        setTimeout(() => {
-          simulateResponse();
-        }, Math.random() * 2000 + 1000);
-      }, Math.random() * 2000 + 1000);
-      
+    const markMessageAsRead = async (messageId) => {
       try {
-        // In a real app, send to API
-        // await axios.post('/api/messages', {
-        //   receiver_id: selectedUser.value.id,
-        //   message: content
-        // });
+        await axios.put('/api/messages/mark-read', {
+          messageIds: [messageId]
+        });
       } catch (error) {
-        console.error('Message send error:', error);
+        console.error('Error marking message as read:', error);
       }
     };
     
-    const simulateResponse = () => {
-      isTyping.value = false;
+    const markMessagesRead = async (messageIds) => {
+      try {
+        await axios.put('/api/messages/mark-read', {
+          messageIds: messageIds
+        });
+      } catch (error) {
+        console.error('Error marking messages as read:', error);
+      }
+    };
+    
+    const sendMessage = async () => {
+      const content = inputMessage.value.trim();
+      if (!content || !selectedUser.value) return;
       
-      if (!selectedUser.value) return;
+      try {
+        // Send via API
+        await axios.post('/api/messages', { // Removed response assignment
+            receiver_id: selectedUser.value.id,
+            message: content
+          });
+        
+        // Clear input
+        inputMessage.value = '';
+        
+        // Reset textarea height
+        if (messageInput.value) {
+          messageInput.value.style.height = 'auto';
+        }
+        
+        // Send via socket to improve real-time experience
+        socket.value.emit('send_message', {
+          receiver_username: selectedUser.value.username,
+          message: content
+        });
+        
+        // Let socket handle the message display via receive_message event
+      } catch (error) {
+        console.error('Message send error:', error);
+        
+        // Add temporary message to show error state
+        messages.value.push({
+          id: 'temp-' + Date.now(),
+          sender_id: props.user.id,
+          receiver_id: selectedUser.value.id,
+          message: content,
+          timestamp: new Date().toISOString(),
+          read: false,
+          error: true
+        });
+        
+        // Clear input on error too
+        inputMessage.value = '';
+      }
+    };
+    
+    const handleTyping = () => {
+      if (!selectedUser.value || !socket.value) return;
       
-      const responses = [
-        "I got your message!",
-        "Thanks for letting me know.",
-        "I'll check and get back to you.",
-        "That sounds good to me.",
-        "Can you provide more details?",
-        "I'll take care of it right away."
-      ];
+      // Clear existing timeout
+      if (typingTimeout.value) {
+        clearTimeout(typingTimeout.value);
+      }
       
-      const response = {
-        id: Date.now(),
-        sender_id: selectedUser.value.id,
-        receiver_id: props.user.id,
-        message: responses[Math.floor(Math.random() * responses.length)],
-        timestamp: new Date().toISOString(),
-        read: true
-      };
-      
-      messages.value.push(response);
-      lastMessages[selectedUser.value.id] = response;
-      
-      nextTick(() => {
-        scrollToBottom();
-        animateNewMessage();
+      // Emit typing event
+      socket.value.emit('typing', {
+        receiver_username: selectedUser.value.username,
+        typing: true
       });
+      
+      // Set timeout to stop typing indicator after 2 seconds of inactivity
+      typingTimeout.value = setTimeout(() => {
+        socket.value.emit('typing', {
+          receiver_username: selectedUser.value.username,
+          typing: false
+        });
+      }, 2000);
+    };
+    
+    const forwardDetection = () => {
+      // Only available for admins
+      if (props.user.role !== 'admin' || !selectedUser.value) return;
+      
+      // For demo, we'll just show this functionality exists
+      alert(`This would forward the latest detection to ${selectedUser.value.username}`);
+      
+      // In a real implementation, you'd have a modal to select a notification
+      // and then use socket.emit('forward_notification', {notification_id, agent_id})
     };
 
     // UI Helper Methods
     const handleUserSelect = (user) => {
       selectedUser.value = user;
       
-      // Clear unread count for this user
-      unreadCounts[user.id] = 0;
-      
       // On mobile, hide the sidebar when a user is selected
       if (isMobile.value) {
         showSidebar.value = false;
+      }
+      
+      // Register user activity
+      if (socket.value) {
+        socket.value.emit('user_activity');
       }
       
       // Fetch messages for this user
@@ -642,11 +749,6 @@ export default {
     
     const toggleSidebar = () => {
       showSidebar.value = !showSidebar.value;
-      
-      // Reset user selection if closing sidebar on mobile
-      if (isMobile.value && !showSidebar.value && selectedUser.value) {
-        // Don't reset selectedUser here as we want to keep the chat open
-      }
       
       // Animate sidebar toggle
       animateSidebarToggle();
@@ -730,6 +832,15 @@ export default {
       return '';
     };
     
+    const formatLastActive = (timestamp) => {
+      if (!timestamp) return 'unknown';
+      try {
+        return formatDistanceToNow(parseISO(timestamp), { addSuffix: true });
+      } catch (e) {
+        return 'unknown';
+      }
+    };
+    
     const formatTime = (timestamp) => {
       return format(new Date(timestamp), 'h:mm a');
     };
@@ -739,26 +850,16 @@ export default {
     };
     
     const formatDateTime = (timestamp) => {
-      return format(new Date(timestamp), 'MMM d, yyyy h:mm a');
+      if (!timestamp) return 'Unknown';
+      try {
+        return format(new Date(timestamp), 'MMM d, yyyy h:mm a');
+      } catch (e) {
+        return 'Invalid date';
+      }
     };
     
     const getCurrentDate = () => {
       return format(new Date(), 'EEEE, MMMM d');
-    };
-    
-    const getRandomTime = () => {
-      const times = ['yesterday', '2 hours ago', '5 minutes ago', 'last week'];
-      return times[Math.floor(Math.random() * times.length)];
-    };
-    
-    const getRandomBio = () => {
-      const bios = [
-        "Working on security monitoring and incident response.",
-        "Specializing in content moderation and user safety.",
-        "Platform security analyst with focus on real-time threats.",
-        "Team lead for moderation systems and automated alerts."
-      ];
-      return bios[Math.floor(Math.random() * bios.length)];
     };
     
     const isUserMessage = (message) => {
@@ -795,19 +896,44 @@ export default {
           targets: userPanel.value,
           translateX: [0, -300],
           opacity: [1, 0],
-          duration: 300,
-          easing: 'easeInQuad'
+          duration: 500,
+          easing: 'easeOutExpo'
         });
       }
+    };
+    
+    const animateChatArea = () => {
+      if (!chatArea.value) return;
       
-      // Animate the floating button
-      if (floatingBtn.value) {
+      anime({
+        targets: chatArea.value,
+        opacity: [0, 1],
+        translateY: [20, 0],
+        duration: 500,
+        easing: 'easeOutQuad'
+      });
+    };
+    
+    const animateInfoPanel = () => {
+      if (!infoPanel.value) return;
+      
+      if (showInfoPanel.value) {
+        // Show info panel
         anime({
-          targets: floatingBtn.value,
-          rotate: showSidebar.value ? 0 : 180,
-          scale: [0.9, 1],
-          duration: 400,
-          easing: 'easeOutBack'
+          targets: infoPanel.value,
+          translateX: [300, 0],
+          opacity: [0, 1],
+          duration: 500,
+          easing: 'easeOutExpo'
+        });
+      } else {
+        // Hide info panel
+        anime({
+          targets: infoPanel.value,
+          translateX: [0, 300],
+          opacity: [1, 0],
+          duration: 500,
+          easing: 'easeOutExpo'
         });
       }
     };
@@ -820,28 +946,8 @@ export default {
         translateY: [20, 0],
         opacity: [0, 1],
         delay: anime.stagger(50),
-        duration: 600,
-        easing: 'easeOutExpo'
-      });
-    };
-    
-    const animateChatArea = () => {
-      if (!chatArea.value) return;
-      
-      anime({
-        targets: chatArea.value.querySelector('.chat-header'),
-        translateY: [-50, 0],
-        opacity: [0, 1],
         duration: 500,
-        easing: 'easeOutExpo'
-      });
-      
-      anime({
-        targets: chatArea.value.querySelector('.message-composer'),
-        translateY: [50, 0],
-        opacity: [0, 1],
-        duration: 500,
-        easing: 'easeOutExpo'
+        easing: 'easeOutQuad'
       });
     };
     
@@ -850,50 +956,23 @@ export default {
       
       anime({
         targets: messageItem.value,
-        translateY: [10, 0],
+        translateY: [20, 0],
         opacity: [0, 1],
-        delay: anime.stagger(100),
+        delay: anime.stagger(50),
         duration: 500,
-        easing: 'easeOutExpo'
+        easing: 'easeOutQuad'
       });
     };
     
     const animateNewMessage = () => {
-      const messageElements = document.querySelectorAll('.message');
-      if (!messageElements.length) return;
-      
-      const lastMessage = messageElements[messageElements.length - 1];
-      
-      anime({
-        targets: lastMessage,
-        translateY: [20, 0],
-        opacity: [0, 1],
-        scale: [0.95, 1],
-        duration: 500,
-        easing: 'easeOutElastic(1, .8)'
-      });
-    };
-    
-    const animateInfoPanel = () => {
-      if (!infoPanel.value) return;
-      
-      if (showInfoPanel.value) {
-        // Show panel
+      const lastMessage = document.querySelector('.message:last-child');
+      if (lastMessage) {
         anime({
-          targets: infoPanel.value,
-          translateX: [300, 0],
+          targets: lastMessage,
+          translateY: [20, 0],
           opacity: [0, 1],
           duration: 500,
-          easing: 'easeOutExpo'
-        });
-      } else {
-        // Hide panel
-        anime({
-          targets: infoPanel.value,
-          translateX: [0, 300],
-          opacity: [1, 0],
-          duration: 300,
-          easing: 'easeInQuad'
+          easing: 'easeOutElastic(1, .6)'
         });
       }
     };
@@ -902,315 +981,152 @@ export default {
       if (!searchInput.value) return;
       
       anime({
-        targets: searchInput.value, 
-        parentNode: searchInput.value.parentNode,
-        translateY: [0, -2],
-      scale: [1, 1.05],
-      duration: 300,
-      easing: 'easeOutQuad'
-    });
+        targets: searchInput.value.parentNode,
+        scale: [1, 1.03],
+        boxShadow: ['0 2px 5px rgba(0,0,0,0.1)', '0 4px 10px rgba(0,0,0,0.2)'],
+        duration: 300,
+        easing: 'easeOutQuad'
+      });
+    };
     
-    // Add a subtle glow effect to the search container
-    anime({
-      targets: searchInput.value.parentNode,
-      boxShadow: ['0 0 0 rgba(0, 123, 255, 0)', '0 0 10px rgba(0, 123, 255, 0.3)'],
-      duration: 400,
-      easing: 'easeOutQuad'
-    });
-  };
-  
-  const animateSearchBlur = () => {
-    if (!searchInput.value) return;
-    
-    anime({
-      targets: {
-        value: searchInput.value, 
-        parentNode: searchInput.value.parentNode
-      },
-      translateY: [-2, 0],
-      scale: [1.05, 1],
-      duration: 300,
-      easing: 'easeOutQuad'
-    });
-    
-    anime({
-      targets: searchInput.value.parentNode,
-      boxShadow: ['0 0 10px rgba(0, 123, 255, 0.3)', '0 0 0 rgba(0, 123, 255, 0)'],
-      duration: 300,
-      easing: 'easeOutQuad'
-    });
-  };
-  
-  const animateModal = () => {
-    if (!modalOverlay.value) return;
-    
-    // Animate modal overlay
-    anime({
-      targets: modalOverlay.value,
-      opacity: [0, 1],
-      duration: 300,
-      easing: 'easeOutQuad'
-    });
-    
-    // Animate modal content
-    const modalContent = modalOverlay.value.querySelector('.modal-content');
-    if (modalContent) {
+    const animateSearchBlur = () => {
+      if (!searchInput.value) return;
+      
       anime({
-        targets: modalContent,
+        targets: searchInput.value.parentNode,
+        scale: [1.03, 1],
+        boxShadow: ['0 4px 10px rgba(0,0,0,0.2)', '0 2px 5px rgba(0,0,0,0.1)'],
+        duration: 300,
+        easing: 'easeOutQuad'
+      });
+    };
+    
+    const animateModal = () => {
+      if (!modalOverlay.value) return;
+      
+      // Fade in overlay
+      anime({
+        targets: modalOverlay.value,
+        opacity: [0, 1],
+        duration: 300,
+        easing: 'easeOutQuad'
+      });
+      
+      // Scale in modal content
+      anime({
+        targets: modalOverlay.value.querySelector('.modal-content'),
         scale: [0.9, 1],
         opacity: [0, 1],
-        translateY: [20, 0],
-        duration: 500,
-        easing: 'easeOutElastic(1, 0.7)'
+        duration: 400,
+        easing: 'spring(1, 80, 10, 0)'
       });
-    }
-  };
+    };
 
-  // Lifecycle hooks
-  onMounted(() => {
-    // Check window size and set isMobile accordingly
-    const checkMobile = () => {
+    // Responsive design methods
+    const handleResize = () => {
       isMobile.value = window.innerWidth < 768;
-      if (isMobile.value) {
-        showSidebar.value = false;
-      } else {
+      
+      // If transitioning from mobile to desktop, ensure sidebar is shown
+      if (!isMobile.value) {
         showSidebar.value = true;
       }
     };
-    
-    // Add resize listener
-    window.addEventListener('resize', checkMobile);
-    
-    // Initial call
-    checkMobile();
-    
-    // Fetch initial data
-    fetchOnlineUsers();
-    
-    // Set up polling for online users
-    pollingInterval.value = setInterval(() => {
-      fetchOnlineUsers();
-    }, 30000); // Check every 30 seconds
-    
-    // Add system messages randomly every 2-3 minutes
-    const systemMsgInterval = setInterval(() => {
-      if (Math.random() > 0.7 && selectedUser.value) {
-        addSystemMessage();
-      }
-    }, 120000 + Math.random() * 60000);
-    
-    // Cleanup function
-    onBeforeUnmount(() => {
-      window.removeEventListener('resize', checkMobile);
-      clearInterval(pollingInterval.value);
-      clearInterval(systemMsgInterval);
-      if (typingTimeout.value) clearTimeout(typingTimeout.value);
-    });
-  });
-  
-  // Add a system message with notification details
-  const addSystemMessage = () => {
-    const types = ['object_detection', 'chat_detection', 'audio_detection'];
-    const randomType = types[Math.floor(Math.random() * types.length)];
-    
-    let details = null;
-    
-    if (randomType === 'object_detection') {
-      details = {
-        event_type: 'object_detection',
-        timestamp: new Date().toISOString(),
-        platform: 'Twitch',
-        streamer: selectedUser.value.username,
-        annotated_image: '', // Base64 image would go here
-        detections: [
-          { class: 'person', confidence: 0.95 },
-          { class: 'weapon', confidence: 0.85 }
-        ]
-      };
-    } else if (randomType === 'chat_detection') {
-      details = {
-        event_type: 'chat_detection',
-        timestamp: new Date().toISOString(),
-        platform: 'YouTube',
-        streamer: selectedUser.value.username,
-        keywords: ['banned', 'offensive', 'threat'],
-        messages: [
-          { sender: 'anonymous', message: 'This content contains offensive language.' },
-          { sender: 'moderator', message: 'User has been warned.' }
-        ]
-      };
-    } else {
-      details = {
-        event_type: 'audio_detection',
-        timestamp: new Date().toISOString(),
-        platform: 'Facebook',
-        streamer: selectedUser.value.username,
-        keyword: 'violation',
-        transcript: 'This audio segment contained potentially policy-violating content that was automatically flagged.'
-      };
-    }
-    
-    const notificationMessages = [
-      'Potential violation detected in stream',
-      'Automated alert triggered on content',
-      'Moderation system flagged content',
-      'Policy violation detected'
-    ];
-    
-    // Create system message
-    const systemMsg = {
-      id: Date.now(),
-      sender_id: 'system',
-      receiver_id: props.user.id,
-      message: notificationMessages[Math.floor(Math.random() * notificationMessages.length)],
-      timestamp: new Date().toISOString(),
-      is_system: true,
-      details: details
-    };
-    
-    messages.value.push(systemMsg);
-    
-    nextTick(() => {
-      scrollToBottom();
-      animateSystemMessage();
-    });
-  };
-  
-  const animateSystemMessage = () => {
-    const systemMessages = document.querySelectorAll('.message.system');
-    if (!systemMessages.length) return;
-    
-    const lastSystemMessage = systemMessages[systemMessages.length - 1];
-    
-    anime({
-      targets: lastSystemMessage,
-      translateY: [20, 0],
-      opacity: [0, 1],
-      scale: [0.9, 1],
-      duration: 800,
-      easing: 'easeOutElastic(1, 0.5)'
-    });
-    
-    // Animate the bell icon
-    const bellIcon = lastSystemMessage.querySelector('.system-icon');
-    if (bellIcon) {
-      anime({
-        targets: bellIcon,
-        rotate: [0, 20, -15, 10, -5, 0],
-        duration: 1000,
-        easing: 'easeInOutQuad'
-      });
-    }
-  };
-  
-  // Watch for changes in input message to adjust textarea height
-  watch(inputMessage, (newVal) => {
-    nextTick(() => {
-      autoGrow();
-    });
-  });
-  
-  // Watch for changes in selectedUser to ensure smooth transitions
-  watch(selectedUser, (newUser, oldUser) => {
-    if (!newUser) return;
-    
-    if (!oldUser) {
-      // First selection - no transition needed
-      return;
-    }
-    
-    // Create a smooth transition between users
-    if (messagesContainer.value) {
-      // Fade out current messages
-      anime({
-        targets: messagesContainer.value,
-        opacity: [1, 0],
-        translateY: [0, -10],
-        duration: 200,
-        easing: 'easeInQuad',
-        complete: () => {
-          // Fetch new messages and fade them in
-          fetchMessages(newUser.id);
-          anime({
-            targets: messagesContainer.value,
-            opacity: [0, 1],
-            translateY: [-10, 0],
-            delay: 100,
-            duration: 400,
-            easing: 'easeOutQuad'
-          });
-        }
-      });
-    }
-  });
 
-  return {
-    // Responsive state
-    isMobile,
-    showSidebar,
-    toggleBtnText,
+    // Lifecycle hooks
+    onMounted(() => {
+      setupSocket();
+      fetchOnlineUsers();
+      
+      // Set up resize listener
+      window.addEventListener('resize', handleResize);
+      
+      // Add CSS-style class to body for any global styling needs
+      document.body.classList.add('secure-messaging-app');
+    });
     
-    // UI state
-    showInfoPanel,
-    activeFilter,
-    searchQuery,
-    isTyping,
-    notificationDetails,
+    onBeforeUnmount(() => {
+      window.removeEventListener('resize', handleResize);
+      
+      // Disconnect socket on unmount
+      if (socket.value) {
+        socket.value.disconnect();
+      }
+      
+      // Clean up global styling
+      document.body.classList.remove('secure-messaging-app');
+    });
     
-    // Data state
-    onlineUsers,
-    messages,
-    selectedUser,
-    inputMessage,
-    unreadCounts,
-    
-    // Computed properties
-    filteredUsers,
-    groupedMessages,
-    
-    // Methods
-    handleUserSelect,
-    toggleSidebar,
-    closeMobileChat,
-    toggleInfo,
-    filterUsers,
-    sendMessage,
-    autoGrow,
-    showNotificationDetails,
-    closeNotificationModal,
-    
-    // Helpers
-    getLastMessage,
-    getLastMessageTime,
-    formatTime,
-    formatTimeHeader,
-    formatDateTime,
-    getCurrentDate,
-    getRandomTime,
-    getRandomBio,
-    isUserMessage,
-    getAvatarGradient,
-    
-    // Animation methods
-    animateSearchFocus,
-    animateSearchBlur,
-    
-    // Refs
-    userPanel,
-    userCard,
-    chatArea,
-    messagesContainer,
-    messageItem,
-    infoPanel,
-    searchInput,
-    messageInput,
-    floatingBtn,
-    modalOverlay,
-    usersList
-  };
-}
+    // Watch for changes
+    watch(selectedUser, (newUser) => {
+      if (newUser) {
+        // Update document title with user name
+        document.title = `Chat with ${newUser.username}`;
+      } else {
+        document.title = 'Secure Messaging';
+      }
+    });
+
+    return {
+      // State
+      isMobile,
+      showSidebar,
+      toggleBtnText,
+      showInfoPanel,
+      activeFilter,
+      searchQuery,
+      messages,
+      filteredUsers,
+      groupedMessages,
+      selectedUser,
+      inputMessage,
+      isTyping,
+      unreadCounts,
+      notificationDetails,
+      
+      // Methods
+      handleUserSelect,
+      toggleSidebar,
+      closeMobileChat,
+      toggleInfo,
+      filterUsers,
+      sendMessage,
+      autoGrow,
+      handleTyping,
+      showNotificationDetails,
+      closeNotificationModal,
+      forwardDetection,
+      
+      // Helpers
+      getLastMessage,
+      getLastMessageTime,
+      formatLastActive,
+      formatTime,
+      formatTimeHeader,
+      formatDateTime,
+      getCurrentDate,
+      isUserMessage,
+      getAvatarGradient,
+      
+      // Refs
+      userPanel,
+      userCard,
+      chatArea,
+      messagesContainer,
+      messageItem,
+      infoPanel,
+      searchInput,
+      messageInput,
+      floatingBtn,
+      modalOverlay,
+      usersList,
+      
+      // Animation methods
+      animateSearchFocus,
+      animateSearchBlur
+    };
+  }
 };
-</script>
+        </script> 
 
 <style scoped>
 .messaging-container {

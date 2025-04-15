@@ -16,11 +16,11 @@
       </div>
       <div class="modal-body">
         <div class="stream-player-container">
-          <VideoPlayer 
-            :key="videoPlayerKey"
-            :platform="stream.platform.toLowerCase()"
-            :streamer-name="stream.streamer_username"
-          />
+          <video ref="videoPlayer" class="video-player"></video>
+          <div v-if="isLoading" class="loading-overlay">
+            <font-awesome-icon icon="spinner" spin class="loading-icon" />
+            <div>Loading stream...</div>
+          </div>
         </div>
         <div v-if="detections.length > 0" class="detections-section">
           <h4>Recent Detections</h4>
@@ -29,6 +29,7 @@
               v-for="(alert, index) in detections" 
               :key="index"
               class="detection-card"
+              v-wave
             >
               <img :src="alert.image_url" alt="Detection" class="detection-image" />
               <div class="detection-info">
@@ -74,14 +75,12 @@
 </template>
 
 <script>
-import VideoPlayer from './VideoPlayer.vue'
-import { ref } from 'vue'
+import Hls from 'hls.js'
+import anime from 'animejs'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 
 export default {
   name: 'StreamDetailsModal',
-  components: {
-    VideoPlayer
-  },
   props: {
     stream: {
       type: Object,
@@ -99,7 +98,9 @@ export default {
   emits: ['close', 'assign', 'refresh'],
   setup(props, { emit }) {
     const refreshError = ref(null)
-    const videoPlayerKey = ref(Date.now())
+    const videoPlayer = ref(null)
+    const hls = ref(null)
+    const isLoading = ref(true)
 
     const formatTime = (timestamp) => {
       return new Date(timestamp).toLocaleString('en-US', {
@@ -114,15 +115,166 @@ export default {
 
     const handleRefresh = () => {
       refreshError.value = null
-      videoPlayerKey.value = Date.now()
+      isLoading.value = true
+      destroyHls()
       emit('refresh')
+      // Re-initialize the video player after a short delay
+      setTimeout(() => {
+        initializeVideo()
+      }, 1000)
     }
+
+    const initializeVideo = () => {
+      if (!videoPlayer.value) return
+      
+      try {
+        isLoading.value = true
+        
+        // Get the correct m3u8 URL directly from the stream object
+        let m3u8Url = null
+        
+        if (props.stream.platform.toLowerCase() === 'chaturbate' && props.stream.chaturbate_m3u8_url) {
+          m3u8Url = props.stream.chaturbate_m3u8_url
+        } else if (props.stream.platform.toLowerCase() === 'stripchat' && props.stream.stripchat_m3u8_url) {
+          m3u8Url = props.stream.stripchat_m3u8_url
+        }
+        
+        if (!m3u8Url) {
+          refreshError.value = 'No valid streaming URL available for this stream'
+          isLoading.value = false
+          return
+        }
+        
+        // Initialize HLS.js if supported
+        if (Hls.isSupported()) {
+          destroyHls() // Clean up any existing instance
+          
+          hls.value = new Hls({
+            startLevel: 0,
+            capLevelToPlayerSize: true,
+            maxBufferLength: 30,
+            maxMaxBufferLength: 60
+          })
+          
+          hls.value.loadSource(m3u8Url)
+          hls.value.attachMedia(videoPlayer.value)
+          
+          hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
+            videoPlayer.value.muted = true // Muted for autoplay
+            videoPlayer.value.play().catch(e => {
+              console.warn('Autoplay prevented:', e)
+            })
+            isLoading.value = false
+            
+            // Add animation for the video player
+            anime({
+              targets: videoPlayer.value,
+              opacity: [0, 1],
+              duration: 800,
+              easing: 'easeOutSine'
+            })
+          })
+          
+          hls.value.on(Hls.Events.ERROR, (event, data) => {
+            console.error('HLS error:', data)
+            if (data.fatal) {
+              switch(data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  refreshError.value = 'Network error while loading the stream'
+                  hls.value.startLoad()
+                  break
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  refreshError.value = 'Media error while playing the stream'
+                  hls.value.recoverMediaError()
+                  break
+                default:
+                  refreshError.value = 'Error loading the stream'
+                  destroyHls()
+                  break
+              }
+            }
+          })
+        } 
+        // Fallback for browsers with native HLS support
+        else if (videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) {
+          videoPlayer.value.src = m3u8Url
+          videoPlayer.value.addEventListener('loadedmetadata', () => {
+            videoPlayer.value.muted = true // Muted for autoplay
+            videoPlayer.value.play().catch(e => {
+              console.warn('Autoplay prevented:', e)
+            })
+            isLoading.value = false
+          })
+          
+          videoPlayer.value.addEventListener('error', () => {
+            refreshError.value = 'Error loading the stream'
+            isLoading.value = false
+          })
+        } else {
+          refreshError.value = 'HLS streaming is not supported by your browser'
+          isLoading.value = false
+        }
+      } catch (error) {
+        console.error('Error initializing video stream:', error)
+        refreshError.value = 'Failed to load stream data'
+        isLoading.value = false
+      }
+    }
+    
+    const destroyHls = () => {
+      if (hls.value) {
+        hls.value.destroy()
+        hls.value = null
+      }
+      
+      if (videoPlayer.value) {
+        videoPlayer.value.pause()
+        videoPlayer.value.removeAttribute('src')
+        videoPlayer.value.load()
+      }
+    }
+    
+    // Initialize when mounted
+    onMounted(() => {
+      // Add entrance animation to modal
+      anime({
+        targets: '.modal-content',
+        translateY: [30, 0],
+        opacity: [0, 1],
+        easing: 'easeOutExpo',
+        duration: 600
+      })
+      
+      initializeVideo()
+      
+      // Add animation to detection cards
+      anime({
+        targets: '.detection-card',
+        scale: [0.9, 1],
+        opacity: [0, 1],
+        delay: anime.stagger(100),
+        easing: 'easeOutElastic(1, .8)',
+        duration: 800
+      })
+    })
+    
+    // Clean up when unmounting
+    onBeforeUnmount(() => {
+      destroyHls()
+    })
+    
+    // Watch for stream changes and reinitialize video
+    watch(() => props.stream.id, () => {
+      destroyHls()
+      initializeVideo()
+    })
 
     return {
       formatTime,
       handleRefresh,
       refreshError,
-      videoPlayerKey
+      videoPlayer,
+      isLoading
     }
   }
 }
@@ -153,14 +305,13 @@ export default {
   max-height: 85vh;
   overflow-y: auto;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  animation: slideUp 0.3s ease;
   position: relative;
 }
 
 .modal-close {
   position: absolute;
-  top: 15px;
-  right: 15px;
+  top: 10px;
+  right: 10px;
   background: none;
   border: none;
   color: var(--text-color);
@@ -169,6 +320,7 @@ export default {
   opacity: 0.7;
   transition: opacity 0.2s ease;
   padding: 8px;
+  z-index: 10;
 }
 
 .modal-close:hover {
@@ -176,7 +328,7 @@ export default {
 }
 
 .modal-header {
-  padding: 20px;
+  padding: 25px;
   border-bottom: 1px solid var(--input-border);
 }
 
@@ -230,6 +382,33 @@ export default {
   position: relative;
 }
 
+.video-player {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  z-index: 5;
+}
+
+.loading-icon {
+  font-size: 2rem;
+  margin-bottom: 10px;
+  animation: spin 1s linear infinite;
+}
+
 .detections-section h4 {
   margin: 20px 0 15px 0;
   font-size: 1.2rem;
@@ -246,11 +425,13 @@ export default {
   background-color: var(--hover-bg);
   border-radius: 8px;
   overflow: hidden;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .detection-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .detection-image {
@@ -299,7 +480,7 @@ export default {
   padding: 8px 15px;
   border-radius: 5px;
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  transition: all 0.2s ease;
   font-size: 0.9rem;
   display: flex;
   align-items: center;
@@ -308,6 +489,11 @@ export default {
 
 .action-button:hover:not(:disabled) {
   opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.action-button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .action-button:disabled {
@@ -331,24 +517,9 @@ export default {
   to { opacity: 1; }
 }
 
-@keyframes slideUp {
-  from { 
-    transform: translateY(20px); 
-    opacity: 0; 
-  }
-  to { 
-    transform: translateY(0); 
-    opacity: 1; 
-  }
-}
-
 @keyframes spin {
-  from { 
-    transform: rotate(0deg); 
-  }
-  to { 
-    transform: rotate(360deg); 
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 @media (max-width: 576px) {

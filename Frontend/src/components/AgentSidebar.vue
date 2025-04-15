@@ -46,35 +46,31 @@
     </div>
   </div>
 
-  <!-- Settings Popup -->
+  <!-- Settings Popup (Read-only version) -->
   <div class="settings-popup" v-if="showSettings" ref="settingsPopupRef">
     <div class="settings-menu">
-      <div class="settings-section-title">Detection</div>
-      <button 
-        class="settings-item flag-item" 
-        @click="openAddKeywordModal"
-        ref="keywordButtonRef"
-      >
-        <span>Add Keyword</span>
-        <font-awesome-icon :icon="['fas', 'plus']" class="right-icon" />
-      </button>
-      <button 
-        class="settings-item flag-item" 
-        @click="openAddObjectModal"
-        ref="objectButtonRef"
-      >
-        <span>Add Object Detection</span>
-        <font-awesome-icon :icon="['fas', 'plus']" class="right-icon" />
-      </button>
-      <button 
-        class="settings-item flag-item" 
-        @click="openAddTelegramModal"
-        ref="telegramButtonRef"
-      >
-        <span>Add Telegram Recipient</span>
-        <font-awesome-icon :icon="['fas', 'plus']" class="right-icon" />
-      </button>
+      <div class="settings-section-title">Alert Settings</div>
+      <div class="settings-item view-item">
+        <span>Keywords</span>
+        <span class="item-count">{{ chatKeywords.length }} active</span>
+        <font-awesome-icon :icon="['fas', 'chevron-right']" class="right-icon" />
+      </div>
+      <div class="settings-item view-item">
+        <span>Object Detection</span>
+        <span class="item-count">{{ flaggedObjects.length }} active</span>
+        <font-awesome-icon :icon="['fas', 'chevron-right']" class="right-icon" />
+      </div>
+      <div class="settings-item view-item">
+        <span>Telegram Recipients</span>
+        <span class="item-count">{{ telegramRecipients.length }} active</span>
+        <font-awesome-icon :icon="['fas', 'chevron-right']" class="right-icon" />
+      </div>
      
+      <button class="settings-item preferences">
+        <span>Change Password</span>
+        <font-awesome-icon :icon="['fas', 'key']" class="right-icon" />
+      </button>
+      
       <button class="settings-item logout" @click="logout">
         <span>Log out</span>
       </button>
@@ -117,16 +113,6 @@
     </div>
   </div>
   
-  <!-- Modal Components -->
-  <SettingsModals
-    ref="modalsRef"
-    @notification="showToastNotification"
-    @update:keywords="fetchKeywords"
-    @update:objects="fetchObjects"
-    @update:telegramRecipients="fetchTelegramRecipients"
-    :isMobile="isMobile"
-  />
-  
   <!-- Content Tabs -->
   <div class="content-tabs" v-if="activeTab === 'streams'">
     <!-- Keep existing content -->
@@ -139,49 +125,40 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import anime from 'animejs/lib/anime.es.js'
 import axios from 'axios'
-import { useRouter } from 'vue-router'
-import SettingsModals from './SettingsModals.vue'
 import { 
   faTachometerAlt, 
   faVideo, 
-  faUsers, 
+  faClipboardList,
   faBell, 
   faCog,
   faComments,
-  faCheck,
   faChevronRight,
-  faPlus,
+  faKey,
   faExclamationCircle,
   faCheckCircle,
   faInfoCircle,
-  faEdit,
-  faTrash,
   faSpinner
 } from '@fortawesome/free-solid-svg-icons'
 
 library.add(
   faTachometerAlt, 
   faVideo, 
-  faUsers, 
+  faClipboardList, 
   faBell, 
   faCog,
   faComments,
-  faCheck,
   faChevronRight,
-  faPlus,
+  faKey,
   faExclamationCircle,
   faCheckCircle,
   faInfoCircle,
-  faEdit,
-  faTrash,
   faSpinner
 )
 
 export default {
-  name: 'AdminSidebar',
+  name: 'AgentSidebar',
   components: {
-    FontAwesomeIcon,
-    SettingsModals
+    FontAwesomeIcon
   },
   props: {
     activeTab: String,
@@ -195,7 +172,6 @@ export default {
   },
   emits: ['tab-change', 'update:theme', 'settings', 'logout'],
   setup(props, { emit }) {
-    const router = useRouter()
     const isMobile = ref(false)
     const windowWidth = ref(window.innerWidth)
     const navButtons = ref([])
@@ -204,7 +180,6 @@ export default {
     const settingsToggleRef = ref(null)
     const settingsPopupRef = ref(null)
     const showSettings = ref(false)
-    const modalsRef = ref(null)
     const footerRef = ref(null)
     const headerRef = ref(null)
     
@@ -214,11 +189,6 @@ export default {
     const logoutSpinnerRef = ref(null)
     const spinnerCircleRef = ref(null)
     
-    // Refs for modal buttons
-    const keywordButtonRef = ref(null)
-    const objectButtonRef = ref(null)
-    const telegramButtonRef = ref(null)
-    
     // Toast notification
     const toastRef = ref(null)
     const showToast = ref(false)
@@ -226,7 +196,7 @@ export default {
     const toastType = ref('success')
     const toastTimeout = ref(null)
     
-    // Data for settings
+    // Read-only data for settings
     const chatKeywords = ref([])
     const flaggedObjects = ref([])
     const telegramRecipients = ref([])
@@ -316,7 +286,7 @@ export default {
       }
     }
 
-    // Logout function with animation and redirect
+    // Logout function with animation
     const logout = async (callApi = true) => {
       // First close the settings popup if it's open
       if (showSettings.value) {
@@ -410,7 +380,7 @@ export default {
       // Make the actual API call to logout
       if (callApi) {
         try {
-          await axios.post('/api/logout')
+          await axios.post('/api/agent/logout')
         } catch (error) {
           console.error('Logout failed:', error)
         }
@@ -419,7 +389,7 @@ export default {
       // Continue the animation and check session status
       setTimeout(async () => {
         try {
-          const response = await axios.get('/api/session')
+          const response = await axios.get('/api/agent/session')
           
           // Complete the logout animation
           if (logoutOverlayRef.value) {
@@ -442,12 +412,9 @@ export default {
                     
                     // Perform redirection if logged out successfully
                     if (!response.data.logged_in) {
-                      // Reset state and redirect to app.vue
+                      // Reset state and redirect
                       showSettings.value = false
                       emit('logout')
-                      
-                      // Redirect to the app.vue (root path)
-                      router.push('../App.vue')
                     } else {
                       // Show error toast
                       showToastNotification('Logout failed. Please try again.', 'error')
@@ -462,9 +429,6 @@ export default {
           // Assume logout succeeded if session check fails
           showLogoutOverlay.value = false
           emit('logout')
-          
-          // Redirect to the app.vue (root path)
-          router.push('../')
         }
       }, 1500) // Delay for animation effect
     }
@@ -508,51 +472,42 @@ export default {
       }, 3000)
     }
 
-    // Modal functions
-    const openAddKeywordModal = () => {
-      modalsRef.value?.openKeywordModal(keywordButtonRef.value)
-    }
-    
-    const openAddObjectModal = () => {
-      modalsRef.value?.openObjectModal(objectButtonRef.value)
-    }
-    
-    const openAddTelegramModal = () => {
-      modalsRef.value?.openTelegramModal(telegramButtonRef.value)
-    }
-    
-    // Additional functions
+    // Read-only data fetching functions
     const fetchKeywords = async () => {
       try {
-        const response = await axios.get('/api/keywords')
+        const response = await axios.get('/api/agent/keywords')
         chatKeywords.value = response.data
       } catch (error) {
         console.error('Error fetching keywords:', error)
+        showToastNotification('Unable to load keywords', 'error')
       }
     }
     
     const fetchObjects = async () => {
       try {
-        const response = await axios.get('/api/objects')
+        const response = await axios.get('/api/agent/objects')
         flaggedObjects.value = response.data
       } catch (error) {
         console.error('Error fetching objects:', error)
+        showToastNotification('Unable to load objects', 'error')
       }
     }
     
     const fetchTelegramRecipients = async () => {
       try {
-        const response = await axios.get('/api/telegram_recipients')
+        const response = await axios.get('/api/agent/telegram_recipients')
         telegramRecipients.value = response.data
       } catch (error) {
         console.error('Error fetching telegram recipients:', error)
+        showToastNotification('Unable to load telegram recipients', 'error')
       }
     }
 
+    // Modified tab for agent users
     const tabs = [
       { id: 'dashboard', label: 'Dashboard', icon: ['fas', 'tachometer-alt'] },
       { id: 'streams', label: 'Streams', icon: ['fas', 'video'] },
-      { id: 'agents', label: 'Agents', icon: ['fas', 'users'] },
+      { id: 'tasks', label: 'Tasks', icon: ['fas', 'clipboard-list'] },
       { id: 'messages', label: 'Messages', icon: ['fas', 'comments'] },
       { id: 'notifications', label: 'Notifications', icon: ['fas', 'bell'] }
     ]
@@ -591,22 +546,16 @@ export default {
       toggleSettings,
       logout,
       
+      // Data for read-only display
+      chatKeywords,
+      flaggedObjects,
+      telegramRecipients,
+      
       // Logout animation states and refs
       showLogoutOverlay,
       logoutOverlayRef,
       logoutSpinnerRef,
       spinnerCircleRef,
-      
-      // Modal controls
-      openAddKeywordModal,
-      openAddObjectModal,
-      openAddTelegramModal,
-      modalsRef,
-      
-      // Modal button refs
-      keywordButtonRef,
-      objectButtonRef,
-      telegramButtonRef,
       
       // Toast notification
       showToast,
@@ -824,14 +773,31 @@ export default {
   opacity: 0.6;
 }
 
-.flag-item {
+/* Read-only view items */
+.view-item {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  cursor: default;
+}
+
+.view-item:hover {
+  background-color: transparent;
+}
+
+.item-count {
+  margin-left: auto;
+  margin-right: 8px;
+  font-size: 0.8rem;
+  color: #8e8e8e;
+}
+
+.settings-item.preferences {
+  border-top: 1px solid var(--input-border);
+  margin-top: 8px;
 }
 
 .settings-item.logout {
-  border-top: 1px solid var(--input-border);
-  margin-top: 8px;
   color: #f44336;
 }
 
@@ -933,145 +899,6 @@ export default {
 }
 
 /* Logout Animation Styles */
-.logout-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-  opacity: 0;
-}
-
-.logout-spinner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.spinner-circle {
-  width: 80px;
-  height: 80px;
-  transform-origin: center;
-  margin-bottom: 16px;
-}
-
-.path {
-  stroke: var(--primary-color);
-  stroke-linecap: round;
-  stroke-dasharray: 126;
-  stroke-dashoffset: 126;
-  animation: dash 1.5s ease-in-out infinite;
-}
-
-.logout-text {
-  color: white;
-  font-size: 1.1rem;
-  font-weight: 500;
-  text-align: center;
-  margin-top: 16px;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes dash {
-  0% {
-    stroke-dashoffset: 126;
-  }
-  50% {
-    stroke-dashoffset: 0;
-  }
-  100% {
-    stroke-dashoffset: 126;
-  }
-}
-
-@keyframes pulse {
-  0% {
-    opacity: 0.6;
-  }
-  50% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0.6;
-  }
-}
-
-@media (max-width: 768px) {
-  .sidebar {
-    display: none;
-  }
-  
-  .content-tabs {
-    margin-left: 0;
-    padding: 16px;
-    padding-bottom: 70px;
-  }
-  
-  .settings-popup {
-    position: fixed;
-    bottom: 70px;
-    left: 16px;
-    right: 16px;
-    width: auto;
-  }}
-  
-  
-
-/* Toast Notification */
-.toast-notification {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 20px;
-  border-radius: 8px;
-  background-color: #4caf50;
-  color: white;
-  display: flex;
-  align-items: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 2000;
-  min-width: 280px;
-  max-width: 400px;
-}
-
-.toast-notification.error {
-  background-color: #f44336;
-}
-
-.toast-notification.info {
-  background-color: #2196f3;
-}
-
-.toast-icon {
-  margin-right: 12px;
-  font-size: 1.2rem;
-}
-
-.toast-message {
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
-/* Content Tabs */
-.content-tabs {
-  margin-left: 72px;
-  padding: 20px;
-  animation: fadeIn 0.4s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* New Logout Animation Styles */
 .logout-overlay {
   position: fixed;
   top: 0;

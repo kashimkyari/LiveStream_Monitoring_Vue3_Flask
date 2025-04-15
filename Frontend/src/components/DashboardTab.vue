@@ -1,20 +1,19 @@
 <template>
   <section class="dashboard-tab">
-    <div class="dashboard-header" ref="dashboardHeader">
+    <div class="dashboard-header">
       <h2>Stream Dashboard</h2>
-      <div class="stats-container" ref="statsContainer">
+      <div class="stats-container">
         <StatCard 
           v-for="stat in stats"
           :key="stat.label"
           :value="stat.value"
           :label="stat.label"
           :icon="stat.icon"
-          ref="statCards"
         />
       </div>
     </div>
 
-    <div class="stream-grid" ref="streamGrid">
+    <div class="stream-grid">
       <StreamCard
         v-for="(stream, index) in streams"
         :key="stream.id"
@@ -22,14 +21,13 @@
         :detection-count="getDetectionCount(stream)"
         @click="openStream(stream, index)"
         class="stream-card"
-        ref="streamCards"
       />
     </div>
   </section>
 </template>
 
 <script>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import anime from 'animejs/lib/anime.es.js'
 import StatCard from './StatCard.vue'
 import StreamCard from './StreamCard.vue'
@@ -47,12 +45,6 @@ export default {
   },
   emits: ['open-stream'],
   setup(props, { emit }) {
-    const dashboardHeader = ref(null)
-    const statsContainer = ref(null)
-    const streamGrid = ref(null)
-    const statCards = ref([])
-    const streamCards = ref([])
-    
     const stats = computed(() => [
       { 
         value: props.dashboardStats.ongoing_streams, 
@@ -77,9 +69,10 @@ export default {
     
     const openStream = (stream, index) => {
       // Animate the card click
-      if (streamCards.value[index]) {
+      const clickedCard = document.querySelectorAll('.stream-card')[index];
+      if (clickedCard) {
         anime({
-          targets: streamCards.value[index],
+          targets: clickedCard,
           scale: [1, 1.05, 1],
           duration: 400,
           easing: 'easeInOutQuad'
@@ -95,7 +88,7 @@ export default {
     onMounted(() => {
       // Animate the header with a fade-in and slide-up effect
       anime({
-        targets: dashboardHeader.value,
+        targets: '.dashboard-header',
         opacity: [0, 1],
         translateY: [20, 0],
         duration: 600,
@@ -104,7 +97,7 @@ export default {
       
       // Animate stats cards with a staggered entrance
       anime({
-        targets: statCards.value,
+        targets: '.stats-container .stat-card',
         opacity: [0, 1],
         translateY: [20, 0],
         scale: [0.9, 1],
@@ -115,11 +108,11 @@ export default {
       
       // Animate stream cards with a staggered entrance
       anime({
-        targets: streamGrid.value.querySelectorAll('.stream-card'),
+        targets: '.stream-card',
         opacity: [0, 1],
         translateY: [30, 0],
         scale: [0.95, 1],
-        delay: anime.stagger(80, {start: 800, grid: [3, 3], from: 'center'}),
+        delay: anime.stagger(80, {start: 800, from: 'center'}),
         duration: 700,
         easing: 'easeOutCubic'
       })
@@ -128,12 +121,7 @@ export default {
     return {
       stats,
       getDetectionCount,
-      openStream,
-      dashboardHeader,
-      statsContainer,
-      streamGrid,
-      statCards,
-      streamCards
+      openStream
     }
   }
 }
@@ -141,36 +129,35 @@ export default {
 
 <style scoped>
 .dashboard-tab {
-  animation: fadeIn 0.4s ease;
-  max-width: calc(100% - 5rem);
+  width: 100%;
   margin: 0 auto;
-  padding: 1.5rem;
+  box-sizing: border-box;
+  
 }
 
 .dashboard-header {
-  margin-bottom: 35px;
+  margin-bottom: 2rem;
 }
 
 .dashboard-header h2 {
-  margin-bottom: 25px;
+  margin-bottom: 1.5rem;
   font-size: 2rem;
   color: var(--text-color);
   font-weight: 600;
   letter-spacing: -0.5px;
-  opacity: 0;
 }
 
 .stats-container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 24px;
-  margin-bottom: 35px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 2rem;
 }
 
 .stream-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 24px;
+  gap: 1.5rem;
   perspective: 1000px;
 }
 
@@ -188,54 +175,58 @@ export default {
   box-shadow: 0 12px 20px rgba(0, 0, 0, 0.15);
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 /* Responsive styles */
 @media (max-width: 1280px) {
   .dashboard-tab {
-    max-width: calc(100% - 4rem);
+    padding: 1.25rem;
+    overflow: hidden;
   }
 }
 
 @media (max-width: 992px) {
   .dashboard-tab {
-    max-width: calc(100% - 3rem);
+    padding: 1rem;
   }
   
   .stats-container {
-    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+  }
+  
+  .stream-grid {
+    gap: 1.25rem;
   }
 }
 
 @media (max-width: 768px) {
   .dashboard-tab {
-    max-width: calc(100% - 2rem);
-    padding: 1rem;
-  }
-  
-  .stats-container {
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-  }
-  
-  .stream-grid {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 16px;
+    padding: 0.75rem;
   }
   
   .dashboard-header h2 {
     font-size: 1.6rem;
-    margin-bottom: 20px;
+    margin-bottom: 1.25rem;
+  }
+  
+  .stats-container {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  
+  .stream-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
   }
 }
 
-@media (max-width: 576px) {
+@media (max-width: 640px) {
+  .stats-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
   .dashboard-tab {
-    max-width: 100%;
-    padding: 0.75rem;
+    padding: 0.5rem;
   }
   
   .stats-container {
@@ -248,6 +239,7 @@ export default {
   
   .dashboard-header h2 {
     font-size: 1.4rem;
+    margin-bottom: 1rem;
   }
 }
 </style>
