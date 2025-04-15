@@ -14,27 +14,30 @@
         <table>
           <thead>
             <tr>
-              <th>Username</th>
-              <th>Assigned Streams</th>
-              <th>Actions</th>
+              <th class="avatar-col"></th>
+              <th>Agent</th>
+              <th class="count-col">Streams</th>
+              <th class="actions-col">Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="agent in agents" :key="agent.id" class="agent-row">
-              <td>
-                <div class="agent-info">
-                  <div class="avatar">{{ agent.username.charAt(0).toUpperCase() }}</div>
-                  <div class="agent-name">{{ agent.username }}</div>
-                </div>
+              <td class="avatar-col">
+                <div class="avatar">{{ agent.username.charAt(0).toUpperCase() }}</div>
               </td>
-              <td>{{ agent.assignments?.length || 0 }}</td>
-              <td class="actions">
-                <button @click.stop="$emit('edit', agent)" class="icon-button edit" title="Edit Agent" v-wave>
-                  <font-awesome-icon icon="edit" />
-                </button>
-                <button @click.stop="$emit('delete', agent)" class="icon-button danger" title="Delete Agent" v-wave>
-                  <font-awesome-icon icon="trash" />
-                </button>
+              <td>
+                <div class="agent-name">{{ agent.username }}</div>
+              </td>
+              <td class="count-col">{{ agent.assignments?.length || 0 }}</td>
+              <td class="actions-col">
+                <div class="actions">
+                  <button @click.stop="$emit('edit', agent)" class="icon-button edit" title="Edit Agent" v-wave>
+                    <font-awesome-icon icon="edit" />
+                  </button>
+                  <button @click.stop="$emit('delete', agent)" class="icon-button danger" title="Delete Agent" v-wave>
+                    <font-awesome-icon icon="trash" />
+                  </button>
+                </div>
               </td>
             </tr>
             <tr v-if="agents.length === 0">
@@ -58,9 +61,6 @@
             <div class="avatar">{{ agent.username.charAt(0).toUpperCase() }}</div>
             <div class="agent-name">{{ agent.username }}</div>
           </div>
-          <span class="status-badge" :class="agent.online ? 'active' : 'inactive'">
-            {{ agent.online ? 'Online' : 'Offline' }}
-          </span>
         </div>
         
         <div class="card-details">
@@ -110,16 +110,20 @@ export default {
   box-sizing: border-box;
   animation: fadeIn 0.4s ease;
   position: relative;
-  padding-top: 1.5rem; /* Added padding top for better spacing */
+  padding-top: 1.5rem;
 }
 
 .tab-header {
   margin-bottom: 2rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .tab-header h2 {
-  margin-bottom: 1.5rem;
-  font-size: 2rem;
+  margin: 0;
+  font-size: 1.75rem;
   color: var(--text-color);
   font-weight: 600;
   letter-spacing: -0.5px;
@@ -129,21 +133,20 @@ export default {
   display: flex;
   gap: 15px;
   align-items: center;
-  justify-content: flex-end;
 }
 
 .create-button {
   background-color: var(--primary-color);
   color: white;
   border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
+  padding: 8px 16px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.3s ease;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 500;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
@@ -158,13 +161,13 @@ export default {
   background-color: var(--input-bg);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
   border: 1px solid var(--input-border);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .agents-table:hover {
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
 }
 
 .table-responsive {
@@ -175,25 +178,39 @@ table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
+  table-layout: fixed;
 }
 
 th, td {
-  padding: 16px;
+  padding: 12px;
   text-align: left;
+  vertical-align: middle;
 }
 
 th {
   background-color: var(--hover-bg);
   font-weight: 600;
   text-transform: uppercase;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   letter-spacing: 0.5px;
   color: var(--text-muted, #6c757d);
   border-bottom: 1px solid var(--input-border);
 }
 
-.text-center {
+/* Column widths */
+.avatar-col {
+  width: 60px;
+  padding: 8px;
+}
+
+.count-col {
+  width: 80px;
   text-align: center;
+}
+
+.actions-col {
+  width: 100px;
+  padding-right: 16px;
 }
 
 .agent-row {
@@ -209,15 +226,9 @@ th {
   border-bottom: none;
 }
 
-.agent-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .avatar {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   background-color: #4caf50;
   color: white;
   border-radius: 50%;
@@ -225,38 +236,20 @@ th {
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: 1rem;
 }
 
 .agent-name {
   font-weight: 500;
   font-size: 1rem;
-}
-
-.status-badge {
-  display: inline-flex;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  min-width: 80px;
-  justify-content: center;
-}
-
-.status-badge.active {
-  background-color: rgba(40, 167, 69, 0.15);
-  color: #28a745;
-}
-
-.status-badge.inactive {
-  background-color: rgba(108, 117, 125, 0.15);
-  color: #6c757d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .actions {
-  white-space: nowrap;
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
 }
 
@@ -264,8 +257,8 @@ th {
   background: none;
   border: none;
   cursor: pointer;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -292,7 +285,7 @@ th {
 
 .empty-state {
   text-align: center;
-  padding: 40px 0;
+  padding: 30px 0;
 }
 
 .empty-content {
@@ -303,7 +296,7 @@ th {
 }
 
 .empty-icon {
-  font-size: 2rem;
+  font-size: 1.75rem;
   margin-bottom: 10px;
   opacity: 0.5;
 }
@@ -317,19 +310,19 @@ th {
   background-color: var(--input-bg);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   border: 1px solid var(--input-border);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .agent-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .card-header {
-  padding: 16px;
+  padding: 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -337,15 +330,21 @@ th {
   background-color: var(--hover-bg);
 }
 
+.agent-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .card-details {
-  padding: 16px;
+  padding: 12px;
 }
 
 .detail-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .detail-row:last-child {
@@ -355,7 +354,7 @@ th {
 .detail-label {
   font-weight: 500;
   color: var(--text-muted, #6c757d);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .detail-value {
@@ -363,17 +362,17 @@ th {
 }
 
 .card-actions {
-  padding: 12px 16px;
+  padding: 10px 12px;
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
   border-top: 1px solid var(--input-border);
   background-color: var(--hover-bg);
 }
 
 .empty-state-mobile {
   text-align: center;
-  padding: 40px 0;
+  padding: 30px 0;
   background-color: var(--input-bg);
   border-radius: 12px;
   border: 1px solid var(--input-border);
@@ -385,31 +384,25 @@ th {
 }
 
 /* Responsive styles */
-@media (max-width: 1280px) {
-  .agents-tab {
-    padding: 1.5rem 1.25rem;
-  }
-}
-
 @media (max-width: 992px) {
-  .agents-tab {
-    padding: 1.5rem 1rem;
+  .tab-header {
+    margin-bottom: 1.5rem;
+  }
+  
+  .tab-header h2 {
+    font-size: 1.5rem;
   }
 }
 
 @media (max-width: 768px) {
-  .agents-tab {
-    padding: 1.25rem 0.75rem;
-  }
-  
-  .tab-header h2 {
-    font-size: 1.6rem;
-    margin-bottom: 1.25rem;
+  .tab-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
   }
   
   .controls {
     width: 100%;
-    justify-content: center;
   }
   
   .create-button {
@@ -424,7 +417,7 @@ th {
   
   .mobile-cards {
     display: block;
-    margin-top: 20px;
+    margin-top: 15px;
   }
 }
 
@@ -435,27 +428,6 @@ th {
   
   .tab-header h2 {
     font-size: 1.4rem;
-    margin-bottom: 1rem;
-  }
-  
-  .card-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-  
-  .card-header .status-badge {
-    align-self: flex-start;
-  }
-  
-  .card-actions {
-    justify-content: space-around;
-  }
-  
-  .avatar {
-    width: 36px;
-    height: 36px;
-    font-size: 1rem;
   }
 }
 </style>

@@ -139,7 +139,6 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import anime from 'animejs/lib/anime.es.js'
 import axios from 'axios'
-import { useRouter } from 'vue-router'
 import SettingsModals from './SettingsModals.vue'
 import { 
   faTachometerAlt, 
@@ -195,7 +194,6 @@ export default {
   },
   emits: ['tab-change', 'update:theme', 'settings', 'logout'],
   setup(props, { emit }) {
-    const router = useRouter()
     const isMobile = ref(false)
     const windowWidth = ref(window.innerWidth)
     const navButtons = ref([])
@@ -442,12 +440,12 @@ export default {
                     
                     // Perform redirection if logged out successfully
                     if (!response.data.logged_in) {
-                      // Reset state and redirect to app.vue
+                      // Reset state and emit logout event to parent
                       showSettings.value = false
                       emit('logout')
                       
-                      // Redirect to the app.vue (root path)
-                      router.push('../App.vue')
+                      // Instead of using router, we'll use window.location to navigate to root
+                      window.location.href = '../'
                     } else {
                       // Show error toast
                       showToastNotification('Logout failed. Please try again.', 'error')
@@ -463,8 +461,8 @@ export default {
           showLogoutOverlay.value = false
           emit('logout')
           
-          // Redirect to the app.vue (root path)
-          router.push('../')
+          // Instead of using router, use window.location
+          window.location.href = '../'
         }
       }, 1500) // Delay for animation effect
     }

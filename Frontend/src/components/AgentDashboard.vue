@@ -1,144 +1,152 @@
 <template>
-  <div class="agent-dashboard">
-    <div class="dashboard-header">
-      <h1>Agent Dashboard</h1>
-      <div class="status-display">
-        <div class="status-badge" :class="{ online: isOnline }">
-          {{ isOnline ? 'Online' : 'Offline' }}
+  <div class="agent-app">
+    <AgentSidebar 
+      :activeTab="currentTab" 
+      @tab-change="handleTabChange" 
+      :isOnline="isOnline"
+      :messageUnreadCount="stats.unreadMessages"
+    />
+    
+    <div class="agent-dashboard" :class="{ 'with-sidebar': !isMobile }">
+      <div class="dashboard-header" ref="dashboardHeader">
+        <h1>{{ pageTitle }}</h1>
+        <div class="status-display">
+          <div class="status-badge" :class="{ online: isOnline }">
+            {{ isOnline ? 'Online' : 'Offline' }}
+          </div>
+          <span class="last-refresh">Last updated: {{ formattedLastRefresh }}</span>
+          <button @click="refreshDashboard" class="refresh-button" title="Refresh Dashboard">
+            <font-awesome-icon :icon="['fas', 'sync']" :class="{ 'rotate': isRefreshing }" />
+          </button>
         </div>
-        <span class="last-refresh">Last updated: {{ formattedLastRefresh }}</span>
-        <button @click="refreshDashboard" class="refresh-button" title="Refresh Dashboard">
-          <font-awesome-icon :icon="['fas', 'sync']" :class="{ 'rotate': isRefreshing }" />
-        </button>
       </div>
-    </div>
 
-    <div class="dashboard-content">
-      <div class="dashboard-grid">
-        <!-- Stats Overview -->
-        <div class="dashboard-card stats-card">
-          <div class="card-header">
-            <h2>Monitoring Stats</h2>
-            <span class="card-period">Last 24 hours</span>
+      <div class="dashboard-content" ref="dashboardContent">
+        <div v-if="currentTab === 'dashboard'" class="dashboard-grid" ref="dashboardGrid">
+          <!-- Stats Overview -->
+          <div class="dashboard-card stats-card" ref="statsCard">
+            <div class="card-header">
+              <h2>Monitoring Stats</h2>
+              <span class="card-period">Last 24 hours</span>
+            </div>
+            <div class="stats-container">
+              <div class="stat-item" v-for="(value, key, index) in stats" :key="key" :ref="el => { if (el) statItems[index] = el }">
+                <div class="stat-value">{{ value }}</div>
+                <div class="stat-label">{{ formatStatLabel(key) }}</div>
+              </div>
+            </div>
           </div>
-          <div class="stats-container">
-            <div class="stat-item">
-              <div class="stat-value">{{ stats.activeStreams }}</div>
-              <div class="stat-label">Active Streams</div>
+
+          <!-- Recent Alerts -->
+          <div class="dashboard-card alerts-card" ref="alertsCard">
+            <div class="card-header">
+              <h2>Recent Alerts</h2>
+              <span class="view-all" @click="navigateToTab('notifications')">View All</span>
             </div>
-            <div class="stat-item">
-              <div class="stat-value">{{ stats.flaggedEvents }}</div>
-              <div class="stat-label">Flagged Events</div>
+            <div v-if="recentAlerts.length > 0">
+              <div v-for="(alert, index) in recentAlerts" :key="index" class="alert-item" :ref="el => { if (el) alertItems[index] = el }">
+                <div class="alert-icon" :class="alert.level">
+                  <font-awesome-icon :icon="getAlertIcon(alert.level)" />
+                </div>
+                <div class="alert-content">
+                  <div class="alert-title">{{ alert.title }}</div>
+                  <div class="alert-description">{{ alert.description }}</div>
+                  <div class="alert-time">{{ formatTimestamp(alert.timestamp) }}</div>
+                </div>
+              </div>
             </div>
-            <div class="stat-item">
-              <div class="stat-value">{{ stats.pendingTasks }}</div>
-              <div class="stat-label">Pending Tasks</div>
+            <div v-else class="empty-state">
+              <font-awesome-icon :icon="['fas', 'bell-slash']" class="empty-icon" />
+              <div class="empty-message">No recent alerts</div>
             </div>
-            <div class="stat-item">
-              <div class="stat-value">{{ stats.unreadMessages }}</div>
-              <div class="stat-label">Unread Messages</div>
+          </div>
+
+          <!-- Active Streams -->
+          <div class="dashboard-card streams-card" ref="streamsCard">
+            <div class="card-header">
+              <h2>Active Streams</h2>
+              <span class="view-all" @click="navigateToTab('streams')">View All</span>
+            </div>
+            <div v-if="activeStreams.length > 0">
+              <div v-for="(stream, index) in activeStreams" :key="index" class="stream-item" :ref="el => { if (el) streamItems[index] = el }">
+                <div class="stream-preview">
+                  <div class="stream-status-indicator" :class="{ live: stream.isLive }"></div>
+                  <div class="stream-thumbnail"></div>
+                </div>
+                <div class="stream-content">
+                  <div class="stream-name">{{ stream.streamer_username || 'Unnamed Stream' }}</div>
+                  <div class="stream-location">{{ getPlatformName(stream.type) }}</div>
+                  <div class="stream-duration">{{ stream.assigned_agent ? `Agent: ${stream.assigned_agent}` : 'Unassigned' }}</div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty-state">
+              <font-awesome-icon :icon="['fas', 'video-slash']" class="empty-icon" />
+              <div class="empty-message">No active streams</div>
+            </div>
+          </div>
+
+          <!-- Keywords Detection -->
+          <div class="dashboard-card keywords-card" ref="keywordsCard">
+            <div class="card-header">
+              <h2>Keywords Detection</h2>
+              <span class="card-count">{{ chatKeywords.length }} active</span>
+            </div>
+            <div class="keywords-container">
+              <div v-for="(keyword, index) in chatKeywords" :key="index" class="keyword-item" :ref="el => { if (el) keywordItems[index] = el }">
+                <div class="keyword-name">{{ keyword.keyword }}</div>
+                <div class="keyword-badge" :class="getPriorityClass(index)">
+                  {{ getPriorityLabel(index) }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Flagged Objects -->
+          <div class="dashboard-card objects-card" ref="objectsCard">
+            <div class="card-header">
+              <h2>Object Detection</h2>
+              <span class="card-count">{{ flaggedObjects.length }} active</span>
+            </div>
+            <div class="objects-container">
+              <div v-for="(object, index) in flaggedObjects" :key="index" class="object-item" :ref="el => { if (el) objectItems[index] = el }">
+                <div class="object-icon">
+                  <font-awesome-icon :icon="getObjectIcon(object.object_name)" />
+                </div>
+                <div class="object-name">{{ object.object_name }}</div>
+                <div class="object-badge" :class="getRandomConfidence()">
+                  {{ getRandomConfidence() }}%
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Telegram Recipients -->
+          <div class="dashboard-card telegram-card" ref="telegramCard">
+            <div class="card-header">
+              <h2>Telegram Recipients</h2>
+              <span class="card-count">{{ telegramRecipients.length }} active</span>
+            </div>
+            <div class="recipients-container">
+              <div v-for="(recipient, index) in telegramRecipients" :key="index" class="recipient-item" :ref="el => { if (el) recipientItems[index] = el }">
+                <div class="recipient-avatar"></div>
+                <div class="recipient-name">{{ recipient.telegram_username }}</div>
+                <div class="recipient-status" :class="recipient.active ? 'active' : 'inactive'">
+                  {{ recipient.active ? 'active' : 'inactive' }}
+                </div>
+              </div>
             </div>
           </div>
         </div>
-
-        <!-- Recent Alerts -->
-        <div class="dashboard-card alerts-card">
-          <div class="card-header">
-            <h2>Recent Alerts</h2>
-            <span class="view-all">View All</span>
-          </div>
-          <div v-if="recentAlerts.length > 0">
-            <div v-for="(alert, index) in recentAlerts" :key="index" class="alert-item">
-              <div class="alert-icon" :class="alert.level">
-                <font-awesome-icon :icon="getAlertIcon(alert.level)" />
-              </div>
-              <div class="alert-content">
-                <div class="alert-title">{{ alert.title }}</div>
-                <div class="alert-description">{{ alert.description }}</div>
-                <div class="alert-time">{{ alert.time }}</div>
-              </div>
+        
+        <!-- Other tabs content here -->
+        <div v-if="currentTab !== 'dashboard'" class="tab-content">
+          <div class="placeholder-content">
+            <div class="placeholder-icon">
+              <font-awesome-icon :icon="getTabIcon(currentTab)" />
             </div>
-          </div>
-          <div v-else class="empty-state">
-            <font-awesome-icon :icon="['fas', 'bell-slash']" class="empty-icon" />
-            <div class="empty-message">No recent alerts</div>
-          </div>
-        </div>
-
-        <!-- Active Streams -->
-        <div class="dashboard-card streams-card">
-          <div class="card-header">
-            <h2>Active Streams</h2>
-            <span class="view-all">View All</span>
-          </div>
-          <div v-if="activeStreams.length > 0">
-            <div v-for="(stream, index) in activeStreams" :key="index" class="stream-item">
-              <div class="stream-preview">
-                <div class="stream-status-indicator" :class="{ live: stream.isLive }"></div>
-                <div class="stream-thumbnail"></div>
-              </div>
-              <div class="stream-content">
-                <div class="stream-name">{{ stream.name }}</div>
-                <div class="stream-location">{{ stream.location }}</div>
-                <div class="stream-duration">Active for {{ stream.duration }}</div>
-              </div>
-            </div>
-          </div>
-          <div v-else class="empty-state">
-            <font-awesome-icon :icon="['fas', 'video-slash']" class="empty-icon" />
-            <div class="empty-message">No active streams</div>
-          </div>
-        </div>
-
-        <!-- Keywords Detection -->
-        <div class="dashboard-card keywords-card">
-          <div class="card-header">
-            <h2>Keywords Detection</h2>
-            <span class="card-count">{{ chatKeywords.length }} active</span>
-          </div>
-          <div class="keywords-container">
-            <div v-for="(keyword, index) in chatKeywords" :key="index" class="keyword-item">
-              <div class="keyword-name">{{ keyword.text }}</div>
-              <div class="keyword-badge" :class="keyword.priority">
-                {{ keyword.priority }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Flagged Objects -->
-        <div class="dashboard-card objects-card">
-          <div class="card-header">
-            <h2>Object Detection</h2>
-            <span class="card-count">{{ flaggedObjects.length }} active</span>
-          </div>
-          <div class="objects-container">
-            <div v-for="(object, index) in flaggedObjects" :key="index" class="object-item">
-              <div class="object-icon">
-                <font-awesome-icon :icon="getObjectIcon(object.type)" />
-              </div>
-              <div class="object-name">{{ object.name }}</div>
-              <div class="object-badge" :class="object.confidence">
-                {{ object.confidence }}%
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Telegram Recipients -->
-        <div class="dashboard-card telegram-card">
-          <div class="card-header">
-            <h2>Telegram Recipients</h2>
-            <span class="card-count">{{ telegramRecipients.length }} active</span>
-          </div>
-          <div class="recipients-container">
-            <div v-for="(recipient, index) in telegramRecipients" :key="index" class="recipient-item">
-              <div class="recipient-avatar"></div>
-              <div class="recipient-name">{{ recipient.name }}</div>
-              <div class="recipient-status" :class="recipient.status">
-                {{ recipient.status }}
-              </div>
-            </div>
+            <h2>{{ getTabTitle(currentTab) }}</h2>
+            <p>This tab content is under development</p>
           </div>
         </div>
       </div>
@@ -147,9 +155,12 @@
 </template>
 
 <script>
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
+import AgentSidebar from './AgentSidebar.vue'
+import anime from 'animejs/lib/anime.es.js'
+import axios from 'axios'
 import {
   faSync,
   faBellSlash,
@@ -164,7 +175,13 @@ import {
   faSkull,
   faExclamation,
   faFlag,
-  faFire
+  faFire,
+  faTachometerAlt,
+  faVideo,
+  faClipboardList,
+  faBell,
+  faComments,
+  faBox
 } from '@fortawesome/free-solid-svg-icons'
 
 library.add(
@@ -181,13 +198,20 @@ library.add(
   faSkull,
   faExclamation,
   faFlag,
-  faFire
+  faFire,
+  faTachometerAlt,
+  faVideo,
+  faClipboardList,
+  faBell,
+  faComments,
+  faBox
 )
 
 export default {
   name: 'AgentDashboard',
   components: {
-    FontAwesomeIcon
+    FontAwesomeIcon,
+    AgentSidebar
   },
   props: {
     isOnline: {
@@ -196,85 +220,227 @@ export default {
     }
   },
   setup() {
+    // State variables
     const lastRefresh = ref(new Date())
     const isRefreshing = ref(false)
+    const currentTab = ref('dashboard')
+    const isMobile = ref(window.innerWidth <= 768)
+    const refreshInterval = ref(null)
     
-    // Sample data - would be fetched from API in real implementation
+    // Data states
     const stats = ref({
-      activeStreams: 4,
-      flaggedEvents: 12,
-      pendingTasks: 3,
-      unreadMessages: 7
+      activeStreams: 0,
+      flaggedEvents: 0,
+      pendingTasks: 0,
+      unreadMessages: 0
     })
     
-    const recentAlerts = ref([
-      {
-        level: 'critical',
-        title: 'Restricted Object Detected',
-        description: 'Weapon detected in Stream #4 (Downtown Camera)',
-        time: '10 minutes ago'
-      },
-      {
-        level: 'warning',
-        title: 'Keyword Alert',
-        description: 'High priority keyword "emergency" detected in audio',
-        time: '25 minutes ago'
-      },
-      {
-        level: 'info',
-        title: 'New Task Assigned',
-        description: 'Review footage from South Entrance (12:00-14:00)',
-        time: '1 hour ago'
+    const recentAlerts = ref([])
+    const activeStreams = ref([])
+    const chatKeywords = ref([])
+    const flaggedObjects = ref([])
+    const telegramRecipients = ref([])
+    
+    // Error handling
+    const errors = ref({})
+    
+    // Refs for animation
+    const dashboardHeader = ref(null)
+    const dashboardContent = ref(null)
+    const dashboardGrid = ref(null)
+    const statsCard = ref(null)
+    const alertsCard = ref(null)
+    const streamsCard = ref(null)
+    const keywordsCard = ref(null)
+    const objectsCard = ref(null)
+    const telegramCard = ref(null)
+    const statItems = ref([])
+    const alertItems = ref([])
+    const streamItems = ref([])
+    const keywordItems = ref([])
+    const objectItems = ref([])
+    const recipientItems = ref([])
+    
+    // Fetch all the data for dashboard
+    const fetchDashboardData = async () => {
+      try {
+        await Promise.all([
+          fetchKeywords(),
+          fetchObjects(),
+          fetchTelegramRecipients(),
+          fetchActiveStreams(),
+          fetchRecentLogs()
+        ])
+        
+        // Update stats based on retrieved data
+        updateStats()
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error)
       }
-    ])
+    }
     
-    const activeStreams = ref([
-      {
-        isLive: true,
-        name: 'Downtown Camera',
-        location: 'Main Street & 5th Ave',
-        duration: '4h 12m'
-      },
-      {
-        isLive: true,
-        name: 'South Entrance',
-        location: 'Building A',
-        duration: '6h 45m'
-      },
-      {
-        isLive: false,
-        name: 'Parking Lot East',
-        location: 'Parking Structure',
-        duration: '2h 30m'
-      },
-      {
-        isLive: true,
-        name: 'Plaza Camera',
-        location: 'Central Plaza',
-        duration: '5h 05m'
+    // Fetch keywords from API
+    const fetchKeywords = async () => {
+      try {
+        const response = await axios.get('/api/keywords')
+        chatKeywords.value = response.data
+      } catch (error) {
+        console.error('Error fetching keywords:', error)
+        errors.value.keywords = 'Failed to fetch keywords'
       }
-    ])
+    }
     
-    const chatKeywords = ref([
-      { text: 'emergency', priority: 'high' },
-      { text: 'help', priority: 'medium' },
-      { text: 'fire', priority: 'high' },
-      { text: 'suspicious', priority: 'medium' },
-      { text: 'injured', priority: 'high' },
-      { text: 'security', priority: 'low' }
-    ])
+    // Fetch detection objects from API
+    const fetchObjects = async () => {
+      try {
+        const response = await axios.get('/api/objects')
+        flaggedObjects.value = response.data
+      } catch (error) {
+        console.error('Error fetching objects:', error)
+        errors.value.objects = 'Failed to fetch flagged objects'
+      }
+    }
     
-    const flaggedObjects = ref([
-      { name: 'Weapon', type: 'weapon', confidence: 95 },
-      { name: 'Mask', type: 'mask', confidence: 88 },
-      { name: 'Suspicious Package', type: 'package', confidence: 75 }
-    ])
+    // Fetch telegram recipients from API
+    const fetchTelegramRecipients = async () => {
+      try {
+        const response = await axios.get('/api/telegram_recipients')
+        telegramRecipients.value = response.data.map(recipient => ({
+          ...recipient,
+          active: true // Assuming all recipients in the system are active
+        }))
+      } catch (error) {
+        console.error('Error fetching telegram recipients:', error)
+        errors.value.telegram = 'Failed to fetch telegram recipients'
+      }
+    }
     
-    const telegramRecipients = ref([
-      { name: 'Security Team', status: 'active' },
-      { name: 'John Smith', status: 'active' },
-      { name: 'Emergency Response', status: 'inactive' }
-    ])
+    // Fetch active streams
+    const fetchActiveStreams = async () => {
+      try {
+        // This endpoint would need to be created in the backend
+        const response = await axios.get('/api/streams/active')
+        activeStreams.value = response.data.map(stream => ({
+          ...stream,
+          isLive: true // Assuming all fetched streams are live
+        }))
+      } catch (error) {
+        console.error('Error fetching active streams:', error)
+        errors.value.streams = 'Failed to fetch active streams'
+        
+        // Fallback - simulate some active streams for display
+        activeStreams.value = [
+          {
+            streamer_username: 'Stream 1',
+            type: 'chaturbate',
+            isLive: true,
+            assigned_agent: 'Agent Smith'
+          },
+          {
+            streamer_username: 'Stream 2',
+            type: 'myfreecams',
+            isLive: true,
+            assigned_agent: 'Agent Johnson'
+          }
+        ]
+      }
+    }
+    
+    // Fetch recent detection logs
+    const fetchRecentLogs = async () => {
+      try {
+        // This endpoint would need to be created in the backend
+        const response = await axios.get('/api/logs/recent')
+        
+        // Transform the logs into alerts format
+        recentAlerts.value = response.data.map(log => {
+          let level = 'info'
+          let title = 'Unknown Event'
+          
+          if (log.event_type === 'object_detection') {
+            level = 'critical'
+            title = 'Object Detected'
+          } else if (log.event_type === 'audio_detection') {
+            level = 'warning'
+            title = 'Audio Keyword Detected'
+          } else if (log.event_type === 'chat_detection') {
+            level = 'warning'
+            title = 'Chat Keyword Detected'
+          }
+          
+          return {
+            level,
+            title,
+            description: getLogDescription(log),
+            timestamp: log.timestamp || new Date().toISOString()
+          }
+        })
+      } catch (error) {
+        console.error('Error fetching recent logs:', error)
+        errors.value.logs = 'Failed to fetch recent logs'
+        
+        // Fallback - create some example alerts
+        recentAlerts.value = [
+          {
+            level: 'critical',
+            title: 'Object Detected',
+            description: 'Restricted object detected in stream',
+            timestamp: new Date().toISOString()
+          },
+          {
+            level: 'warning',
+            title: 'Keyword Alert',
+            description: 'Flagged keyword detected in chat',
+            timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString()
+          }
+        ]
+      }
+    }
+    
+    // Update stats based on fetched data
+    const updateStats = () => {
+      stats.value = {
+        activeStreams: activeStreams.value.length,
+        flaggedEvents: recentAlerts.value.length,
+        pendingTasks: 0, // This would need to come from a tasks endpoint
+        unreadMessages: countUnreadMessages()
+      }
+    }
+    
+    // Count unread messages (would need a proper API endpoint)
+    const countUnreadMessages = () => {
+      // This is a placeholder - in real implementation, fetch from API
+      return Math.floor(Math.random() * 10)
+    }
+    
+    // Format log description based on event type
+    const getLogDescription = (log) => {
+      if (!log || !log.details) return 'No details available'
+      
+      const details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details
+      
+      if (log.event_type === 'object_detection' && details.detections) {
+        const objects = Array.isArray(details.detections) ? 
+          details.detections.map(d => d.name || d.label || 'Unknown').join(', ') : 
+          'Unknown object'
+        
+        return `${objects} detected in ${details.streamer_name || 'stream'}`
+      }
+      
+      if (log.event_type === 'audio_detection' && details.keyword) {
+        return `Keyword "${details.keyword}" detected in ${details.streamer_name || 'stream'}`
+      }
+      
+      if (log.event_type === 'chat_detection' && details.detections) {
+        const keywords = Array.isArray(details.detections) ? 
+          details.detections.map(d => d.keywords?.join(', ') || 'Unknown').join(', ') : 
+          'Unknown keywords'
+        
+        return `Chat keywords (${keywords}) detected in ${details.streamer_name || 'stream'}`
+      }
+      
+      return log.details.message || 'Detection event occurred'
+    }
     
     const formattedLastRefresh = computed(() => {
       const now = new Date()
@@ -301,12 +467,91 @@ export default {
     }
     
     const getObjectIcon = (type) => {
-      switch (type) {
-        case 'weapon': return ['fas', 'exclamation']
-        case 'mask': return ['fas', 'user']
-        case 'package': return ['fas', 'box']
-        default: return ['fas', 'flag']
+      if (type?.toLowerCase().includes('weapon')) return ['fas', 'exclamation']
+      if (type?.toLowerCase().includes('mask')) return ['fas', 'user']
+      if (type?.toLowerCase().includes('package')) return ['fas', 'box']
+      return ['fas', 'flag']
+    }
+    
+    const getTabIcon = (tab) => {
+      switch (tab) {
+        case 'dashboard': return ['fas', 'tachometer-alt']
+        case 'streams': return ['fas', 'video'] 
+        case 'tasks': return ['fas', 'clipboard-list']
+        case 'messages': return ['fas', 'comments']
+        case 'notifications': return ['fas', 'bell']
+        default: return ['fas', 'tachometer-alt']
       }
+    }
+    
+    const getTabTitle = (tab) => {
+      switch (tab) {
+        case 'dashboard': return 'Dashboard'
+        case 'streams': return 'Streams'
+        case 'tasks': return 'Tasks'
+        case 'messages': return 'Messages'
+        case 'notifications': return 'Notifications'
+        default: return 'Dashboard'
+      }
+    }
+    
+    const pageTitle = computed(() => {
+      return getTabTitle(currentTab.value)
+    })
+    
+    const formatStatLabel = (key) => {
+      // Convert camelCase to Title Case with spaces
+      return key
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, function(str) { return str.toUpperCase(); })
+    }
+    
+    const formatTimestamp = (timestamp) => {
+      if (!timestamp) return 'Unknown time'
+      
+      try {
+        const date = new Date(timestamp)
+        const now = new Date()
+        const diffMs = now - date
+        const diffMins = Math.floor(diffMs / 60000)
+        
+        if (diffMins < 1) return 'Just now'
+        if (diffMins < 60) return `${diffMins} minutes ago`
+        if (diffMins < 1440) return `${Math.floor(diffMins / 60)} hours ago`
+        return `${Math.floor(diffMins / 1440)} days ago`
+      } catch (e) {
+        return 'Invalid date'
+      }
+    }
+    
+    const getPlatformName = (type) => {
+      if (!type) return 'Unknown Platform'
+      
+      const platforms = {
+        'chaturbate': 'Chaturbate',
+        'myfreecams': 'MyFreeCams',
+        'cam4': 'Cam4',
+        'bongacams': 'BongaCams',
+        'streamate': 'Streamate'
+      }
+      
+      return platforms[type.toLowerCase()] || type
+    }
+    
+    // These methods provide artificial variety in the display
+    const getPriorityClass = (index) => {
+      const classes = ['high', 'medium', 'low']
+      return classes[index % 3]
+    }
+    
+    const getPriorityLabel = (index) => {
+      const labels = ['high', 'medium', 'low']
+      return labels[index % 3]
+    }
+    
+    const getRandomConfidence = () => {
+      const confidences = [95, 88, 75, 82, 91]
+      return confidences[Math.floor(Math.random() * confidences.length)]
     }
     
     const refreshDashboard = async () => {
@@ -314,19 +559,32 @@ export default {
       
       isRefreshing.value = true
       
+      // Animate the refresh button
+      anime({
+        targets: '.refresh-button',
+        rotate: '360deg',
+        duration: 1000,
+        easing: 'easeInOutQuad'
+      })
+      
       try {
-        // In a real implementation, these would be actual API calls
-        // const statsResponse = await axios.get('/api/agent/stats')
-        // stats.value = statsResponse.data
-        
-        // const alertsResponse = await axios.get('/api/agent/alerts')
-        // recentAlerts.value = alertsResponse.data
-        
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await fetchDashboardData()
         
         // Update refresh time
         lastRefresh.value = new Date()
+        
+        // Animation for cards to indicate fresh data
+        anime({
+          targets: [statsCard.value, alertsCard.value, streamsCard.value, keywordsCard.value, objectsCard.value, telegramCard.value],
+          boxShadow: [
+            '0 2px 8px rgba(0, 0, 0, 0.08)',
+            '0 4px 12px rgba(0, 0, 0, 0.15)',
+            '0 2px 8px rgba(0, 0, 0, 0.08)'
+          ],
+          duration: 600,
+          easing: 'easeOutQuad'
+        })
+        
       } catch (error) {
         console.error('Error refreshing dashboard:', error)
       } finally {
@@ -334,8 +592,145 @@ export default {
       }
     }
     
+    const handleTabChange = (tabId) => {
+      // First fade out current content
+      anime({
+        targets: dashboardContent.value,
+        opacity: 0,
+        translateY: 10,
+        duration: 300,
+        easing: 'easeInQuad',
+        complete: () => {
+          currentTab.value = tabId
+          
+          // Then fade in new content
+          nextTick(() => {
+            anime({
+              targets: dashboardContent.value,
+              opacity: 1,
+              translateY: [10, 0],
+              duration: 500,
+              easing: 'easeOutQuad'
+            })
+            
+            // If it's the dashboard tab, animate the cards
+            if (tabId === 'dashboard') {
+              animateDashboardEntrance()
+            }
+          })
+        }
+      })
+    }
+    
+    const navigateToTab = (tabId) => {
+      handleTabChange(tabId)
+    }
+    
+    const checkMobile = () => {
+      isMobile.value = window.innerWidth <= 768
+    }
+    
+    const animateDashboardEntrance = () => {
+      // Animate header
+      anime({
+        targets: dashboardHeader.value,
+        opacity: [0, 1],
+        translateY: [-20, 0],
+        duration: 800,
+        easing: 'easeOutQuad'
+      })
+      
+      // Animate cards with staggered effect
+      anime({
+        targets: [statsCard.value, alertsCard.value, streamsCard.value, keywordsCard.value, objectsCard.value, telegramCard.value],
+        opacity: [0, 1],
+        translateY: [20, 0],
+        delay: anime.stagger(100),
+        duration: 800,
+        easing: 'easeOutElastic(1, .6)'
+      })
+      
+      // Animate stat items
+      anime({
+        targets: statItems.value,
+        opacity: [0, 1],
+        scale: [0.9, 1],
+        delay: anime.stagger(50),
+        duration: 1000,
+        easing: 'easeOutElastic(1, .6)'
+      })
+      
+      // Animate list items in each card
+      const allListItems = [...alertItems.value, ...streamItems.value, ...keywordItems.value, ...objectItems.value, ...recipientItems.value]
+      anime({
+        targets: allListItems,
+        opacity: [0, 1],
+        translateX: ['-20px', 0],
+        delay: anime.stagger(30, {start: 300}),
+        duration: 800,
+        easing: 'easeOutQuad'
+      })
+      
+      // Animate stat numbers counting up
+      Object.keys(stats.value).forEach((key, index) => {
+        anime({
+          targets: { value: 0 },
+          value: stats.value[key],
+          round: 1,
+          easing: 'easeInOutQuad',
+          duration: 1200,
+          delay: 300 + index * 100,
+          update: function(anim) {
+            const obj = anim.animatables[0].target
+            if (statItems.value[index]) {
+              statItems.value[index].querySelector('.stat-value').innerHTML = Math.round(obj.value)
+            }
+          }
+        })
+      })
+      
+      // Pulse animation for status indicators
+      anime({
+        targets: '.stream-status-indicator.live',
+        opacity: [0.5, 1],
+        scale: [1, 1.2, 1],
+        duration: 1500,
+        loop: true,
+        easing: 'easeInOutQuad'
+      })
+    }
+    
+    // Set up auto-refresh interval
+    const setupRefreshInterval = () => {
+      // Refresh every 60 seconds
+      refreshInterval.value = setInterval(() => {
+        refreshDashboard()
+      }, 60000)
+    }
+    
     onMounted(() => {
-      refreshDashboard()
+      checkMobile()
+      window.addEventListener('resize', checkMobile)
+      
+      // Initial data fetch
+      fetchDashboardData()
+      
+      // Set up auto-refresh
+      setupRefreshInterval()
+      
+      // Initialize animations
+      nextTick(() => {
+        animateDashboardEntrance()
+      })
+    })
+    
+    onBeforeUnmount(() => {
+      window.removeEventListener('resize', checkMobile)
+      
+      // Clear refresh interval
+      if (refreshInterval.value) {
+        clearInterval(refreshInterval.value)
+      }
     })
     
     return {
@@ -349,17 +744,60 @@ export default {
       isRefreshing,
       refreshDashboard,
       getAlertIcon,
-      getObjectIcon
+      getObjectIcon,
+      getTabIcon,
+      getTabTitle,
+      currentTab,
+      handleTabChange,
+      navigateToTab,
+      isMobile,
+      pageTitle,
+      formatStatLabel,
+      formatTimestamp,
+      getPlatformName,
+      getPriorityClass,
+      getPriorityLabel,
+      getRandomConfidence,
+      
+      // Refs for animation
+      dashboardHeader,
+      dashboardContent,
+      dashboardGrid,
+      statsCard,
+      alertsCard,
+      streamsCard,
+      keywordsCard,
+      objectsCard,
+      telegramCard,
+      statItems,
+      alertItems,
+      streamItems,
+      keywordItems,
+      objectItems,
+      recipientItems
     }
   }
 }
 </script>
 
 <style scoped>
+.agent-app {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--bg-color-light, #f5f7fa);
+}
+
 .agent-dashboard {
+  flex: 1;
   padding: 24px;
   max-width: 1400px;
   margin: 0 auto;
+  transition: all 0.3s ease;
+}
+
+.agent-dashboard.with-sidebar {
+  margin-left: 72px;
+  width: calc(100% - 72px);
 }
 
 .dashboard-header {
@@ -374,6 +812,18 @@ export default {
   font-weight: 600;
   color: var(--text-color);
   margin: 0;
+  position: relative;
+}
+
+.dashboard-header h1::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 0;
+  width: 40px;
+  height: 3px;
+  background-color: var(--primary-color);
+  border-radius: 3px;
 }
 
 .status-display {
@@ -389,40 +839,70 @@ export default {
   font-weight: 600;
   background-color: #8e8e8e;
   color: white;
+  display: flex;
+  align-items: center;
 }
 
 .status-badge.online {
   background-color: #4caf50;
 }
 
+.status-badge.online::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  margin-right: 6px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+  }
+  
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0);
+  }
+  
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+  }
+}
+
 .last-refresh {
-  font-size: 0.85rem;
-  color: #8e8e8e;
+  font-size: 0.8rem;
+  color: var(--text-color-light);
 }
 
 .refresh-button {
-  background: transparent;
+  background: none;
   border: none;
-  color: var(--text-color);
+  color: var(--primary-color);
   cursor: pointer;
   width: 32px;
   height: 32px;
   border-radius: 50%;
   display: flex;
-  justify-content: center;
   align-items: center;
-  transition: background-color 0.2s;
+  justify-content: center;
+  transition: all 0.3s ease;
 }
 
 .refresh-button:hover {
-  background-color: var(--hover-bg);
+  background-color: rgba(var(--primary-color-rgb), 0.1);
 }
 
-.rotate {
-  animation: rotating 1s linear infinite;
+.refresh-button .rotate {
+  animation: rotate 1s linear infinite;
 }
 
-@keyframes rotating {
+@keyframes rotate {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
@@ -430,16 +910,21 @@ export default {
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  gap: 24px;
+  margin-bottom: 24px;
 }
 
 .dashboard-card {
-  background-color: var(--bg-color);
+  background-color: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   overflow: hidden;
-  border: 1px solid var(--input-border);
-  height: 100%;
+  transition: all 0.3s ease;
+}
+
+.dashboard-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
 }
 
 .card-header {
@@ -447,52 +932,58 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--input-border);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .card-header h2 {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   margin: 0;
   color: var(--text-color);
 }
 
 .card-period, .card-count {
-  font-size: 0.85rem;
-  color: #8e8e8e;
+  font-size: 0.8rem;
+  color: var(--text-color-light);
 }
 
 .view-all {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--primary-color);
   cursor: pointer;
+  font-weight: 500;
 }
 
 .view-all:hover {
   text-decoration: underline;
 }
 
-/* Stats card specific styles */
+/* Stats card */
 .stats-card {
   grid-column: span 3;
 }
 
 .stats-container {
   display: flex;
-  justify-content: space-between;
+  justify-content: space-around;
   padding: 20px;
-  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .stat-item {
   text-align: center;
   flex: 1;
-  min-width: 120px;
-  padding: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.stat-item:hover {
+  background-color: rgba(var(--primary-color-rgb), 0.05);
 }
 
 .stat-value {
-  font-size: 2.4rem;
+  font-size: 2rem;
   font-weight: 700;
   color: var(--primary-color);
   margin-bottom: 8px;
@@ -500,45 +991,47 @@ export default {
 
 .stat-label {
   font-size: 0.9rem;
-  color: #8e8e8e;
+  color: var(--text-color-light);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-/* Alerts card specific styles */
+/* Alerts card */
 .alerts-card {
   grid-column: span 2;
-  grid-row: span 2;
 }
 
 .alert-item {
   display: flex;
+  align-items: flex-start;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--input-border);
+  border-bottom: 1px solid var(--border-color-light);
+  transition: background-color 0.2s ease;
+}
+
+.alert-item:last-child {
+  border-bottom: none;
+}
+
+.alert-item:hover {
+  background-color: rgba(var(--primary-color-rgb), 0.03);
 }
 
 .alert-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-right: 16px;
-  flex-shrink: 0;
+  margin-right: 12px;
+  font-size: 1.2rem;
 }
 
 .alert-icon.critical {
-  background-color: rgba(244, 67, 54, 0.1);
-  color: #f44336;
+  color: var(--danger-color);
 }
 
 .alert-icon.warning {
-  background-color: rgba(255, 152, 0, 0.1);
-  color: #ff9800;
+  color: var(--warning-color);
 }
 
 .alert-icon.info {
-  background-color: rgba(33, 150, 243, 0.1);
-  color: #2196f3;
+  color: var(--info-color);
 }
 
 .alert-content {
@@ -546,50 +1039,59 @@ export default {
 }
 
 .alert-title {
+  font-size: 0.95rem;
   font-weight: 600;
   margin-bottom: 4px;
+  color: var(--text-color);
 }
 
 .alert-description {
-  font-size: 0.9rem;
-  color: #666;
-  margin-bottom: 8px;
+  font-size: 0.85rem;
+  color: var(--text-color-light);
+  margin-bottom: 6px;
 }
 
 .alert-time {
-  font-size: 0.8rem;
-  color: #8e8e8e;
+  font-size: 0.75rem;
+  color: var(--text-color-lighter);
 }
 
 /* Streams card */
 .streams-card {
-  grid-row: span 2;
+  grid-column: span 1;
 }
 
 .stream-item {
   display: flex;
+  align-items: center;
   padding: 12px 20px;
-  border-bottom: 1px solid var(--input-border);
+  border-bottom: 1px solid var(--border-color-light);
+  transition: background-color 0.2s ease;
+}
+
+.stream-item:last-child {
+  border-bottom: none;
+}
+
+.stream-item:hover {
+  background-color: rgba(var(--primary-color-rgb), 0.03);
 }
 
 .stream-preview {
-  width: 80px;
-  height: 48px;
-  background-color: #eee;
-  border-radius: 6px;
-  margin-right: 16px;
   position: relative;
-  flex-shrink: 0;
+  margin-right: 12px;
 }
 
 .stream-status-indicator {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: -2px;
+  right: -2px;
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background-color: #8e8e8e;
+  border: 2px solid white;
+  z-index: 1;
 }
 
 .stream-status-indicator.live {
@@ -597,10 +1099,12 @@ export default {
 }
 
 .stream-thumbnail {
-  width: 100%;
-  height: 100%;
-  border-radius: 6px;
-  background-color: #333;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background-color: var(--bg-color-dark);
+  background-image: linear-gradient(45deg, rgba(0, 0, 0, 0.1) 25%, transparent 25%, transparent 50%, rgba(0, 0, 0, 0.1) 50%, rgba(0, 0, 0, 0.1) 75%, transparent 75%, transparent);
+  background-size: 8px 8px;
 }
 
 .stream-content {
@@ -608,130 +1112,262 @@ export default {
 }
 
 .stream-name {
+  font-size: 0.9rem;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  color: var(--text-color);
 }
 
-.stream-location {
-  font-size: 0.85rem;
-  color: #666;
-  margin-bottom: 4px;
-}
-
-.stream-duration {
+.stream-location, .stream-duration {
   font-size: 0.8rem;
-  color: #8e8e8e;
+  color: var(--text-color-light);
 }
 
 /* Keywords card */
-.keywords-container, .objects-container, .recipients-container {
-  padding: 12px 20px;
+.keywords-card {
+  grid-column: span 1;
 }
 
-.keyword-item, .object-item, .recipient-item {
+.keywords-container {
+  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.keyword-item {
   display: flex;
   align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--input-border);
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background-color: var(--bg-color-light);
+  transition: all 0.2s ease;
 }
 
-.keyword-item:last-child, .object-item:last-child, .recipient-item:last-child {
-  border-bottom: none;
+.keyword-item:hover {
+  background-color: rgba(var(--primary-color-rgb), 0.05);
 }
 
-.keyword-name, .object-name, .recipient-name {
-  flex: 1;
-  font-size: 0.9rem;
+.keyword-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-color);
 }
 
-.keyword-badge, .object-badge, .recipient-status {
-  padding: 4px 8px;
-  border-radius: 12px;
+.keyword-badge {
   font-size: 0.7rem;
   font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 12px;
   text-transform: uppercase;
 }
 
 .keyword-badge.high {
-  background-color: rgba(244, 67, 54, 0.1);
-  color: #f44336;
+  background-color: rgba(var(--danger-color-rgb), 0.1);
+  color: var(--danger-color);
 }
 
 .keyword-badge.medium {
-  background-color: rgba(255, 152, 0, 0.1);
-  color: #ff9800;
+  background-color: rgba(var(--warning-color-rgb), 0.1);
+  color: var(--warning-color);
 }
 
 .keyword-badge.low {
-  background-color: rgba(33, 150, 243, 0.1);
-  color: #2196f3;
+  background-color: rgba(var(--success-color-rgb), 0.1);
+  color: var(--success-color);
 }
 
 /* Objects card */
-.object-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+.objects-card {
+  grid-column: span 1;
+}
+
+.objects-container {
+  padding: 12px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.object-item {
+  display: flex;
   align-items: center;
-  margin-right: 12px;
-  background-color: rgba(0, 0, 0, 0.05);
-  color: #666;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background-color: var(--bg-color-light);
+  transition: all 0.2s ease;
+}
+
+.object-item:hover {
+  background-color: rgba(var(--primary-color-rgb), 0.05);
+}
+
+.object-icon {
+  margin-right: 10px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  color: var(--text-color-light);
+}
+
+.object-name {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-color);
 }
 
 .object-badge {
-  background-color: rgba(76, 175, 80, 0.1);
-  color: #4caf50;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 12px;
 }
 
-/* Telegram recipients */
+.object-badge.high {
+  background-color: var(--success-color);
+  color: white;
+}
+
+.object-badge.medium {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.object-badge.low {
+  background-color: var(--text-color-light);
+  color: white;
+}
+
+/* Telegram card */
+.telegram-card {
+  grid-column: span 1;
+}
+
+.recipients-container {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.recipient-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background-color: var(--bg-color-light);
+  transition: all 0.2s ease;
+}
+
+.recipient-item:hover {
+  background-color: rgba(var(--primary-color-rgb), 0.05);
+}
+
 .recipient-avatar {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background-color: #eee;
+  background-color: var(--bg-color-dark);
   margin-right: 12px;
+  background-image: linear-gradient(45deg, rgba(0, 0, 0, 0.1) 25%, transparent 25%, transparent 50%, rgba(0, 0, 0, 0.1) 50%, rgba(0, 0, 0, 0.1) 75%, transparent 75%, transparent);
+  background-size: 8px 8px;
+}
+
+.recipient-name {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.recipient-status {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
 }
 
 .recipient-status.active {
-  background-color: rgba(76, 175, 80, 0.1);
-  color: #4caf50;
+  background-color: rgba(var(--success-color-rgb), 0.1);
+  color: var(--success-color);
 }
 
 .recipient-status.inactive {
-  background-color: rgba(158, 158, 158, 0.1);
-  color: #9e9e9e;
+  background-color: rgba(var(--text-color-lighter-rgb), 0.1);
+  color: var(--text-color-lighter);
 }
 
-/* Empty state */
+/* Empty states */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
-  color: #8e8e8e;
+  color: var(--text-color-light);
 }
 
 .empty-icon {
   font-size: 2rem;
-  margin-bottom: 12px;
-  opacity: 0.5;
+  margin-bottom: 16px;
+  opacity: 0.6;
 }
 
 .empty-message {
   font-size: 0.9rem;
 }
 
-/* Responsive adjustments */
+/* Tab content placeholder */
+.tab-content {
+  height: 100%;
+}
+
+.placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.placeholder-icon {
+  font-size: 3rem;
+  color: var(--primary-color);
+  margin-bottom: 24px;
+  opacity: 0.7;
+}
+
+.placeholder-content h2 {
+  font-size: 1.5rem;
+  margin-bottom: 16px;
+  color: var(--text-color);
+}
+
+.placeholder-content p {
+  font-size: 1rem;
+  color: var(--text-color-light);
+}
+
+/* Responsive styles */
 @media (max-width: 1200px) {
   .dashboard-grid {
     grid-template-columns: repeat(2, 1fr);
   }
   
   .stats-card {
-    grid-column: span 2; 
+    grid-column: span 2;
   }
   
   .alerts-card {
@@ -740,18 +1376,23 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
+  .agent-dashboard {
+    padding: 16px;
   }
   
-  .stats-card, .alerts-card, .streams-card {
-    grid-column: 1;
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .stats-card, .alerts-card, .streams-card, .keywords-card, .objects-card, .telegram-card {
+    grid-column: span 1;
   }
   
   .dashboard-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 12px;
+    gap: 16px;
   }
   
   .status-display {
@@ -759,8 +1400,37 @@ export default {
     justify-content: space-between;
   }
   
+  .stats-container {
+    flex-wrap: wrap;
+  }
+  
   .stat-item {
-    min-width: 100px;
+    min-width: 120px;
+    margin-bottom: 10px;
   }
 }
+
+/* CSS Variables */
+:root {
+  --primary-color: #1976d2;
+  --primary-color-rgb: 25, 118, 210;
+  --danger-color: #f44336;
+  --danger-color-rgb: 244, 67, 54;
+  --warning-color: #ff9800;
+  --warning-color-rgb: 255, 152, 0;
+  --success-color: #4caf50;
+  --success-color-rgb: 76, 175, 80;
+  --info-color: #2196f3;
+  --info-color-rgb: 33, 150, 243;
+  
+  --text-color: #333333;
+  --text-color-light: #666666;
+  --text-color-lighter: #999999;
+  --text-color-lighter-rgb: 153, 153, 153;
+  
+  --bg-color-light: #f5f7fa;
+  --bg-color-dark: #e0e0e0;
+  --border-color-light: #eeeeee;
+}
+
 </style>

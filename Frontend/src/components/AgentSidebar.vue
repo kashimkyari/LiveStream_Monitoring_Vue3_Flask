@@ -286,8 +286,8 @@ export default {
       }
     }
 
-    // Logout function with animation
-    const logout = async (callApi = true) => {
+    // Modified logout function with proper redirection
+      const logout = async (callApi = true) => {
       // First close the settings popup if it's open
       if (showSettings.value) {
         anime({
@@ -380,7 +380,7 @@ export default {
       // Make the actual API call to logout
       if (callApi) {
         try {
-          await axios.post('/api/agent/logout')
+          await axios.post('/api/logout')
         } catch (error) {
           console.error('Logout failed:', error)
         }
@@ -389,7 +389,7 @@ export default {
       // Continue the animation and check session status
       setTimeout(async () => {
         try {
-          const response = await axios.get('/api/agent/session')
+          const response = await axios.get('/api/session')
           
           // Complete the logout animation
           if (logoutOverlayRef.value) {
@@ -412,9 +412,12 @@ export default {
                     
                     // Perform redirection if logged out successfully
                     if (!response.data.logged_in) {
-                      // Reset state and redirect
+                      // Reset state and emit logout event to parent
                       showSettings.value = false
                       emit('logout')
+                      
+                      // Instead of using router, we'll use window.location to navigate to root
+                      window.location.href = '../'
                     } else {
                       // Show error toast
                       showToastNotification('Logout failed. Please try again.', 'error')
@@ -429,6 +432,9 @@ export default {
           // Assume logout succeeded if session check fails
           showLogoutOverlay.value = false
           emit('logout')
+          
+          // Instead of using router, use window.location
+          window.location.href = '../'
         }
       }, 1500) // Delay for animation effect
     }
