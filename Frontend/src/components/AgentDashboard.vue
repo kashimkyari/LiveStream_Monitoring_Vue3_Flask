@@ -316,10 +316,10 @@ const fetchTelegramRecipients = async () => {
 
 const fetchRecentLogs = async () => {
   try {
-    const response = await axios.get('/api/agent/logs')
+    const response = await axios.get('/api/logs')
     
     recentAlerts.value = response.data.map(log => {
-      // existing code
+      console.log(log)
     }).slice(0, 5)
   } catch (error) {
     console.error('Error fetching recent logs:', error)
@@ -363,6 +363,7 @@ const fetchRecentLogs = async () => {
     // }
     
     // Format log description based on event type
+    // eslint-disable-next-line
     const getLogDescription = (log) => {
       if (!log || !log.details) return 'No details available'
       
