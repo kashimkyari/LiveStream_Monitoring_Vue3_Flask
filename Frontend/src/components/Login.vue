@@ -72,11 +72,11 @@
 </template>
 
 <script>
-import axios from 'axios'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useToast } from 'vue-toastification';
 import "vue-toastification/dist/index.css"
 import anime from 'animejs/lib/anime.es.js';
+import api from '@/services/api'
 
 export default {
   name: 'LoginComponent',
@@ -228,15 +228,10 @@ export default {
       });
       
       try {
-        const response = await axios.post('/api/login', {
-          username: this.username,
-          password: this.password
-        }, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        })
+        const response = await api.post('/api/login', {
+              username: this.username,
+              password: this.password
+            })
 
         if (response.status === 200 && response.data.message === "Login successful") {
           this.animateSuccessfulLogin();
