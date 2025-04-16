@@ -1,4 +1,5 @@
 <template>
+  <SpeedInsights/>
   <div id="app" :data-theme="isDarkTheme ? 'dark' : 'light'" ref="appContainer">
     <!-- Theme toggle -->
     <div class="header-controls">
@@ -37,6 +38,7 @@ import anime from 'animejs/lib/anime.es.js'
 import LoginComponent from './components/Login.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
 import AgentDashboard from './components/AgentDashboard.vue'
+import { SpeedInsights } from "@vercel/speed-insights/vue"
 
 library.add(
   faMoon, faSun, faSignOutAlt, faBroadcastTower,
@@ -49,7 +51,8 @@ export default {
     FontAwesomeIcon,
     LoginComponent,
     AdminDashboard,
-    AgentDashboard
+    AgentDashboard,
+    SpeedInsights
   },
   setup() {
     const isDarkTheme = ref(true)

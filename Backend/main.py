@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """
-main.py - Flask application entry point with SSL support.
-
-This application is configured to load SSL certificates if enabled via environment variables,
-ensuring secure communication over HTTPS.
+main.py - Flask application entry point with SSL support and strict CORS for API endpoints.
 """
 
 import logging
@@ -26,11 +23,26 @@ load_dotenv()
 # Create the Flask app using a factory function
 app = create_app()
 
-# Configure CORS.
-# For development: default to all origins if ALLOWED_ORIGINS is not specified.
-# For production, set ALLOWED_ORIGINS to a comma-separated list of allowed URLs.
-allowed_origins = os.getenv('ALLOWED_ORIGINS', '*').split(',')
-CORS(app, supports_credentials=True, origins=allowed_origins)
+# === CORS Configuration ===
+# Only allow requests from the actual frontend origin when using credentials.
+# Wildcard '*' cannot be used with supports_credentials=True.
+allowed_origins = os.getenv(
+    'ALLOWED_ORIGINS',
+    'https://live-stream-monitoring-vue3-flask.vercel.app'
+).split(',')
+
+CORS(
+    app,
+    supports_credentials=True,
+    origins=allowed_origins,
+    resources={r"/api/*": {"origins": allowed_origins}},
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With"
+    ],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+)
 
 # Configure logging to both file and console
 logging.basicConfig(
@@ -45,11 +57,9 @@ logging.basicConfig(
 # Database initialization and default user creation
 with app.app_context():
     try:
-        # Initialize all database tables
         db.create_all()
         logging.info("Database tables initialized")
 
-        # Create a default admin user if one doesn't exist
         admin_password = os.getenv('DEFAULT_ADMIN_PASSWORD')
         if not User.query.filter_by(role="admin").first() and admin_password:
             admin = User(
@@ -61,7 +71,6 @@ with app.app_context():
             db.session.commit()
             logging.info("Default admin user created")
 
-        # Create a default agent user if one doesn't exist
         agent_password = os.getenv('DEFAULT_AGENT_PASSWORD')
         if not User.query.filter_by(role="agent").first() and agent_password:
             agent = User(
@@ -86,35 +95,27 @@ except Exception as e:
     logging.error("Failed to start background services: %s", str(e))
 
 if __name__ == "__main__":
-    # Determine debug mode from environment variables
     debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
 
-    # Check if SSL should be enabled (production usage)
-    # Set ENABLE_SSL=true in your environment variables to enable SSL.
     if os.getenv('ENABLE_SSL', 'false').lower() == 'true':
-        # Use os.path.expanduser to correctly resolve '~' to the user's home directory.
         cert_dir = os.path.expanduser(os.getenv('CERT_DIR', '~/certs'))
-        # Specify the SSL certificate and private key file names.
         ssl_cert = os.path.join(cert_dir, 'fullchain.pem')
         ssl_key = os.path.join(cert_dir, 'privkey.pem')
-        
-        # Verify that the certificate and key files exist before proceeding.
+
         if not (os.path.exists(ssl_cert) and os.path.exists(ssl_key)):
             logging.error("SSL certificates not found in %s", cert_dir)
             raise FileNotFoundError("SSL certificate files are missing")
 
         ssl_context = (ssl_cert, ssl_key)
-        logging.info("SSL context is enabled using cert: %s and key: %s", ssl_cert, ssl_key)
+        logging.info("SSL context enabled: cert=%s key=%s", ssl_cert, ssl_key)
     else:
         ssl_context = None
-        logging.info("SSL context is disabled; running without SSL")
+        logging.info("SSL context disabled; running without SSL")
 
-    # Run the Flask application.
-    # Note: In production, consider using a WSGI server (e.g., Gunicorn) to better handle SSL and performance.
     app.run(
         host=os.getenv('FLASK_HOST', '0.0.0.0'),
         port=int(os.getenv('FLASK_PORT', 5000)),
         threaded=True,
         debug=debug_mode,
-        ssl_context=ssl_context  # Use SSL context if available
+        ssl_context=ssl_context
     )

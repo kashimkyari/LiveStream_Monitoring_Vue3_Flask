@@ -13,6 +13,7 @@
     "@fortawesome/vue-fontawesome": "^3.0.8",
     "@headlessui/vue": "^1.7.23",
     "@kouts/vue-modal": "^2.1.12",
+    "@vercel/speed-insights": "^1.2.0",
     "@vueuse/core": "^13.0.0",
     "animejs": "3.2.1",
     "axios": "^1.8.4",
