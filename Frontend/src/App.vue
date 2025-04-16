@@ -67,8 +67,6 @@ export default {
       const savedTheme = localStorage.getItem('themePreference')
       isDarkTheme.value = savedTheme ? savedTheme === 'dark' : true
       
-      axios.defaults.baseURL = "/api"
-      axios.defaults.withCredentials = true
       
       checkAuthentication()
       animateControls()
