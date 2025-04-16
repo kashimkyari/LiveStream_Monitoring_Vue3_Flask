@@ -40,6 +40,7 @@ import AdminDashboard from './components/AdminDashboard.vue'
 import AgentDashboard from './components/AgentDashboard.vue'
 import { SpeedInsights } from "@vercel/speed-insights/vue"
 
+
 library.add(
   faMoon, faSun, faSignOutAlt, faBroadcastTower,
   faTachometerAlt, faVideo, faExclamationTriangle, faChartLine, faCog

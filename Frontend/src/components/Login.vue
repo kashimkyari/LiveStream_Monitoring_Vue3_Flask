@@ -1,6 +1,7 @@
 <template>
   <div class="login-container">
-    <form @submit.prevent="handleSubmit" class="login-form" ref="loginForm">
+    <!-- Show Login Form when not in Forgot Password mode and not in Create Account mode -->
+    <form v-if="!showForgotPassword && !showCreateAccount" @submit.prevent="handleSubmit" class="login-form" ref="loginForm">
       <div class="logo-container" ref="logoContainer">
         <font-awesome-icon icon="user-lock" class="logo-icon" />
       </div>
@@ -68,6 +69,12 @@
         <div class="circle circle-3" ref="circle3"></div>
       </div>
     </form>
+    
+    <!-- Show Forgot Password Component when in Forgot Password mode -->
+    <ForgotPasswordComponent v-else-if="showForgotPassword" @back="showForgotPassword = false" />
+    
+    <!-- Show Create Account Component when in Create Account mode -->
+    <CreateAccountComponent v-else-if="showCreateAccount" @back="showCreateAccount = false" />
   </div>
 </template>
 
@@ -77,10 +84,16 @@ import { useToast } from 'vue-toastification';
 import "vue-toastification/dist/index.css"
 import anime from 'animejs/lib/anime.es.js';
 import api from '@/services/api'
+import ForgotPasswordComponent from './ForgotPassword.vue'
+import CreateAccountComponent from './CreateAccount.vue'
 
 export default {
   name: 'LoginComponent',
-  components: { FontAwesomeIcon },
+  components: { 
+    FontAwesomeIcon,
+    ForgotPasswordComponent,
+    CreateAccountComponent
+  },
   emits: ['login-success'],
   setup() {
     const toast = useToast()
@@ -91,7 +104,9 @@ export default {
       username: '',
       password: '',
       loading: false,
-      error: null
+      error: null,
+      showForgotPassword: false,
+      showCreateAccount: false
     }
   },
   mounted() {
@@ -154,6 +169,8 @@ export default {
       const inputs = [this.$refs.usernameInput, this.$refs.passwordInput];
       
       inputs.forEach(input => {
+        if (!input) return;
+        
         input.addEventListener('focus', () => {
           anime({
             targets: input.parentNode,
@@ -178,35 +195,41 @@ export default {
     
     animateDecorations() {
       // Continuous animations for decorative elements
-      anime({
-        targets: this.$refs.circle1,
-        translateX: '10px',
-        translateY: '15px',
-        duration: 8000,
-        direction: 'alternate',
-        loop: true,
-        easing: 'easeInOutSine'
-      });
+      if (this.$refs.circle1) {
+        anime({
+          targets: this.$refs.circle1,
+          translateX: '10px',
+          translateY: '15px',
+          duration: 8000,
+          direction: 'alternate',
+          loop: true,
+          easing: 'easeInOutSine'
+        });
+      }
       
-      anime({
-        targets: this.$refs.circle2,
-        translateX: '-15px',
-        translateY: '-10px',
-        duration: 9000,
-        direction: 'alternate',
-        loop: true,
-        easing: 'easeInOutSine'
-      });
+      if (this.$refs.circle2) {
+        anime({
+          targets: this.$refs.circle2,
+          translateX: '-15px',
+          translateY: '-10px',
+          duration: 9000,
+          direction: 'alternate',
+          loop: true,
+          easing: 'easeInOutSine'
+        });
+      }
       
-      anime({
-        targets: this.$refs.circle3,
-        translateX: '8px',
-        translateY: '-12px',
-        duration: 7000,
-        direction: 'alternate',
-        loop: true,
-        easing: 'easeInOutSine'
-      });
+      if (this.$refs.circle3) {
+        anime({
+          targets: this.$refs.circle3,
+          translateX: '8px',
+          translateY: '-12px',
+          duration: 7000,
+          direction: 'alternate',
+          loop: true,
+          easing: 'easeInOutSine'
+        });
+      }
     },
     
     async handleSubmit() {
@@ -300,6 +323,8 @@ export default {
     },
     
     shakeForm() {
+      if (!this.$refs.loginForm) return;
+      
       anime({
         targets: this.$refs.loginForm,
         translateX: [
@@ -315,15 +340,13 @@ export default {
     },
     
     forgotPassword() {
-      this.toast.info("Password reset feature coming soon", {
-        position: "top-center"
-      });
+      // Show the ForgotPassword component
+      this.showForgotPassword = true;
     },
     
     createAccount() {
-      this.toast.info("Account creation feature coming soon", {
-        position: "top-center"
-      });
+      // Show the CreateAccount component
+      this.showCreateAccount = true;
     },
     
     showError(message) {

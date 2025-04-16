@@ -55,7 +55,5 @@ app.use(Toast, {
   timeout: 5000
 })
 
-
-
 // Mount the app
 app.mount('#app')
