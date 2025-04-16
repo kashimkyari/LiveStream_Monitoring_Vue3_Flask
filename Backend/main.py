@@ -1,16 +1,26 @@
-# main.py
+#!/usr/bin/env python3
+"""
+main.py - Flask application entry point with SSL support.
+
+This application is configured to load SSL certificates if enabled via environment variables,
+ensuring secure communication over HTTPS.
+"""
+
+import logging
+import os
+from flask import Flask
+from flask_cors import CORS
+from dotenv import load_dotenv
+
+# Import application components
 from config import create_app
 from extensions import db
 from models import User
 from routes import *
 from cleanup import start_chat_cleanup_thread, start_detection_cleanup_thread
 from monitoring import start_notification_monitor
-import logging
-import os
-from flask_cors import CORS
-from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
 # Create the Flask app
@@ -20,7 +30,7 @@ app = create_app()
 allowed_origins = os.getenv('ALLOWED_ORIGINS', 'https://live-stream-monitoring-vue3-flask.vercel.app').split(',')
 CORS(app, supports_credentials=True, origins=allowed_origins)
 
-# Configure logging
+# Configure logging - logs both to a file and the console
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -30,15 +40,15 @@ logging.basicConfig(
     ]
 )
 
+# Database initialization and default user creation
 with app.app_context():
     try:
-        # Initialize database
+        # Initialize database tables
         db.create_all()
         logging.info("Database tables initialized")
 
-        # Create default admin
+        # Create default admin user if not exists
         admin_password = os.getenv('DEFAULT_ADMIN_PASSWORD')
-        
         if not User.query.filter_by(role="admin").first() and admin_password:
             admin = User(
                 username=os.getenv('DEFAULT_ADMIN_USERNAME', 'admin'),
@@ -49,7 +59,7 @@ with app.app_context():
             db.session.commit()
             logging.info("Default admin user created")
 
-        # Create default agent
+        # Create default agent user if not exists
         agent_password = os.getenv('DEFAULT_AGENT_PASSWORD')
         if not User.query.filter_by(role="agent").first() and agent_password:
             agent = User(
@@ -65,7 +75,7 @@ with app.app_context():
         logging.error("Database initialization failed: %s", str(e))
         raise
 
-# Start background tasks
+# Start background tasks with error handling
 try:
     start_notification_monitor()
     start_detection_cleanup_thread()
@@ -74,10 +84,34 @@ except Exception as e:
     logging.error("Failed to start background services: %s", str(e))
 
 if __name__ == "__main__":
+    # Determine debug mode from environment variables
     debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+
+    # Check if SSL should be enabled (production usage)
+    # Set ENABLE_SSL=true in your environment to enable SSL, along with CERT_DIR if custom.
+    if os.getenv('ENABLE_SSL', 'false').lower() == 'true':
+        cert_dir = os.getenv('CERT_DIR', '/home/ec2-user/certs/')
+        # Critical: Use the preferred certificate pair.
+        # Here we choose fullchain.pem and privkey.pem for SSL context.
+        ssl_cert = os.path.join(cert_dir, 'fullchain.pem')
+        ssl_key = os.path.join(cert_dir, 'privkey.pem')
+        
+        # Verify that certificate files exist before proceeding
+        if not (os.path.exists(ssl_cert) and os.path.exists(ssl_key)):
+            logging.error("SSL certificates not found in %s", cert_dir)
+            raise FileNotFoundError("SSL certificate files are missing")
+
+        ssl_context = (ssl_cert, ssl_key)
+        logging.info("SSL context is enabled using cert: %s and key: %s", ssl_cert, ssl_key)
+    else:
+        ssl_context = None
+        logging.info("SSL context is disabled; running without SSL")
+
+    # Run the Flask application. In production, consider using a WSGI server like Gunicorn.
     app.run(
         host=os.getenv('FLASK_HOST', '0.0.0.0'),
         port=int(os.getenv('FLASK_PORT', 5000)),
         threaded=True,
-        debug=debug_mode
+        debug=debug_mode,
+        ssl_context=ssl_context  # Apply SSL context if available
     )
