@@ -26,8 +26,10 @@ load_dotenv()
 # Create the Flask app using a factory function
 app = create_app()
 
-# Configure CORS from environment variables
-allowed_origins = os.getenv('ALLOWED_ORIGINS', 'https://live-stream-monitoring-vue3-flask.vercel.app').split(',')
+# Configure CORS.
+# For development: default to all origins if ALLOWED_ORIGINS is not specified.
+# For production, set ALLOWED_ORIGINS to a comma-separated list of allowed URLs.
+allowed_origins = os.getenv('ALLOWED_ORIGINS', '*').split(',')
 CORS(app, supports_credentials=True, origins=allowed_origins)
 
 # Configure logging to both file and console
