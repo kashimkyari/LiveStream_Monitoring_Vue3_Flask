@@ -23,14 +23,14 @@ from monitoring import start_notification_monitor
 # Load environment variables from .env file
 load_dotenv()
 
-# Create the Flask app
+# Create the Flask app using a factory function
 app = create_app()
 
 # Configure CORS from environment variables
 allowed_origins = os.getenv('ALLOWED_ORIGINS', 'https://live-stream-monitoring-vue3-flask.vercel.app').split(',')
 CORS(app, supports_credentials=True, origins=allowed_origins)
 
-# Configure logging - logs both to a file and the console
+# Configure logging to both file and console
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -43,11 +43,11 @@ logging.basicConfig(
 # Database initialization and default user creation
 with app.app_context():
     try:
-        # Initialize database tables
+        # Initialize all database tables
         db.create_all()
         logging.info("Database tables initialized")
 
-        # Create default admin user if not exists
+        # Create a default admin user if one doesn't exist
         admin_password = os.getenv('DEFAULT_ADMIN_PASSWORD')
         if not User.query.filter_by(role="admin").first() and admin_password:
             admin = User(
@@ -59,7 +59,7 @@ with app.app_context():
             db.session.commit()
             logging.info("Default admin user created")
 
-        # Create default agent user if not exists
+        # Create a default agent user if one doesn't exist
         agent_password = os.getenv('DEFAULT_AGENT_PASSWORD')
         if not User.query.filter_by(role="agent").first() and agent_password:
             agent = User(
@@ -88,15 +88,15 @@ if __name__ == "__main__":
     debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
 
     # Check if SSL should be enabled (production usage)
-    # Set ENABLE_SSL=true in your environment to enable SSL, along with CERT_DIR if custom.
+    # Set ENABLE_SSL=true in your environment variables to enable SSL.
     if os.getenv('ENABLE_SSL', 'false').lower() == 'true':
-        cert_dir = os.getenv('CERT_DIR', '/home/ec2-user/certs/')
-        # Critical: Use the preferred certificate pair.
-        # Here we choose fullchain.pem and privkey.pem for SSL context.
+        # Use os.path.expanduser to correctly resolve '~' to the user's home directory.
+        cert_dir = os.path.expanduser(os.getenv('CERT_DIR', '~/certs'))
+        # Specify the SSL certificate and private key file names.
         ssl_cert = os.path.join(cert_dir, 'fullchain.pem')
         ssl_key = os.path.join(cert_dir, 'privkey.pem')
         
-        # Verify that certificate files exist before proceeding
+        # Verify that the certificate and key files exist before proceeding.
         if not (os.path.exists(ssl_cert) and os.path.exists(ssl_key)):
             logging.error("SSL certificates not found in %s", cert_dir)
             raise FileNotFoundError("SSL certificate files are missing")
@@ -107,11 +107,12 @@ if __name__ == "__main__":
         ssl_context = None
         logging.info("SSL context is disabled; running without SSL")
 
-    # Run the Flask application. In production, consider using a WSGI server like Gunicorn.
+    # Run the Flask application.
+    # Note: In production, consider using a WSGI server (e.g., Gunicorn) to better handle SSL and performance.
     app.run(
         host=os.getenv('FLASK_HOST', '0.0.0.0'),
         port=int(os.getenv('FLASK_PORT', 5000)),
         threaded=True,
         debug=debug_mode,
-        ssl_context=ssl_context  # Apply SSL context if available
+        ssl_context=ssl_context  # Use SSL context if available
     )
