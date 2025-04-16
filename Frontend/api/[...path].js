@@ -1,3 +1,4 @@
+// api/[...path].js
 const axios = require('axios');
 
 export default async function handler(req, res) {
@@ -14,7 +15,12 @@ export default async function handler(req, res) {
   }
 
   // Get the path from the request
-  const path = Array.isArray(req.query.path) ? req.query.path.join('/') : req.query.path;
+  let path = Array.isArray(req.query.path) ? req.query.path.join('/') : req.query.path;
+  
+  // Remove leading 'api/' if present (handles /api/api/something case)
+  if (path.startsWith('api/')) {
+    path = path.substring(4);
+  }
   
   try {
     console.log(`Proxying ${req.method} request to: http://54.86.99.85:5000/api/${path}`);
