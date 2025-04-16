@@ -1,7 +1,7 @@
 # routes/agent_routes.py
 from flask import Blueprint, request, jsonify, session
 from extensions import db
-from models import User
+from models import User, Assignment
 from utils import login_required
 
 agent_bp = Blueprint('agent', __name__)
@@ -19,19 +19,15 @@ def get_agents():
 @login_required(role="admin")
 def create_agent():
     data = request.get_json()
-    required_fields = ["username", "password", "firstname", "lastname", "email", "phonenumber"]
+    required_fields = ["username", "password"]
     if any(field not in data for field in required_fields):
         return jsonify({"message": "Missing required fields"}), 400
-    if User.query.filter((User.username == data["username"]) | (User.email == data["email"])).first():
-        return jsonify({"message": "Username or email exists"}), 400
+    if User.query.filter_by(username=data["username"]).first():
+        return jsonify({"message": "Username already exists"}), 400
+    
     agent = User(
         username=data["username"],
         password=data["password"],
-        firstname=data["firstname"],
-        lastname=data["lastname"],
-        email=data["email"],
-        phonenumber=data["phonenumber"],
-        staffid=data.get("staffid"),
         role="agent",
     )
     db.session.add(agent)
@@ -45,15 +41,20 @@ def update_agent(agent_id):
     if not agent:
         return jsonify({"message": "Agent not found"}), 404
     data = request.get_json()
-    updates = {}
+    
     if "username" in data and (new_uname := data["username"].strip()):
+        if User.query.filter(User.username == new_uname, User.id != agent_id).first():
+            return jsonify({"message": "Username already taken"}), 400
         agent.username = new_uname
-        updates["username"] = new_uname
+    
     if "password" in data and (new_pwd := data["password"].strip()):
         agent.password = new_pwd
-        updates["password"] = "updated"
+    
+    if "online" in data:
+        agent.online = bool(data["online"])
+    
     db.session.commit()
-    return jsonify({"message": "Agent updated", "updates": updates})
+    return jsonify({"message": "Agent updated", "agent": agent.serialize()})
 
 @agent_bp.route("/api/agents/<int:agent_id>", methods=["DELETE"])
 @login_required(role="admin")
@@ -64,3 +65,14 @@ def delete_agent(agent_id):
     db.session.delete(agent)
     db.session.commit()
     return jsonify({"message": "Agent deleted"})
+
+# Add a new endpoint to get streams assigned to an agent
+@agent_bp.route("/api/agents/<int:agent_id>/assignments", methods=["GET"])
+@login_required(role="admin")
+def get_agent_assignments(agent_id):
+    agent = User.query.filter_by(id=agent_id, role="agent").first()
+    if not agent:
+        return jsonify({"message": "Agent not found"}), 404
+    
+    assignments = agent.assignments
+    return jsonify([assignment.serialize() for assignment in assignments])

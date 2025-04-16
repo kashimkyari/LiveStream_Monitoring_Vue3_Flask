@@ -375,7 +375,6 @@ html, body {
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
   background-color: var(--bg-color);
   color: var(--text-color);
   transition: background-color 0.5s ease, color 0.5s ease;
@@ -396,7 +395,7 @@ html, body {
   transition: background-color 0.5s ease, color 0.5s ease;
   position: relative;
   min-height: 100vh;
-  overflow-x: hidden;
+  
 }
 
 .header-controls {
@@ -438,7 +437,6 @@ html, body {
 .dashboard {
   display: flex;
   height: 100vh;
-  overflow: hidden;
   position: relative;
 }
 
@@ -556,7 +554,7 @@ html, body {
 /* Media queries */
 @media (max-width: 992px) {
   .content-area {
-    padding-left: var(--sidebar-collapsed-width);
+    
   }
 }
 

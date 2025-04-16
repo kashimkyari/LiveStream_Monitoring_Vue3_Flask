@@ -116,6 +116,57 @@ def create_stream():
 
     return jsonify({"message": "Stream created", "stream": stream.serialize()}), 201
 
+@stream_bp.route("/api/streams/<int:stream_id>", methods=["PUT"])
+@login_required(role="admin")
+def update_stream(stream_id):
+    stream = Stream.query.get(stream_id)
+    if not stream:
+        return jsonify({"message": "Stream not found"}), 404
+    
+    data = request.get_json()
+    agent_ids_only = len(data.keys()) == 1 and "agent_ids" in data
+    
+    # Update only the fields that are provided
+    if "room_url" in data and data["room_url"].strip():
+        # Check if new URL already exists for another stream
+        existing = Stream.query.filter(Stream.room_url == data["room_url"].strip(), Stream.id != stream_id).first()
+        if existing:
+            return jsonify({"message": "Room URL already exists for another stream"}), 400
+        stream.room_url = data["room_url"].strip()
+    
+    # Check if we need to refresh the stream data
+    # Only refresh if explicitly requested AND we're not just updating agent assignments
+    if "refresh" in data and data["refresh"] and not agent_ids_only:
+        if stream.type == "chaturbate":
+            child_stream = ChaturbateStream.query.get(stream_id)
+            scraped_data = scrape_chaturbate_data(stream.room_url)
+            if scraped_data and 'chaturbate_m3u8_url' in scraped_data:
+                child_stream.chaturbate_m3u8_url = scraped_data["chaturbate_m3u8_url"]
+        elif stream.type == "stripchat":
+            child_stream = StripchatStream.query.get(stream_id)
+            scraped_data = scrape_stripchat_data(stream.room_url)
+            if scraped_data and 'stripchat_m3u8_url' in scraped_data:
+                child_stream.stripchat_m3u8_url = scraped_data["stripchat_m3u8_url"]
+    
+    # Handle agent assignments
+    if "agent_ids" in data:
+        # Clear existing assignments if we're setting new ones
+        existing_assignments = Assignment.query.filter_by(stream_id=stream_id).all()
+        for assignment in existing_assignments:
+            db.session.delete(assignment)
+        
+        # Create new assignments for each agent
+        for agent_id in data["agent_ids"]:
+            # Verify agent exists
+            agent = User.query.filter_by(id=agent_id, role="agent").first()
+            if agent:
+                assignment = Assignment(agent_id=agent_id, stream_id=stream_id)
+                db.session.add(assignment)
+    
+    db.session.commit()
+    return jsonify({"message": "Stream updated", "stream": stream.serialize()}), 200
+
+# Modify the existing delete function to handle assignments
 @stream_bp.route("/api/streams/<int:stream_id>", methods=["DELETE"])
 @login_required(role="admin")
 def delete_stream(stream_id):
@@ -123,19 +174,13 @@ def delete_stream(stream_id):
     if not stream:
         return jsonify({"message": "Stream not found"}), 404
 
-    if stream.type == 'chaturbate':
-        child_stream = ChaturbateStream.query.get(stream_id)
-    elif stream.type == 'stripchat':
-        child_stream = StripchatStream.query.get(stream_id)
-    else:
-        child_stream = None
-
-    if child_stream:
-        db.session.delete(child_stream)
+    
 
     db.session.delete(stream)
     db.session.commit()
     return jsonify({"message": "Stream deleted"}), 200
+
+
 
 # --------------------------------------------------------------------
 # Updated Stream Refresh Route for Chaturbate

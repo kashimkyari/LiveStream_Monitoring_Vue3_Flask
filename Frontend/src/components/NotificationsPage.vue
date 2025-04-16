@@ -820,7 +820,7 @@ const animateImageLoad = (event) => {
 }
 
 .notifications-controls {
-  background-color: var(--input-bg);
+  background-color: rgba(var(--bg-color-rgb, 210, 175, 190), 0.07);
   border-bottom: 1px solid var(--input-border);
   padding: 1rem;
   position: sticky;

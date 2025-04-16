@@ -12,6 +12,16 @@
         <h3>Add New Stream</h3>
       </div>
       
+      <!-- Connection Status - Moved below header -->
+      <div class="connection-status-container" v-if="isCreating">
+        <div class="connection-status">
+          <div class="status-indicator" :class="connectionStatus">
+            {{ connectionStatus === 'sse' ? 'Real-Time' : 'Polling' }}
+          </div>
+          <div class="status-latency" v-if="latency">{{ latency }}ms</div>
+        </div>
+      </div>
+      
       <div class="modal-body">
         <form @submit.prevent="submitForm">
           <!-- Platform Selection with Icons -->
@@ -88,13 +98,6 @@
           
           <!-- Animated Progress Section -->
           <div v-if="isCreating" class="progress-container">
-            <div class="connection-status">
-              <div class="status-indicator" :class="connectionStatus">
-                {{ connectionStatus === 'sse' ? 'Real-Time' : 'Polling' }}
-              </div>
-              <div class="status-latency" v-if="latency">{{ latency }}ms</div>
-            </div>
-            
             <div class="progress-header">
               <div class="platform-icon-animated" :class="form.platform.toLowerCase()">
                 {{ form.platform ? form.platform.substring(0, 2).toUpperCase() : 'ST' }}
@@ -655,16 +658,45 @@ export default {
 </script>
 
 <style scoped>
-/* Previous styles remain unchanged */
+/* Modal Header - Updated to center title */
+.modal-header {
+  padding: 25px 30px 20px;
+  border-bottom: 1px solid var(--card-border);
+  display: flex;
+  align-items: center;
+  justify-content: center; /* Center the content horizontally */
+  gap: 12px;
+  position: relative; /* Added for absolute positioning context */
+}
 
-/* Connection Status */
+.header-icon {
+  font-size: 1.5rem;
+  color: var(--primary-color);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+/* Added container for connection status */
+.connection-status-container {
+  padding: 0 30px;
+  display: flex;
+  justify-content: center;
+  margin-top: -5px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--card-border);
+  padding-bottom: 10px;
+}
+
+/* Connection Status - Modified */
 .connection-status {
-  position: absolute;
-  top: 15px;
-  right: 15px;
   display: flex;
   gap: 8px;
   align-items: center;
+  justify-content: center;
 }
 
 .status-indicator {
@@ -690,16 +722,6 @@ export default {
 .status-latency {
   font-size: 0.7rem;
   opacity: 0.7;
-}
-
-/* Enhanced Progress Bar Physics */
-.progress-bar {
-  transition: none !important; /* Disable CSS transitions for anime.js control */
-}
-
-/* Particle Performance Optimization */
-.particle {
-  will-change: transform, opacity;
 }
 
 .modal-overlay {
@@ -761,25 +783,6 @@ export default {
   opacity: 1;
   background: var(--input-border);
   transform: rotate(90deg);
-}
-
-.modal-header {
-  padding: 25px 30px 20px;
-  border-bottom: 1px solid var(--card-border);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.header-icon {
-  font-size: 1.5rem;
-  color: var(--primary-color);
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.6rem;
-  font-weight: 600;
 }
 
 .modal-body {
@@ -932,6 +935,7 @@ export default {
   box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb, 0, 123, 255), 0.1);
   outline: none;
 }
+
 
 .select-arrow {
   position: absolute;

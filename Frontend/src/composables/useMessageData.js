@@ -20,7 +20,7 @@ export function useMessageData(user) {
     error.value = null
     
     try {
-      const response = await axios.get('/api/all-messages')
+      const response = await axios.get('/api/messages')
       messages.value = response.data
     } catch (err) {
       console.error('Error fetching messages:', err)

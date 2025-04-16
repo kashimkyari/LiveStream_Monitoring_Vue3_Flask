@@ -1,6 +1,6 @@
 <template>
   <div class="modal-overlay" @click.self="$emit('close')">
-    <div class="modal-content">
+    <div class="modal-content" ref="modalContent">
       <button class="modal-close" @click="$emit('close')" v-wave>
         <font-awesome-icon icon="times" />
       </button>
@@ -9,41 +9,21 @@
       </div>
       <div class="modal-body">
         <form @submit.prevent="submitForm">
-          <div class="form-row">
-            <div class="form-group">
-              <label for="username">Username</label>
-              <input id="username" v-model="form.username" required />
-            </div>
-            <div class="form-group">
-              <label for="password">Password</label>
-              <input id="password" v-model="form.password" type="password" required />
-            </div>
+          <div class="form-group" ref="usernameGroup">
+            <label for="username">Username</label>
+            <input id="username" v-model="form.username" required />
           </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="firstname">First Name</label>
-              <input id="firstname" v-model="form.firstname" required />
-            </div>
-            <div class="form-group">
-              <label for="lastname">Last Name</label>
-              <input id="lastname" v-model="form.lastname" required />
-            </div>
+          
+          <div class="form-group" ref="passwordGroup">
+            <label for="password">Password</label>
+            <input id="password" v-model="form.password" type="password" required />
           </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="email">Email</label>
-              <input id="email" v-model="form.email" type="email" required />
-            </div>
-            <div class="form-group">
-              <label for="phonenumber">Phone Number</label>
-              <input id="phonenumber" v-model="form.phonenumber" type="tel" required />
-            </div>
-          </div>
+          
           <div class="form-actions">
             <button type="button" @click="$emit('close')" class="cancel-button" v-wave>
               Cancel
             </button>
-            <button type="submit" class="submit-button" v-wave>
+            <button type="submit" class="submit-button" v-wave ref="submitButton">
               Create Agent
             </button>
           </div>
@@ -54,7 +34,8 @@
 </template>
 
 <script>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import anime from 'animejs/lib/anime.es.js'
 
 export default {
   name: 'CreateAgentModal',
@@ -62,28 +43,69 @@ export default {
   setup(props, { emit }) {
     const form = ref({
       username: '',
-      password: '',
-      firstname: '',
-      lastname: '',
-      email: '',
-      phonenumber: ''
+      password: ''
+    })
+    
+    const modalContent = ref(null)
+    const usernameGroup = ref(null)
+    const passwordGroup = ref(null)
+    const submitButton = ref(null)
+    
+    onMounted(() => {
+      // Animate modal appearance
+      anime({
+        targets: modalContent.value,
+        scale: [0.9, 1],
+        opacity: [0, 1],
+        duration: 400,
+        easing: 'easeOutElastic(1, .8)'
+      })
+      
+      // Staggered animation for form elements
+      anime({
+        targets: [usernameGroup.value, passwordGroup.value, submitButton.value],
+        translateY: [20, 0],
+        opacity: [0, 1],
+        delay: anime.stagger(100, {start: 300}),
+        duration: 500,
+        easing: 'easeOutQuad'
+      })
     })
     
     const submitForm = () => {
-      emit('submit', form.value)
-      form.value = {
-        username: '',
-        password: '',
-        firstname: '',
-        lastname: '',
-        email: '',
-        phonenumber: ''
-      }
+      // Animation for button press
+      anime({
+        targets: submitButton.value,
+        scale: [1, 0.95, 1],
+        duration: 300,
+        easing: 'easeInOutQuad',
+        complete: () => {
+          // Success animation
+          anime({
+            targets: modalContent.value,
+            translateY: [0, -20],
+            opacity: [1, 0],
+            duration: 300,
+            easing: 'easeOutQuad',
+            complete: () => {
+              emit('submit', form.value)
+              form.value = {
+                username: '',
+                password: ''
+              }
+            }
+          })
+        }
+      })
     }
     
     return {
       form,
-      submitForm
+      submitForm,
+      modalContent,
+      usernameGroup,
+      passwordGroup,
+      submitButton
     }
   }
 }
@@ -110,12 +132,12 @@ export default {
   background-color: var(--input-bg);
   border-radius: 10px;
   width: 100%;
-  max-width: 600px;
+  max-width: 450px;
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  animation: slideUp 0.3s ease;
   position: relative;
+  opacity: 0; /* Initial state for anime.js */
 }
 
 .modal-close {
@@ -129,6 +151,7 @@ export default {
   font-size: 1.2rem;
   opacity: 0.7;
   transition: opacity 0.2s ease;
+  z-index: 2;
 }
 
 .modal-close:hover {
@@ -143,92 +166,89 @@ export default {
 .modal-header h3 {
   margin: 0;
   font-size: 1.5rem;
+  background: linear-gradient(45deg, var(--primary-color), #8a6eff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-align: center;
 }
 
 .modal-body {
-  padding: 20px;
+  padding: 25px;
 }
 
-.form-row {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 15px;
-}
-
-.form-row .form-group {
-  flex: 1;
+.form-group {
+  margin-bottom: 20px;
+  opacity: 0; /* Initial state for anime.js */
 }
 
 .form-group label {
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
   font-size: 0.9rem;
   font-weight: 500;
+  color: var(--text-color);
 }
 
 .form-group input {
   width: 100%;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid var(--input-border);
-  border-radius: 5px;
+  border-radius: 8px;
   background-color: var(--input-bg);
   color: var(--text-color);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.form-group input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.2);
+  outline: none;
 }
 
 .form-actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: 30px;
 }
 
 .cancel-button {
+  flex: 1;
   background-color: var(--hover-bg);
   color: var(--text-color);
   border: 1px solid var(--input-border);
-  padding: 8px 15px;
-  border-radius: 5px;
+  padding: 10px 15px;
+  border-radius: 8px;
   cursor: pointer;
+  font-weight: 500;
   transition: all 0.2s ease;
 }
 
 .cancel-button:hover {
   background-color: var(--input-bg);
+  transform: translateY(-2px);
 }
 
 .submit-button {
-  background-color: var(--primary-color);
+  flex: 1;
+  background: linear-gradient(45deg, var(--primary-color), #8a6eff);
   color: white;
   border: none;
-  padding: 8px 15px;
-  border-radius: 5px;
+  padding: 10px 15px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  opacity: 0; /* Initial state for anime.js */
 }
 
 .submit-button:hover {
-  opacity: 0.9;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* Responsive styles */
-@media (max-width: 768px) {
-  .form-row {
-    flex-direction: column;
-    gap: 0;
-  }
-}
-
 @media (max-width: 576px) {
   .form-actions {
     flex-direction: column;

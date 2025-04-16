@@ -135,6 +135,7 @@ import ConfirmationModal from './ConfirmationModal.vue'
 import SettingsModals from './SettingsModals.vue'
 import NotificationsPage from './NotificationsPage.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import axios from 'axios'
 
 export default {
   name: 'AdminDashboard',
@@ -152,10 +153,40 @@ export default {
     FontAwesomeIcon,
     NotificationsPage
   },
+  // In your main component that uses StreamsTab
+methods: {
+  async loadStreams() {
+    try {
+      const response = await axios.get('/api/streams');
+      this.streams = response.data;
+    } catch (error) {
+      console.error('Error loading streams:', error);
+    }
+  },
+  
+  handleStreamCreated() { // Parameter removed
+    // Reload streams to get fresh data
+    this.loadStreams();
+  },
+  
+  handleStreamUpdated(updatedStream) {
+    // Update the stream in our list
+    const index = this.streams.findIndex(s => s.id === updatedStream.id);
+    if (index !== -1) {
+      this.$set(this.streams, index, updatedStream);
+    }
+  },
+  
+  handleStreamDeleted(streamId) {
+    // Remove the deleted stream from our list
+    this.streams = this.streams.filter(s => s.id !== streamId);
+  }
+},
   setup() {
     const router = useRouter()
     const toast = useToast()
     const mainContent = ref(null)
+    
 
     // Composable integrations
     const {

@@ -1143,7 +1143,7 @@ export default {
 .glass-panel {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  background-color: rgba(var(--bg-color-rgb, 18, 18, 18), 0.7);
+  background-color: rgba(var(--bg-color-rgb, 210, 175, 190), 0.07);
   border: 1px solid rgba(var(--text-color-rgb, 240, 240, 240), 0.1);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
 }

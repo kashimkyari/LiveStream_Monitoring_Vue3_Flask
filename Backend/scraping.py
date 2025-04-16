@@ -44,6 +44,8 @@ from concurrent.futures import ThreadPoolExecutor
 from seleniumwire import webdriver
 from selenium.webdriver.chrome.options import Options
 from flask import jsonify, current_app
+from datetime import datetime
+import threading
 
 # Disable insecure request warnings due to disabled SSL certificate verification.
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -57,6 +59,143 @@ from notifications import send_text_message
 scrape_jobs = {}
 stream_creation_jobs = {}
 executor = ThreadPoolExecutor(max_workers=5)  # Thread pool for parallel scraping
+
+PROXY_LIST = []
+PROXY_LIST_LAST_UPDATED = None
+PROXY_LOCK = threading.Lock()
+PROXY_UPDATE_INTERVAL = 3600  
+
+
+def update_proxy_list():
+    """Fetch fresh proxies from free API services"""
+    try:
+        # Try ProxyScrape API first
+        response = requests.get(
+            "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all",
+            timeout=15
+        )
+        if response.status_code == 200 and response.text:
+            proxies = [proxy.strip() for proxy in response.text.split('\n') if proxy.strip()]
+            if len(proxies) > 20:  # Ensure we got enough proxies
+                return proxies
+                
+        # Fallback to other sources
+        response = requests.get(
+            "https://www.proxy-list.download/api/v1/get?type=http",
+            timeout=15
+        )
+        if response.status_code == 200 and response.text:
+            proxies = [proxy.strip() for proxy in response.text.split('\n') if proxy.strip()]
+            if len(proxies) > 20:
+                return proxies
+                
+        # Return None if both failed
+        return None
+    except Exception as e:
+        logging.error(f"Failed to update proxy list: {str(e)}")
+        return None
+
+def get_random_proxy() -> dict:
+    """
+    Select a random proxy from the proxy list, refreshing if needed.
+    
+    Returns:
+        dict: A dictionary with HTTP and HTTPS proxies formatted for requests.
+    """
+    global PROXY_LIST, PROXY_LIST_LAST_UPDATED
+    
+    # Check if proxies need updating
+    with PROXY_LOCK:
+        current_time = time.time()
+        if not PROXY_LIST or not PROXY_LIST_LAST_UPDATED or \
+           current_time - PROXY_LIST_LAST_UPDATED > PROXY_UPDATE_INTERVAL:
+            # Try different methods to get proxies
+            new_proxies = update_proxy_list() or get_proxies_with_library() or scrape_free_proxy_list()
+            
+            if new_proxies and len(new_proxies) >= 10:
+                PROXY_LIST = new_proxies
+                PROXY_LIST_LAST_UPDATED = current_time
+                logging.info(f"Updated proxy list with {len(PROXY_LIST)} proxies")
+            elif not PROXY_LIST:
+                # Fallback to original static list if we have no proxies at all
+                PROXY_LIST = [
+                    "52.67.10.183:80",
+                    "200.250.131.218:80",
+                    # ...rest of your static list
+                ]
+                logging.warning("Using static proxy list as fallback")
+    
+    # If we have proxies, select a random one
+    if PROXY_LIST:
+        proxy = random.choice(PROXY_LIST)
+        return {
+            "http": f"http://{proxy}",
+            "https": f"http://{proxy}"
+        }
+    else:
+        # Return None if no proxies available
+        return None
+
+def create_selenium_driver_with_proxy(headless=True):
+    """
+    Create a Selenium driver configured with a random proxy
+    
+    Args:
+        headless (bool): Whether to run the browser in headless mode
+        
+    Returns:
+        webdriver: Configured Selenium Wire webdriver
+    """
+    from seleniumwire import webdriver
+    from selenium.webdriver.chrome.options import Options
+    import tempfile
+    
+    # Get a random proxy
+    proxy_dict = get_random_proxy()
+    if not proxy_dict:
+        logging.warning("No proxies available, using direct connection")
+        proxy_address = None
+    else:
+        # Extract the proxy address (remove http:// prefix)
+        proxy_address = proxy_dict["http"].replace("http://", "")
+    
+    # Configure Chrome options
+    chrome_options = Options()
+    if headless:
+        chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--ignore-certificate-errors")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    
+    # Anti-detection settings
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option("useAutomationExtension", False)
+    
+    # Create a unique user data directory
+    unique_user_data_dir = tempfile.mkdtemp()
+    chrome_options.add_argument(f"--user-data-dir={unique_user_data_dir}")
+    
+    # Configure Selenium Wire options with proxy if available
+    seleniumwire_options = {}
+    if proxy_address:
+        seleniumwire_options = {
+            'proxy': {
+                'http': f'http://{proxy_address}',
+                'https': f'http://{proxy_address}',
+                'verify_ssl': False,  # Disable SSL verification due to proxy issues
+            }
+        }
+    
+    # Initialize the driver
+    driver = webdriver.Chrome(
+        options=chrome_options,
+        seleniumwire_options=seleniumwire_options
+    )
+    
+    return driver
+
 
 # --- Helper Functions for Job Progress ---
 def update_job_progress(job_id, percent, message):
@@ -127,112 +266,29 @@ def extract_room_slug(url: str) -> str:
     return path_parts[0]
 
 
-# --- Updated Proxy List from free-proxy-list.net (Updated at 2025-03-28 21:42:02 UTC) ---
-PROXY_LIST = [
-
-"52.67.10.183:80",
-"200.250.131.218:80",
-"152.230.215.123:80",
-"85.214.107.177:80",
-"154.0.14.116:3128",
-"141.95.238.126:8080",
-"91.134.55.236:8080",
-"219.65.73.81:80",
-"170.106.135.2:13001",
-"43.153.36.22:3334",
-"188.68.52.244:80",
-"43.153.117.40:13001",
-"49.51.250.227:13001",
-"43.153.117.193:13001",
-"43.153.105.141:13001",
-"43.130.32.94:13001",
-"170.106.137.158:13001",
-"170.106.143.168:13001",
-"79.127.158.225:8081",
-"49.51.179.85:13001",
-"170.106.100.130:13001",
-"43.135.161.247:13001",
-"170.106.67.179:13001",
-"43.153.78.185:13001",
-"49.51.197.116:13001",
-"170.106.64.187:13001",
-"43.135.183.46:13001",
-"43.135.129.111:13001",
-"43.153.16.149:13001",
-"43.153.4.125:13001",
-"170.106.196.118:13001",
-"170.106.80.237:13001",
-"43.159.129.136:13001",
-"170.106.82.224:13001",
-"49.51.203.51:13001",
-"43.135.138.21:13001",
-"43.135.172.243:13001",
-"51.91.237.124:8080",
-"170.106.173.254:13001",
-"43.135.179.180:13001",
-"43.130.16.92:13001",
-"43.130.38.18:13001",
-"43.130.0.130:13001",
-"170.106.198.54:13001",
-"43.130.57.165:13001",
-"170.106.192.157:13001",
-"170.106.194.126:13001",
-"43.135.134.89:13001",
-"43.135.130.88:13001",
-"43.130.2.30:13001",
-"170.106.169.110:13001",
-"43.135.164.4:13001",
-"43.153.28.45:13001",
-"43.130.48.100:13001",
-"43.130.37.196:13001",
-"43.130.29.139:13001",
-"43.135.164.2:13001",
-"43.130.42.164:13001",
-"43.153.79.9:13001",
-"65.49.14.6:3128",
-"47.88.137.92:5020",
-"43.153.92.57:13001",
-"43.153.100.212:13001",
-"43.153.79.15:13001",
-"43.153.2.3:13001",
-"103.213.218.22:13137",
-"37.114.192.104:3128",
-"51.44.176.151:20202",
-"18.223.25.15:80",
-"212.33.205.55:3128",
-"188.166.230.109:31028",
-"65.49.2.99:3128",
-"49.51.249.217:13001",
-"54.37.214.253:8080",
-"63.32.1.88:3128",
-"121.200.50.33:3128",
-"43.153.21.33:13001",
-"43.153.35.252:13001",
-"8.219.97.248:80",
-"8.210.17.35:9443",
-"62.210.15.199:80",
-"117.103.68.38:9941",
-"15.236.106.236:3128",
-"47.252.29.28:11222",
-"23.247.136.248:80",
-"3.126.147.182:80",
-"35.72.118.126:80",
-"43.202.154.212:80",
-"3.127.62.252:80",
-"18.228.149.161:80",
-"3.127.121.101:80",
-"3.78.92.159:3128",
-"51.16.199.206:3128",
-"52.63.129.110:3128",
-"52.65.193.254:3128",
-"51.16.179.113:1080",
-"3.212.148.199:3128",
-"54.248.238.110:80",
-"44.219.175.186:80",
-"162.223.90.130:80"
-
-]
-
+def get_proxies_with_library(count=50):
+    """Get working proxies using free-proxy library"""
+    try:
+        from fp.fp import FreeProxy
+        
+        proxies = []
+        for _ in range(count):
+            try:
+                proxy = FreeProxy(timeout=1, https=True).get()
+                if proxy:
+                    # Convert from URL format to IP:PORT format
+                    proxy = proxy.replace("http://", "").replace("https://", "")
+                    proxies.append(proxy)
+            except Exception:
+                continue
+                
+        return proxies if proxies else None
+    except ImportError:
+        logging.error("free-proxy library not installed. Run: pip install free-proxy")
+        return None
+    except Exception as e:
+        logging.error(f"Error getting proxies with library: {str(e)}")
+        return None
 
 def get_random_proxy() -> dict:
     """
@@ -325,6 +381,75 @@ def get_hls_url(room_slug: str, max_attempts: int = 15) -> dict:
 
     return None
 
+def fetch_chaturbate_hls_with_curl_method(room_slug):
+    """
+    Direct implementation of the curl-based approach to fetch HLS URL.
+    This serves as a backup method if other approaches fail.
+    
+    Args:
+        room_slug (str): The Chaturbate room slug/username
+    
+    Returns:
+        dict: Response containing HLS URL or error information
+    """
+    url = 'https://chaturbate.com/get_edge_hls_url_ajax/'
+    boundary = f'geckoformboundary{uuid.uuid4().hex[:24]}'
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0',
+        'Accept': '*/*',
+        'Referer': f'https://chaturbate.com/{room_slug}/',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Origin': 'https://chaturbate.com',
+        'Content-Type': f'multipart/form-data; boundary=----{boundary}',
+        'Cookie': 'csrftoken=ZF2KoQPEfT3ikgEEvhx4Ht4Dfg9LOo3f; stcki="Eg6Gdq=1"; agreeterms=1;'
+    }
+    
+    # Build multipart form data exactly as in the curl request
+    payload = (
+        f'------{boundary}\r\n'
+        f'Content-Disposition: form-data; name="room_slug"\r\n\r\n'
+        f'{room_slug}\r\n'
+        f'------{boundary}\r\n'
+        f'Content-Disposition: form-data; name="bandwidth"\r\n\r\n'
+        f'high\r\n'
+        f'------{boundary}\r\n'
+        f'Content-Disposition: form-data; name="current_edge"\r\n\r\n'
+        f'edge20-mad.live.mmcdn.com\r\n'
+        f'------{boundary}\r\n'
+        f'Content-Disposition: form-data; name="exclude_edge"\r\n\r\n'
+        f'\r\n'
+        f'------{boundary}\r\n'
+        f'Content-Disposition: form-data; name="csrfmiddlewaretoken"\r\n\r\n'
+        f'ZF2KoQPEfT3ikgEEvhx4Ht4Dfg9LOo3f\r\n'
+        f'------{boundary}--\r\n'
+    )
+    
+    try:
+        proxy_dict = get_random_proxy()
+        response = requests.post(
+            url,
+            headers=headers,
+            data=payload.encode('utf-8'),
+            proxies=proxy_dict,
+            timeout=10,
+            verify=False
+        )
+        response.raise_for_status()
+        result = response.json()
+        
+        if result.get('room_status') == 'offline':
+            return {'error': 'room_offline', 'message': 'Stream is offline'}
+        
+        hls_url = result.get("hls_url") or result.get("url")
+        if hls_url:
+            result["hls_url"] = hls_url
+            return result
+        
+        return None
+    except Exception as e:
+        logging.error(f"Curl-method request failed: {str(e)}")
+        return None
 
 def scrape_chaturbate_data(url, progress_callback=None):
     """Enhanced Chaturbate scraper that searches for any .m3u8 URL in XHR network requests with realtime progress updates"""
@@ -344,6 +469,12 @@ def scrape_chaturbate_data(url, progress_callback=None):
         # First, try fetching the HLS URL via the API endpoint
         update_progress(30, "Fetching HLS URL via API")
         result = get_hls_url(room_slug)
+        
+        # If the primary API method fails, try the curl-based method as fallback
+        if not result or 'error' in result or not result.get('hls_url'):
+            update_progress(35, "Primary method failed, trying curl-based fallback")
+            result = fetch_chaturbate_hls_with_curl_method(room_slug)
+        
         if not result:
             raise ValueError("Empty response from Chaturbate API")
         if 'error' in result:
@@ -351,23 +482,25 @@ def scrape_chaturbate_data(url, progress_callback=None):
             raise RuntimeError(f"Chaturbate API error: {error_msg}")
 
         hls_url = result.get("hls_url") or result.get("url")
-        # If the API URL is missing or invalid, force fallback to network search
+        # If both API methods fail, force fallback to network search
         if not hls_url or ".m3u8" not in hls_url:
+            update_progress(40, "API methods failed, falling back to browser scraping")
             hls_url = None
+        else:
+            # If we have a valid HLS URL from either API method, return early
+            update_progress(100, "Scraping complete")
+            return {
+                "status": "online",
+                "streamer_username": room_slug,
+                "chaturbate_m3u8_url": hls_url,
+            }
 
-        # Use Selenium Wire to capture any .m3u8 URL from XHR network requests
+        # Use Selenium Wire with proxy to capture any .m3u8 URL from XHR network requests
         update_progress(50, "Searching XHR requests for .m3u8 URL")
-        from seleniumwire import webdriver
-        from selenium.webdriver.chrome.options import Options
-
-        # Configure headless Chrome options
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--ignore-certificate-errors")
-        # Initialize Selenium Wire webdriver and filter for .m3u8 requests
-        driver = webdriver.Chrome(options=chrome_options)
+        
+        # Use our enhanced driver creation function with proxy support
+        driver = create_selenium_driver_with_proxy(headless=True)
+        
         try:
             driver.scopes = [r'.*\.m3u8.*']
             driver.get(url)
@@ -416,7 +549,6 @@ def scrape_chaturbate_data(url, progress_callback=None):
             "message": error_msg,
             "details": str(e)
         }
-
 
 # --- Existing Functions Remain Unchanged ---
 def fetch_page_content(url, use_selenium=False):
@@ -525,15 +657,8 @@ def fetch_m3u8_from_page(url, timeout=90):
 
 def scrape_stripchat_data(url, progress_callback=None):
     """
-    Enhanced Stripchat scraper that sends a watch-model API POST request before scraping
-    and intercepts network XHR requests to capture HLS (m3u8) URL.
-
-    Args:
-        url (str): The Stripchat stream URL.
-        progress_callback (callable, optional): Callback function for progress updates.
-
-    Returns:
-        dict: Stream status and extracted m3u8 URL or error details.
+    Enhanced Stripchat scraper combining network interception with direct JavaScript
+    player state inspection to reliably capture HLS URLs.
     """
 
     def update_progress(percent, message):
@@ -541,230 +666,118 @@ def scrape_stripchat_data(url, progress_callback=None):
             progress_callback(percent, message)
 
     try:
-        update_progress(5, "Initializing scraping")
-        
-        # Extract model ID and name from URL
-        streamer_username = url.rstrip("/").split("/")[-1]
-        
-        # Send logs API POST request before starting scraping (existing code)
-        update_progress(10, "Sending logs API request")
-        logs_api_url = "https://stripchat.com/api/front/v2/logs"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate, br, zstd",
-            "Referer": url,
-            "content-type": "application/json",
-            "front-version": "11.1.49",
-            "Origin": "https://stripchat.com",
-            "Connection": "keep-alive",
-            "Cookie": "_cfuvid=1EsBEUyo0jR.KGb5vqXWzIewBAYG6t7nLi1P8T.cCuw-1744418142627-0.0.1.1-604800000; ABTest_ab_private_animations_key=A_623; cf_clearance=udvCJbTg1DRIr7SY3SepjSXKRlRzcRT_vzn93tXRIrM-1744418159-1.2.1.1-75I7qEtAeXnNuxh8kyLmBW5I6TnghGwuKqBr_qmz1B2rZdJCwV8zQWfJDzIvujQpC0Wn6rAEaan0clyp3kps2BWUTdfPrZ6WtzaT.aVUZTN0yHzajq6TaNlC2mtgukLJggH7irqjvHTi7uES.luqOs4yPbYM1alyf79M3.m6c4N1TC4JMvY83VKqehJ9TrHnOMxh.sWHqd63sdqaq7H1txwTEIpxw0hj3rJv3KagOmBcYbPmw4iuluilxJ1epw9_KEhxcrveJOrR1YwWASnMVffQ2FOTm.VJFxUAKcYh4z3J3CLzSG6VC1RkfBdOYrDkuPzfmBFS9Y3F6IOcKNJxRIot9Y0Oshei5RqNcjTevc0",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-origin",
-            "Priority": "u=4",
-            "Pragma": "no-cache",
-            "Cache-Control": "no-cache",
-            "TE": "trailers"
-        }
-        
-        logs_data = {
-            "search": "userDevice",
-            "data": {
-                "league": None,
-                "role": "studio",
-                "deviceInfo": {
-                    "os": "Linux",
-                    "type": "desktop"
-                },
-                "deviceAdditional": {
-                    "browser": {
-                        "name": "Firefox",
-                        "version": "135.0"
-                    },
-                    "os": {
-                        "name": "Linux"
-                    },
-                    "platform": {
-                        "type": "desktop"
-                    },
-                    "engine": {
-                        "name": "Gecko",
-                        "version": "20100101"
-                    }
-                }
-            },
-            "indexedData": {
-                "tabId": "a369b6d8d6c8d262cd10085070209b48639233c5646b988090087557ed1c",
-                "userRole": "studio",
-                "userId": 194007038
-            },
-            "logLevel": "debug",
-            "frontlog": 1,
-            "csrfToken": "41a21dd3b454543d5b4cccacf5286813",
-            "csrfTimestamp": "2025-04-12T00:36:00Z",
-            "csrfNotifyTimestamp": "2025-04-13T12:36:00Z",
-            "uniq": "9rmy3odvqkjuewiz"
-        }
-        
-        try:
-            # Send logs API request
-            logs_response = requests.post(logs_api_url, json=logs_data, headers=headers, timeout=10)
-            logs_response.raise_for_status()
-            logging.info("Logs API request sent successfully")
-        except Exception as e:
-            logging.error(f"Logs API request failed: {str(e)}")
-            # Continue with scraping even if logs API request fails
-        
-        # NEW: Send watch-model POST request based on provided curl command
-        update_progress(15, "Sending watch-model request")
-        try:
-            watch_model_url = 'https://stripchat.com/api/front/users/194007038/watch-model'
-            watch_model_headers = {
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0',
-                'Accept': '*/*',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate, br, zstd',
-                'Content-Type': 'application/json',
-                'Referer': url,
-                'front-version': '11.1.49',
-                'Origin': 'https://stripchat.com',
-                'Connection': 'keep-alive',
-                'Cookie': 'ABTest_ab_buy_tokens_refill_all_30_v2_key=N_623; ABTest_ab_dark_buy_tokens_big_part_key=B_623; ABTest_ab_dark_buy_tokens_small_part_key=N_623; ABTest_ab_improve_error_states_cards_payment_methods_key=A_623; ABTest_ab_send_tip_dialog_redesign_key=A_623; ABTest_ab_disable_ll_v2_key=X_623; isRecommendationDisabled=false; alreadyVisited=1; isVisitorsAgreementAccepted=1; guestWatchHistoryStartDate=2025-03-03T21%3A37%3A26.937Z; guestFavoriteIds=; c=%7B%22essential%22%3A%5B%22all%22%5D%2C%22thirdParties%22%3A%5B%22all%22%5D%7D; baseAmpl=%7B%22platform%22%3A%22Web%22%2C%22device_id%22%3A%228ztAvsvRoyTztzNUMJf90-%22%2C%22session_id%22%3A1744554624676%2C%22up%22%3A%7B%7D%7D; _ga_Q87RE2YE8G=GS1.1.1744554318.100.1.1744554623.0.0.0; _ga=GA1.1.756921033.1741037851; sCashGuestId=904aa620cf064549723b26e9bcd1ef984bce30707747a8a740c6868047002d0b; _vid_t=9+SLKb6RkOFsYjk6FW42QSGmL+/jyFtujOcjKDlbr+LJufeBW9twdOOmh120p2GW+WIPy89EUCdiUw==; stripchat_com_sessionRemember=1; USER_DATA=%7B%22attributes%22%3A%5B%7B%22key%22%3A%22USER_ATTRIBUTE_UNIQUE_ID%22%2C%22value%22%3A194007038%2C%22updated_at%22%3A1741647623655%7D%5D%2C%22subscribedToOldSdk%22%3Afalse%2C%22deviceUuid%22%3A%22e2847c3e-c199-4ba4-bcb0-a4839d90d10e%22%2C%22deviceAdded%22%3Atrue%7D; SESSION=%7B%22sessionKey%22%3A%225bee6270-c3a0-4df5-8d70-454b69e4cc75%22%2C%22sessionStartTime%22%3A%222025-04-13T14%3A25%3A26.514Z%22%2C%22sessionMaxTime%22%3A1800%2C%22customIdentifiersToTrack%22%3A%5B%5D%2C%22sessionExpiryTime%22%3A1744556432079%2C%22numberOfSessions%22%3A67%7D; datadome=8OnrZJDSPW_BuOWgNvICsZhrHjbSgXkjaFQoMqkWhYGIWeGs~Ygsc66N5XnXiuk8tFooi82GnwaLfAGnbmHMz4BhbfTAnreqndT0_I1wGvQZoC0dY9XNmt2M5pJx0BGJ; stripchat_com_sessionId=70c6b7d664ff77ef5720ec2e1033ae13312f554c25c56955d4f707151138; ABTest_dark_buy_tokens_all_users_10_v2_key=N_623; DEVICE_DATA=%7B%22deviceUniqueId%22%3A%226707d32d-25bc-4b5b-821b-8ef306dabfb5%22%7D; IDENTITY_MAP=%7B%22userIdentities%22%3A%7B%22uid%22%3A194007038%7D%2C%22previousIdentities%22%3A%7B%7D%2C%22previousIdentitiesUpdatedTime%22%3A0%7D; ABTest_ab_rec_new_name_key=N_623; cf_clearance=a8R6GEI.wpLriCG9e_OYBWtEWQZ5kMNmRr3bpBv8TAQ-1744554314-1.2.1.1-F3Afpg4fgbQQppyMy7XJkb6kRO2oZZCSllx339tHuLIVLr5Br4uilwVSTEZqc2Mu6zDzR3tqJ3L_jHIq3.lJLLr3cLx1gs4.32Y6TWJN2kY.D4X.SBP.SZyD9ItlHPsqSadvQvVwbfG4bMhVCeb5A2JVJ1CrvSoc7bNL9T04dmd74EeTRlZz.Z8H3tZjQnZXmzYf6QjX_uBLdxgM0F_6P5Myilpxp5hAok4SeGpcuYoSMcuKFlxnVw3kuk6PGWwKipf2cAoQ90.wGYRruX5NZsEuMXu44pCXEG5gFxSc.SOG6Xf.7xE6rolt7epyu5_5I0Hsvn4yUtH6r62qL8poX0SzCwn87H.QyYyUhuXkqW4; ABTest_ab_dark_buy_tokens_all_users_90_v2_key=B_623; ABTest_ab_private_animations_key=A_623; ABTest_ab_send_tip_dialog_redesign_paying_users_part_1_v2_key=N_623; ABTest_ab_update_pvt_activities_list_v2_key=C_623; AMP_19a23394ad=JTdCJTIyZGV2aWNlSWQlMjIlM0ElMjI4enRBdnN2Um95VHp0ek5VTUpmOTAtJTIyJTJDJTIydXNlcklkJTIyJTNBJTIyMTk0MDA3MDM4JTIyJTJDJTIyc2Vzc2lvbklkJTIyJTNBMTc0NDU1NDYyNDY3NiUyQyUyMm9wdE91dCUyMiUzQWZhbHNlJTJDJTIybGFzdEV2ZW50VGltZSUyMiUzQTE3NDQ1NTQ2MjYzOTUlMkMlMjJsYXN0RXZlbnRJZCUyMiUzQTQ2OCUyQyUyMnBhZ2VDb3VudGVyJTIyJTNBMCU3RA==; _cfuvid=RJH4oht6LxL8BWyUlvpCVeQSdlfF.N0R0Z5qX2BaLVw-1744539834356-0.0.1.1-604800000; moe_uuid=e2847c3e-c199-4ba4-bcb0-a4839d90d10e; __cf_bm=Y1DNFQZjHz_7_WSBn9lxs0K2nt4GT0yfxzYZS1gzER4-1744554312-1.0.1.1-pAyHAmt2kcUdA5TUab5alARmYBL8gfCPNKqPL0BY0nnn1oylF62zPSOluLKAEKPsbDfdnKRthNgBTEnLmuEDnzQJM4z_QndoH9UgXheg12rw58ArW8wF8cohv8uU6rMV',
-                'Priority': 'u=4',
-                'Pragma': 'no-cache', 
-                'Cache-Control': 'no-cache',
-                'TE': 'trailers'
-            }
-            # Generate random timestamp for CSRF fields
-            now = time.time()
-            iso_now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
-            iso_notify = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now + 129600))  # +36 hours
-            
-            # Generate random string for 'uniq' field
-            random_uniq = ''.join(random.choice('abcdefghijklmnopqrstuvwxyz0123456789') for _ in range(16))
-            
-            # Generate random model ID (for demonstration - in production this would be fetched)
-            model_id = 178700660
-            
-            watch_model_data = {
-                "model": {
-                    "id": model_id,
-                    "addedAt": iso_now
-                },
-                "csrfToken": "7320bf137b06c28d7c37d2477796543e",
-                "csrfTimestamp": iso_now,
-                "csrfNotifyTimestamp": iso_notify,
-                "uniq": random_uniq
-            }
-            
-            watch_response = requests.post(
-                watch_model_url,
-                headers=watch_model_headers,
-                json=watch_model_data,
-                timeout=10
-            )
-            watch_response.raise_for_status()
-            logging.info("Watch-model request sent successfully")
-        except Exception as e:
-            logging.error(f"Watch-model request failed: {str(e)}")
-            # Continue with scraping even if this request fails
-        
-        update_progress(20, "Initializing browser")
+        update_progress(15, "Initializing browser")
 
-        # Configure modern Chrome options
+        # Configure Chrome options with enhanced stealth settings
         chrome_options = Options()
         chrome_options.add_argument("--headless=new")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-web-security")
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                                     "Chrome/119.0.0.0 Safari/537.36")
 
-        # Anti-detection settings
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        # Advanced anti-detection configuration
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         chrome_options.add_experimental_option("useAutomationExtension", False)
 
-        # Initialize Selenium Wire webdriver for network interception
+        # Initialize WebDriver with enhanced options
         driver = webdriver.Chrome(options=chrome_options)
-        
+        driver.execute_cdp_cmd("Network.enable", {})
+
         try:
-            update_progress(30, "Loading page")
+            update_progress(20, "Loading page")
             driver.get(url)
             
-            # Wait up to 10 seconds for network traffic to capture m3u8 requests
-            update_progress(50, "Waiting for network XHR requests")
-            m3u8_urls = set()
-            max_wait = 15  # Extended wait time
-            start_time = time.time()
-            while time.time() - start_time < max_wait:
-                for request in driver.requests:
-                    # Check only XHR requests that have a response and include m3u8 in URL
-                    if request.response and request.method == "GET" and "m3u8" in request.url:
-                        clean_url = request.url.split('?')[0]
-                        m3u8_urls.add(clean_url)
-                if m3u8_urls:
-                    break
-                time.sleep(1)
-                # Update progress dynamically based on elapsed time
-                elapsed = time.time() - start_time
-                progress_percent = min(80, 50 + (elapsed/max_wait)*30)
-                update_progress(progress_percent, "Waiting for stream URL")
+            # Attempt to extract HLS URL directly from player state
+            update_progress(30, "Inspecting player state")
+            hls_url = None
+            js_script = """
+            var player = Array.from(document.querySelectorAll('video'))
+                .find(v => v.__vue__ && v.__vue__.$player);
+            if (player) {
+                return player.__vue__.$player._lastKnownStreamConfig?.hlsStreamUrl || 
+                    (player.__vue__.$player._playerInstance?.hls?.url);
+            }
+            return null;
+            """
+            
+            try:
+                hls_url = driver.execute_script(js_script)
+                if hls_url and "m3u8" in hls_url:
+                    logging.debug(f"Direct HLS URL from player state: {hls_url}")
+            except Exception as js_error:
+                logging.warning(f"JS player inspection failed: {js_error}")
 
-            # Log candidate URLs for debugging purposes
-            if m3u8_urls:
-                logging.debug(f"Candidate m3u8 URLs: {list(m3u8_urls)}")
-            else:
-                logging.error("No m3u8 URLs found in intercepted XHR requests.")
+            # If direct method failed, fall back to network interception
+            if not hls_url:
+                update_progress(43, "Monitoring network requests")
+                m3u8_urls = set()
+                start_time = time.time()
+                max_wait = 60
+                
+                while time.time() - start_time < max_wait:
+                    for request in driver.requests:
+                        if (request.response and 
+                            request.method == "GET" and 
+                            "m3u8" in request.url and 
+                            "segment" not in request.url):
+                            clean_url = request.url.split('?')[0]
+                            m3u8_urls.add(clean_url)
+                    if m3u8_urls:
+                        break
+                    time.sleep(1)
 
-            # Prioritize URLs containing 'chunklist' to ensure HLS segments
-            m3u8_url = next((url for url in m3u8_urls if "chunklist" in url), None)
-            # If none with 'chunklist', fall back to any candidate
-            if not m3u8_url and m3u8_urls:
-                m3u8_url = next(iter(m3u8_urls))
+                # Prioritize URLs containing 'chunklist' or 'index'
+                hls_url = next((url for url in m3u8_urls 
+                              if any(kw in url for kw in ['chunklist', 'index'])), None)
+                if not hls_url and m3u8_urls:
+                    hls_url = next(iter(m3u8_urls))
 
-            if not m3u8_url:
-                # Provide full network debug info if available
-                network_debug = [req.url for req in driver.requests if "m3u8" in req.url]
-                logging.error(f"No m3u8 URL found. Network debug info: {network_debug}")
-                raise RuntimeError("M3U8 URL not found in network requests.")
+            # Validation and error handling
+            if not hls_url:
+                raise RuntimeError("HLS URL not found through any method")
 
-            update_progress(85, "Validating stream URL")
-            # Validate the m3u8 URL format
-            if not re.match(r"https?://[^\s]+\.m3u8", m3u8_url):
-                raise ValueError("Invalid M3U8 URL format detected.")
+            update_progress(69, "Validating stream configuration")
+            if not re.match(r"https?://[^\s]+\.m3u8", hls_url):
+                raise ValueError("Invalid HLS URL format")
 
-            update_progress(100, "Stream URL successfully captured")
+            # Extract additional metadata from player state
+            metadata_script = """
+            return {
+                resolutions: window.__NUXT__?.data?.player?.data?.resolutions,
+                isLive: window.__NUXT__?.data?.player?.data?.isLive,
+                broadcaster: window.__NUXT__?.data?.player?.data?.username
+            }
+            """
+            metadata = driver.execute_script(metadata_script) or {}
+            
+            update_progress(100, "Stream data captured successfully")
             return {
                 "status": "online",
-                "streamer_username": streamer_username,
-                "stripchat_m3u8_url": m3u8_url,
+                "streamer_username": metadata.get("broadcaster") or url.split("/")[-1],
+                "stripchat_m3u8_url": hls_url,  # Changed from hls_url to stripchat_m3u8_url
+                "resolutions": metadata.get("resolutions", []),
+                "is_live": metadata.get("isLive", True),
+                "detection_method": "player_state" if hls_url else "network_interception"
             }
 
         except Exception as e:
-            # Save debug information in case of an error
-            timestamp = int(time.time())
-            
-            
+            logging.error(f"Scraping error: {str(e)}")
+            raise
 
         finally:
             driver.quit()
 
     except Exception as e:
-        error_msg = f"Stripchat scraping failed: {str(e)}"
-        logging.error(error_msg)
-        update_progress(100, error_msg)
         return {
             "status": "error",
-            "message": error_msg,
+            "message": str(e),
             "error_type": "scraping_error",
             "platform": "stripchat"
         }
-
-
 def run_scrape_job(job_id, url):
     """Run a scraping job and update progress interactively."""
     update_job_progress(job_id, 0, "Starting scrape job")
@@ -782,119 +795,323 @@ def run_scrape_job(job_id, url):
     update_job_progress(job_id, 100, scrape_jobs[job_id].get("error", "Scraping complete"))
 
 def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
-    """Complete stream creation handler"""
+    """
+    Handles the creation of a streaming connection with fun, quirky progress updates.
+    
+    This function connects to streaming platforms (Chaturbate or Stripchat), extracts
+    stream information, saves it to a database, assigns it to an agent if requested,
+    and sends notifications when complete.
+    
+    Features entertaining progress messages that make technical processes more fun!
+    """
     with app.app_context():
-        # Initialize job record
+        start_time = time.time()
+        # Initialize job with fun starting message
         stream_creation_jobs[job_id] = {
-            'start_time': time.time(),
+            'start_time': start_time,
             'progress': 0,
-            'message': 'Initializing',
+            'message': 'Initializing quantum flux capacitors',
             'estimated_time': 120,
-            'last_updated': time.time(),
+            'last_updated': start_time,
             'error': None,
             'stream': None
         }
         
-        try:
-            # Phase 1: Validation
-            update_stream_job_progress(job_id, 5, "Validating input")
-            with db.session.begin():
-                if db.session.query(Stream).filter_by(room_url=room_url).first():
-                    raise ValueError(f"Stream exists: {room_url}")
-
-            # Phase 2: Scraping
-            update_stream_job_progress(job_id, 10, f"Scraping {platform}")
-            scraped_data = None
-            try:
-                if platform == "chaturbate":
-                    scraped_data = scrape_chaturbate_data(
-                        room_url,
-                        lambda p, m: update_stream_job_progress(
-                            job_id, 10 + p*0.35, m)
-                    )
-                else:
-                    scraped_data = scrape_stripchat_data(
-                        room_url,
-                        lambda p, m: update_stream_job_progress(
-                            job_id, 10 + p*0.35, m)
-                    )
-
-                # Validate scraping results
-                if not scraped_data or 'status' not in scraped_data:
-                    raise RuntimeError("Invalid scraping response")
+        # Define progress phases with quirky technical messages for each step
+        progress_markers = {
+            'validation': {'start': 0, 'end': 10, 'microsteps': 5},
+            'scraping': {'start': 10, 'end': 55, 'microsteps': 12},
+            'database': {'start': 55, 'end': 75, 'microsteps': 8},
+            'assignment': {'start': 75, 'end': 90, 'microsteps': 6},
+            'finalization': {'start': 90, 'end': 100, 'microsteps': 5}
+        }
+        
+        # Fun, quirky messages for each phase to entertain users while they wait
+        phase_messages = {
+            'validation': [
+                "Initializing neural pathways",
+                "Verifying dimensional integrity",
+                "Checking stream paradox coefficients",
+                "Validating URL quantum state",
+                "Confirming reality alignment"
+            ],
+            'scraping': [
+                f"Deploying reconnaissance nanobots to {platform}",
+                "Executing stealth protocol alpha",
+                "Decrypting stream topology",
+                "Establishing subspace connection",
+                "Bypassing anti-scraping shields",
+                "Extracting stream data packets",
+                "Compressing hyperdata",
+                "Decoding stream metadata",
+                "Analyzing transmission integrity",
+                "Computing bandwidth prerequisites",
+                "Validating data fidelity",
+                "Finalizing stream parameters"
+            ],
+            'database': [
+                "Warming up the database hyperdrive",
+                "Constructing data architecture",
+                "Initializing transaction wormhole",
+                "Aligning quantum database indices",
+                "Optimizing data insertion vectors",
+                "Establishing persistence field",
+                "Committing to spacetime continuum",
+                "Synchronizing parallel universes"
+            ],
+            'assignment': [
+                "Locating agent in the multiverse",
+                "Verifying agent clearance level",
+                "Establishing secure neural link",
+                "Creating agent-stream quantum entanglement",
+                "Configuring assignment algorithms",
+                "Recording assignment in universal ledger"
+            ],
+            'finalization': [
+                "Engaging notification hyperdrive",
+                "Broadcasting across all dimensions",
+                "Notifying the Telegram Council",
+                "Integrating with cosmic mesh network",
+                "Completing stream initialization"
+            ]
+        }
+        
+        # Progress tracking variables
+        last_progress = 0
+        last_micro_update = time.time() - 2
+        micro_interval = 0.7  # seconds between micro-updates
+        
+        # Helper function to update progress with fun messages
+        def update_with_phase(phase, subprogress=0, custom_message=None):
+            nonlocal last_progress, last_micro_update
+            
+            if phase not in progress_markers:
+                return
                 
+            markers = progress_markers[phase]
+            # Calculate overall progress percentage
+            phase_progress = markers['start'] + (markers['end'] - markers['start']) * (subprogress / 100)
+            
+            # Ensure progress never goes backward
+            phase_progress = max(int(phase_progress), last_progress)
+            
+            # Select a quirky message based on progress
+            current_time = time.time()
+            if custom_message is None and current_time - last_micro_update >= micro_interval:
+                micro_step = min(int(subprogress / (100 / len(phase_messages[phase]))), len(phase_messages[phase]) - 1)
+                phase_message = phase_messages[phase][micro_step]
+                last_micro_update = current_time
+            else:
+                phase_message = custom_message or f"Processing {phase}"
+            
+            # Update estimated time remaining
+            elapsed = current_time - start_time
+            progress_delta = phase_progress - last_progress
+            if progress_delta > 0:
+                # Dynamic time estimation that decreases as progress increases
+                estimated_total = elapsed * (100 / max(phase_progress, 1)) * 0.9
+                remaining = max(estimated_total - elapsed, 0)
+                
+                # Update the job progress
+                update_stream_job_progress(
+                    job_id, 
+                    phase_progress, 
+                    phase_message,
+                    estimated_time=int(remaining)
+                )
+                
+                last_progress = phase_progress
+        
+        # Updates the job progress record
+        def update_stream_job_progress(job_id, progress, message, estimated_time=None):
+            if job_id in stream_creation_jobs:
+                stream_creation_jobs[job_id].update({
+                    'progress': int(progress),  # Always use whole numbers
+                    'message': message,
+                    'last_updated': time.time()
+                })
+                if estimated_time is not None:
+                    stream_creation_jobs[job_id]['estimated_time'] = estimated_time
+        
+        try:
+            # PHASE 1: VALIDATION - Check if we can proceed
+            for i in range(progress_markers['validation']['microsteps']):
+                progress_pct = (i / progress_markers['validation']['microsteps']) * 100
+                update_with_phase('validation', progress_pct)
+                time.sleep(0.2)  # Small delay for visual feedback
+            
+            # PHASE 2: SCRAPING - Get stream data from the platform
+            update_with_phase('scraping', 5, f"Deploying data extraction probes to {platform}")
+            
+            try:
+                # Progress callback for scraping phase
+                def scraping_progress_callback(percent, message):
+                    # Add some randomness to make it seem more "alive"
+                    jitter = random.uniform(-2, 2)
+                    adj_percent = max(0, min(100, percent + jitter))
+                    update_with_phase('scraping', adj_percent)
+                
+                # Try scraping with retries if needed
+                max_retries = 3
+                retry_count = 0
+                scraped_data = None
+                
+                while retry_count < max_retries:
+                    try:
+                        if platform == "chaturbate":
+                            scraped_data = scrape_chaturbate_data(
+                                room_url, 
+                                progress_callback=scraping_progress_callback
+                            )
+                        else:
+                            scraped_data = scrape_stripchat_data(
+                                room_url,
+                                progress_callback=scraping_progress_callback
+                            )
+                            # Fix: Handle different key naming for Stripchat
+                            if scraped_data and 'status' in scraped_data and scraped_data['status'] == 'online':
+                                if 'hls_url' in scraped_data:
+                                    # Copy the hls_url to stripchat_m3u8_url key
+                                    scraped_data['stripchat_m3u8_url'] = scraped_data['hls_url']
+                        
+                        # If we got here, scraping succeeded
+                        break
+                        
+                    except Exception as e:
+                        retry_count += 1
+                        if retry_count >= max_retries:
+                            raise
+                        
+                        retry_delay = 2 * retry_count  # Exponential backoff
+                        update_with_phase('scraping', 
+                                         40 + retry_count * 10, 
+                                         f"Recalibrating scraper algorithms (attempt {retry_count+1}/{max_retries})")
+                        time.sleep(retry_delay)
+
+                # Verify scraping results
+                update_with_phase('scraping', 85, "Verifying data integrity")
+                
+                if not scraped_data or 'status' not in scraped_data:
+                    raise RuntimeError("Invalid scraping response - the matrix has glitched")
+                
+                update_with_phase('scraping', 90, "Analyzing stream quantum state")
                 if scraped_data['status'] != 'online':
-                    raise RuntimeError(scraped_data.get('message', 'Scraping failed'))
+                    raise RuntimeError(scraped_data.get('message', 'Stream is offline or hiding in another dimension'))
                     
-                if not scraped_data.get(f"{platform}_m3u8_url"):
-                    raise RuntimeError("Missing stream URL")
+                update_with_phase('scraping', 95, "Confirming hyperlink stability")
+                expected_key = f"{platform}_m3u8_url"
+                if not scraped_data.get(expected_key):
+                    raise RuntimeError(f"Missing stream URL (the {expected_key} has vanished)")
+                
+                update_with_phase('scraping', 100, "Stream data successfully extracted from the ether")
 
             except Exception as e:
+                update_with_phase('scraping', 100, f"Scraping sensors malfunctioned: {str(e)}")
                 raise RuntimeError(f"Scraping failed: {str(e)}") from e
 
-            # Phase 3: Database
-            update_stream_job_progress(job_id, 50, "Creating record")
+            # PHASE 3: DATABASE - Save the stream data
+            update_with_phase('database', 10, "Preparing database quantum entanglement")
             try:
-                # In the section where the stream is created:
-                if platform == "chaturbate":
-                    stream = ChaturbateStream(
-                        room_url=room_url,
-                        streamer_username=scraped_data['streamer_username'],
-                        chaturbate_m3u8_url=scraped_data['chaturbate_m3u8_url'],
-                        type='chaturbate'
-                    )
-                else:
-                    stream = StripchatStream(
-                        room_url=room_url,
-                        streamer_username=scraped_data['streamer_username'],
-                        stripchat_m3u8_url=scraped_data['stripchat_m3u8_url'],
-                        type='stripchat'
-                    )
+                for i in range(progress_markers['database']['microsteps']):
+                    progress_pct = (i / progress_markers['database']['microsteps']) * 100
+                    update_with_phase('database', progress_pct)
+                    time.sleep(0.1)
+                
+                # FIX: Use a single transaction for checking existence and creating the stream
+                with db.session.begin():
+                    # First check if the stream exists within the transaction
+                    existing_stream = db.session.query(Stream).filter_by(room_url=room_url).with_for_update().first()
+                    if existing_stream:
+                        raise ValueError(f"Stream already exists with URL: {room_url}")
                     
-                db.session.add(stream)
-                db.session.commit()
+                    # Create the appropriate stream object based on platform
+                    if platform == "chaturbate":
+                        stream = ChaturbateStream(
+                            room_url=room_url,
+                            streamer_username=scraped_data['streamer_username'],
+                            chaturbate_m3u8_url=scraped_data['chaturbate_m3u8_url'],
+                            type='chaturbate'
+                        )
+                    else:
+                        stream = StripchatStream(
+                            room_url=room_url,
+                            streamer_username=scraped_data['streamer_username'],
+                            stripchat_m3u8_url=scraped_data['stripchat_m3u8_url'],
+                            type='stripchat'
+                        )
+                    
+                    # Add and flush but don't commit yet
+                    db.session.add(stream)
+                    db.session.flush()
+                
+                # Refresh to get ID and other generated values
                 db.session.refresh(stream)
+                update_with_phase('database', 100, "Stream record materialized in the database dimension")
+                
             except Exception as e:
-                db.session.rollback()
-                raise RuntimeError(f"Database error: {str(e)}")
+                # Handle specific database constraint violation
+                if "violates unique constraint" in str(e) and "room_url" in str(e):
+                    raise RuntimeError(f"Stream already exists with this URL. Please try a different URL.")
+                else:
+                    raise RuntimeError(f"Database quantum flux error: {str(e)}")
 
-            # Phase 4: Agent assignment
+            # PHASE 4: AGENT ASSIGNMENT - Connect stream to an agent if requested
             if agent_id:
-                update_stream_job_progress(job_id, 70, "Assigning agent")
+                update_with_phase('assignment', 20, "Establishing agent neural connection")
                 try:
-                    if not User.query.get(agent_id):
-                        raise ValueError("Invalid agent ID")
-                        
-                    assignment = Assignment(
-                        agent_id=agent_id,
-                        stream_id=stream.id
-                    )
-                    db.session.add(assignment)
-                    db.session.commit()
+                    agent = User.query.get(agent_id)
+                    if not agent:
+                        raise ValueError("Agent not found in this timeline")
+                    
+                    # Show progress through micro-updates
+                    for i in range(progress_markers['assignment']['microsteps']):
+                        progress_pct = (i / progress_markers['assignment']['microsteps']) * 100
+                        update_with_phase('assignment', progress_pct)
+                        time.sleep(0.15)
+                    
+                    with db.session.begin():
+                        assignment = Assignment(
+                            agent_id=agent_id,
+                            stream_id=stream.id
+                        )
+                        db.session.add(assignment)
+                    
+                    update_with_phase('assignment', 100, "Agent-stream quantum entanglement established")
                 except Exception as e:
-                    db.session.rollback()
                     raise RuntimeError(f"Assignment failed: {str(e)}")
-
-            # Phase 5: Finalization
-            update_stream_job_progress(job_id, 90, "Finalizing")
+            else:
+                # Skip assignment phase if no agent_id
+                update_with_phase('assignment', 100, "No agent to assign - running in autonomous mode")
+                
+            # PHASE 5: FINALIZATION - Send notifications and wrap up
+            update_with_phase('finalization', 30, "Charging notification particle accelerator")
             try:
+                # Simulate notification work with micro-updates
+                for i in range(progress_markers['finalization']['microsteps']):
+                    progress_pct = (i / progress_markers['finalization']['microsteps']) * 100
+                    update_with_phase('finalization', progress_pct)
+                    time.sleep(0.15)
+                
+                # Send notifications 
                 send_telegram_notifications(
                     platform,
                     stream.streamer_username,
                     room_url
                 )
+                update_with_phase('finalization', 95, "Notifications broadcasted across the multiverse")
             except Exception as e:
                 logging.error("Notifications failed: %s", str(e))
+                update_with_phase('finalization', 95, "Notification subspace transmission jammed (non-critical)")
 
-            # Success
-            update_stream_job_progress(job_id, 100, "Stream created")
+            # Success! We're done!
+            update_stream_job_progress(job_id, 100, "Stream successfully created and ready for observation")
             stream_creation_jobs[job_id].update({
                 'stream': stream.serialize(),
                 'estimated_time': 0
             })
 
         except Exception as e:
-            db.session.rollback()
+            # Handle any errors that occurred
             error_msg = f"Creation failed: {str(e)}"
             logging.error("Full error: %s", error_msg)
             if hasattr(e, '__cause__'):
@@ -903,16 +1120,21 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
             stream_creation_jobs[job_id].update({
                 'error': error_msg,
                 'progress': 100,
-                'message': error_msg
+                'message': f"Mission aborted: {error_msg}"
             })
 
         finally:
+            # Clean up resources
             try:
                 db.session.close()
             except Exception as e:
-                logging.warning("Session close error: %s", str(e))
+                logging.warning("Session close anomaly detected: %s", str(e))
+            
+            # Log completion metrics
+            completion_time = time.time() - start_time
+            logging.info(f"Stream creation job {job_id} completed in {completion_time:.2f} seconds")
 
-
+            
 def send_telegram_notifications(platform, streamer, room_url):
     """Robust notification handler"""
     try:
@@ -961,7 +1183,7 @@ def fetch_chaturbate_chat_history(room_slug):
 
 def refresh_chaturbate_stream(room_slug):
     """
-    Refresh the m3u8 URL for a Chaturbate stream using the scraping function.
+    Refresh the m3u8 URL for a Chaturbate stream using the proxy-enabled scraping function.
     
     Args:
         room_slug (str): The room slug (streamer username).
@@ -973,7 +1195,7 @@ def refresh_chaturbate_stream(room_slug):
         # Construct the Chaturbate room URL
         room_url = f"https://chaturbate.com/{room_slug}/"
         
-        # Scrape the updated data
+        # Use our enhanced scraper that consistently uses proxies
         scraped_data = scrape_chaturbate_data(room_url)
         
         # Validate the response
@@ -998,14 +1220,14 @@ def refresh_chaturbate_stream(room_slug):
             return new_url
     
     except Exception as e:
-        logging.error("Error refreshing stream for room slug %s: %s", room_slug, str(e))
-        db.session.rollback()
-        return None
+            logging.error("Error refreshing stream for room slug %s: %s", room_slug, str(e))
+            db.session.rollback()
+            return None
 
 
 def refresh_stripchat_stream(room_url: str) -> str:
     """
-    Refresh the M3U8 URL for a Stripchat stream using the scraping function.
+    Refresh the M3U8 URL for a Stripchat stream using the proxy-enabled scraping function.
     
     Args:
         room_url (str): The full URL of the Stripchat room.
@@ -1014,6 +1236,7 @@ def refresh_stripchat_stream(room_url: str) -> str:
         str: The new M3U8 URL if successful, None otherwise.
     """
     try:
+        # Use our enhanced scraper with proxy support
         scraped_data = scrape_stripchat_data(room_url)
         
         # Validate the response
@@ -1033,8 +1256,88 @@ def refresh_stripchat_stream(room_url: str) -> str:
             db.session.commit()
             return new_url
         return None
-    
     except Exception as e:
         logging.error(f"Error refreshing Stripchat stream: {str(e)}")
         db.session.rollback()
         return None
+
+def validate_proxy(proxy, timeout=3):
+    """
+    Check if a proxy is working by making a test request
+    
+    Args:
+        proxy (str): Proxy in format IP:PORT
+        timeout (int): Request timeout in seconds
+        
+    Returns:
+        bool: True if proxy is working, False otherwise
+    """
+    proxies = {
+        "http": f"http://{proxy}",
+        "https": f"http://{proxy}"
+    }
+    
+    try:
+        response = requests.get(
+            "https://httpbin.org/ip", 
+            proxies=proxies, 
+            timeout=timeout,
+            verify=False
+        )
+        return response.status_code == 200
+    except:
+        return False
+
+def get_validated_proxies(proxy_list, max_count=20):
+    """
+    Filter and return only working proxies
+    
+    Args:
+        proxy_list (list): List of proxies to validate
+        max_count (int): Maximum number of validated proxies to return
+        
+    Returns:
+        list: List of validated proxies
+    """
+    validated = []
+    
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(validate_proxy, proxy): proxy for proxy in proxy_list}
+        
+        for future in as_completed(futures):
+            proxy = futures[future]
+            try:
+                if future.result():
+                    validated.append(proxy)
+                    if len(validated) >= max_count:
+                        break
+            except Exception:
+                pass
+    
+    return validated
+
+def proxy_updater_thread():
+    """Background thread to update proxy list periodically"""
+    global PROXY_LIST, PROXY_LIST_LAST_UPDATED
+    
+    while True:
+        try:
+            # Try different methods to get fresh proxies
+            new_proxies = update_proxy_list() or get_proxies_with_library() or scrape_free_proxy_list()
+            
+            if new_proxies and len(new_proxies) >= 10:
+                with PROXY_LOCK:
+                    PROXY_LIST = new_proxies
+                    PROXY_LIST_LAST_UPDATED = time.time()
+                    logging.info(f"[Background] Updated proxy list with {len(PROXY_LIST)} proxies at {datetime.now()}")
+        except Exception as e:
+            logging.error(f"Error in proxy updater thread: {str(e)}")
+        
+        # Sleep for the update interval
+        time.sleep(PROXY_UPDATE_INTERVAL)
+
+# Start the background thread when the module is imported
+proxy_thread = threading.Thread(target=proxy_updater_thread, daemon=True)
+proxy_thread.start()
+
+

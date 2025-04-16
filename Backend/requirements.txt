@@ -12,3 +12,4 @@ ultralytics
 whisper
 scipy
 vaderSentiment
+free-proxy
