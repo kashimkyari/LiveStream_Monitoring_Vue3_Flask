@@ -26,22 +26,11 @@ app = create_app()
 # === CORS Configuration ===
 # Only allow requests from the actual frontend origin when using credentials.
 # Wildcard '*' cannot be used with supports_credentials=True.
-allowed_origins = os.getenv(
-    'ALLOWED_ORIGINS',
-    'https://live-stream-monitoring-vue3-flask.vercel.app'
-).split(',')
-
 CORS(
     app,
     supports_credentials=True,
-    origins=allowed_origins,
-    resources={r"/api/*": {"origins": allowed_origins}},
-    allow_headers=[
-        "Content-Type",
-        "Authorization",
-        "X-Requested-With"
-    ],
-    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    origins=["https://live-stream-monitoring-vue3-flask.vercel.app"],
+    resources={r"/api/*": {"origins": ["https://live-stream-monitoring-vue3-flask.vercel.app"]}}
 )
 
 # Configure logging to both file and console
