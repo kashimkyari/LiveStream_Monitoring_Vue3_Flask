@@ -67,7 +67,7 @@ export default {
       const savedTheme = localStorage.getItem('themePreference')
       isDarkTheme.value = savedTheme ? savedTheme === 'dark' : true
       
-      axios.defaults.baseURL = '${import.meta.env.VITE_API_URL}'
+      axios.defaults.baseURL = import.meta.env.VITE_API_URL
       axios.defaults.withCredentials = true
       
       checkAuthentication()
