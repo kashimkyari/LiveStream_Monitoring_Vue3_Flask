@@ -231,11 +231,6 @@ export default {
         const response = await axios.post('/api/login', {
           username: this.username,
           password: this.password
-        }, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
         })
 
         if (response.status === 200 && response.data.message === "Login successful") {
