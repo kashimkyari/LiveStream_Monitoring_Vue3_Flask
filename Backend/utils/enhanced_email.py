@@ -4,9 +4,11 @@ import os
 import smtplib
 import time
 import logging
+import random
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr
+from datetime import datetime
 from flask import current_app
 from dotenv import load_dotenv
 
@@ -208,6 +210,7 @@ class EmailService:
         finally:
             # Always close the connection
             server.quit()
+    
     def _html_to_plain_text(self, html):
         """Convert HTML to plain text (basic implementation)"""
         # This is a very basic implementation
@@ -236,33 +239,74 @@ def send_welcome_email(user_email, username):
     """Send welcome email to newly registered user"""
     email_service = EmailService()
     
-    subject = "Welcome to Live Stream Monitoring"
+    # Get current year for copyright
+    current_year = datetime.now().year
+    
+    subject = "Welcome to JetCam Studio"
     html_content = f"""
     <!DOCTYPE html>
     <html>
     <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Welcome to JetCam Studio</title>
         <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background-color: #4CAF50; color: white; padding: 10px; text-align: center; }}
-            .content {{ padding: 20px; background-color: #f9f9f9; }}
-            .footer {{ font-size: 12px; text-align: center; margin-top: 30px; color: #777; }}
+            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }}
+            .container {{ max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); }}
+            .header {{ background-color: #1a73e8; color: white; padding: 20px; text-align: center; }}
+            .logo-container {{ padding: 20px; text-align: center; background-color: #ffffff; }}
+            .logo {{ max-width: 250px; height: auto; }}
+            .content {{ padding: 30px; background-color: #ffffff; }}
+            .button {{ display: inline-block; padding: 12px 24px; background-color: #1a73e8; 
+                     color: white; text-decoration: none; border-radius: 4px; margin: 25px 0; 
+                     font-weight: bold; text-align: center; transition: background-color 0.3s; }}
+            .button:hover {{ background-color: #0d62c7; }}
+            .feature-box {{ background-color: #f1f3f4; padding: 15px; border-radius: 4px; margin: 20px 0; }}
+            .feature-title {{ color: #1a73e8; font-weight: bold; margin-bottom: 10px; }}
+            .footer {{ font-size: 12px; text-align: center; margin-top: 30px; padding: 20px; color: #777; background-color: #f5f5f5; }}
+            .divider {{ height: 1px; background-color: #eeeeee; margin: 20px 0; }}
         </style>
     </head>
     <body>
         <div class="container">
+            <div class="logo-container">
+                <img src="https://jetcamstudio.com/wp-content/uploads/2023/04/Untitled-9-1-2.png" alt="JetCam Studio Logo" class="logo">
+            </div>
             <div class="header">
-                <h1>Welcome to Live Stream Monitoring!</h1>
+                <h1>Welcome to JetCam Studio!</h1>
             </div>
             <div class="content">
                 <h2>Hello {username}!</h2>
                 <p>Thank you for creating an account with us. We're excited to have you onboard!</p>
-                <p>You can now log in to your account and start monitoring your streams.</p>
-                <p>If you have any questions or need assistance, feel free to contact our support team.</p>
+                
+                <div style="text-align: center;">
+                    <a href="https://live-stream-monitoring-vue3-flask.vercel.app/login" class="button">GO TO DASHBOARD</a>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <h3>What Our App Does:</h3>
+                
+                <div class="feature-box">
+                    <div class="feature-title">🔍 Stream Monitoring</div>
+                    <p>We monitor your livestreams for potentially dangerous objects or policy violations, helping keep your channel safe from bans.</p>
+                </div>
+                
+                <div class="feature-box">
+                    <div class="feature-title">💬 Chat Analysis</div>
+                    <p>Our system detects foul language or inappropriate content in chats, allowing you to moderate effectively.</p>
+                </div>
+                
+                <div class="feature-box">
+                    <div class="feature-title">🚨 Real-time Alerts</div>
+                    <p>Get instant notifications when potential issues are detected so you can take immediate action.</p>
+                </div>
+                
+                <p style="margin-top: 25px;">If you have any questions or need assistance, feel free to contact our support team at <a href="mailto:support@jetcamstudio.com">support@jetcamstudio.com</a>.</p>
             </div>
             <div class="footer">
+                <p>© {current_year} JetCam Studio. All rights reserved.</p>
                 <p>This is an automated message. Please do not reply to this email.</p>
-                <p>&copy; {2025} Live Stream Monitoring. All rights reserved.</p>
             </div>
         </div>
     </body>
@@ -271,49 +315,75 @@ def send_welcome_email(user_email, username):
     
     return email_service.send_email(user_email, subject, html_content)
 
+def generate_six_digit_token():
+    """Generate a secure 6-digit token"""
+    return str(random.randint(100000, 999999))
 
 def send_password_reset_email(user_email, token):
-    """Send password reset email with reset link"""
+    """Send password reset email with 6-digit token"""
     email_service = EmailService()
     
-    # Generate reset URL for the deployed application
-    reset_url = f"https://live-stream-monitoring-vue3-flask.vercel.app/reset-password?token={token}"
+    # Get current year for copyright
+    current_year = datetime.now().year
     
-    subject = "Password Reset Request"
+    subject = "Password Reset Code - JetCam Studio"
     html_content = f"""
     <!DOCTYPE html>
     <html>
     <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Password Reset Code</title>
         <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background-color: #2196F3; color: white; padding: 10px; text-align: center; }}
-            .content {{ padding: 20px; background-color: #f9f9f9; }}
-            .button {{ display: inline-block; padding: 10px 20px; background-color: #2196F3; 
-                     color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }}
-            .warning {{ color: #f44336; }}
-            .footer {{ font-size: 12px; text-align: center; margin-top: 30px; color: #777; }}
+            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }}
+            .container {{ max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); }}
+            .header {{ background-color: #1a73e8; color: white; padding: 20px; text-align: center; }}
+            .logo-container {{ padding: 20px; text-align: center; background-color: #ffffff; }}
+            .logo {{ max-width: 250px; height: auto; }}
+            .content {{ padding: 30px; background-color: #ffffff; }}
+            .code-box {{ font-size: 32px; letter-spacing: 8px; font-weight: bold; background-color: #f1f3f4; 
+                      padding: 20px; border-radius: 6px; text-align: center; margin: 20px 0; }}
+            .warning {{ color: #d93025; padding: 15px; background-color: #fde7e9; border-radius: 4px; margin-top: 20px; }}
+            .footer {{ font-size: 12px; text-align: center; margin-top: 30px; padding: 20px; color: #777; background-color: #f5f5f5; }}
+            .divider {{ height: 1px; background-color: #eeeeee; margin: 20px 0; }}
+            .timer {{ background-color: #f8f9fa; padding: 10px; border-radius: 4px; text-align: center; margin: 15px 0; }}
         </style>
     </head>
     <body>
         <div class="container">
+            <div class="logo-container">
+                <img src="https://jetcamstudio.com/wp-content/uploads/2023/04/Untitled-9-1-2.png" alt="JetCam Studio Logo" class="logo">
+            </div>
             <div class="header">
-                <h1>Password Reset Request</h1>
+                <h1>Password Reset Code</h1>
             </div>
             <div class="content">
                 <h2>Reset Your Password</h2>
-                <p>We received a request to reset your password for your Live Stream Monitoring account. Click the button below to create a new password:</p>
-                <p style="text-align: center;">
-                    <a href="{reset_url}" class="button">Reset Password</a>
-                </p>
-                <p>Or copy and paste this link into your browser:</p>
-                <p style="background-color: #eee; padding: 10px; word-break: break-all;">{reset_url}</p>
-                <p>This link will expire in 1 hour for security reasons.</p>
-                <p class="warning">If you didn't request a password reset, please ignore this email or contact our support team if you have concerns.</p>
+                <p>We received a request to reset your password for your JetCam Studio account. Please use the following 6-digit code to complete your password reset:</p>
+                
+                <div class="code-box">{token}</div>
+                
+                <div class="timer">
+                    <strong>⏰ This code will expire in 1 hour for security reasons.</strong>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <p>To reset your password:</p>
+                <ol>
+                    <li>Go to the password reset page</li>
+                    <li>Enter this 6-digit code</li>
+                    <li>Create your new password</li>
+                </ol>
+                
+                <div class="warning">
+                    <strong>Security Notice:</strong> If you didn't request a password reset, please ignore this email or contact our support team at support@jetcamstudio.com immediately.
+                </div>
             </div>
             <div class="footer">
+                <p>© {current_year} JetCam Studio. All rights reserved.</p>
                 <p>This is an automated message. Please do not reply to this email.</p>
-                <p>&copy; {2025} Live Stream Monitoring. All rights reserved.</p>
+                <p>You're receiving this email because you requested a password reset for your JetCam Studio account.</p>
             </div>
         </div>
     </body>
@@ -321,7 +391,6 @@ def send_password_reset_email(user_email, token):
     """
     
     return email_service.send_email(user_email, subject, html_content)
-
 
 # Create an instance for direct import
 email_service = EmailService()

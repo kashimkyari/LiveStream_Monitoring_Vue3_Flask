@@ -8,6 +8,8 @@ import re
 import secrets
 import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
+import hashlib
+from datetime import datetime, timedelta
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -226,6 +228,9 @@ def register():
         current_app.logger.error(f"Registration error: {str(e)}")
         return jsonify({"message": f"Error creating account: {str(e)}"}), 500
 
+# routes/auth_routes.py
+
+# Update the forgot_password function to use a more secure token generation method
 @auth_bp.route("/api/forgot-password", methods=["POST", "OPTIONS"])
 def forgot_password():
     if request.method == "OPTIONS":
@@ -244,14 +249,27 @@ def forgot_password():
         # Don't reveal whether email exists for security
         return jsonify({"message": "If your email is registered, you will receive a password reset link"}), 200
     
-    # Generate a secure token
-    token = secrets.token_urlsafe(32)
+    # Generate a more secure token
+    # First, create a random base token
+    random_bytes = secrets.token_bytes(32)
+    
+    # Mix in user-specific data and timestamp for uniqueness
+    user_id_bytes = str(user.id).encode('utf-8')
+    timestamp = str(datetime.datetime.utcnow().timestamp()).encode('utf-8')
+    
+    # Create a combined token hash
+    token_seed = random_bytes + user_id_bytes + timestamp
+    token_hash = hashlib.sha256(token_seed).hexdigest()
+    
+    # Use a portion of the hash for the actual token
+    secure_token = token_hash[:40]
+    
     expiration = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
     
     # Store the reset token in the database
     password_reset = PasswordReset(
         user_id=user.id,
-        token=token,
+        token=secure_token,
         expires_at=expiration
     )
     
@@ -264,7 +282,7 @@ def forgot_password():
         
         # Send password reset email using enhanced email service
         try:
-            send_password_reset_email(email, token)
+            send_password_reset_email(email, secure_token)
             current_app.logger.info(f"Password reset email sent to {email}")
         except Exception as e:
             # Log error and inform user that there was an issue
@@ -279,7 +297,6 @@ def forgot_password():
         db.session.rollback()
         current_app.logger.error(f"Password reset error: {str(e)}")
         return jsonify({"message": "An error occurred processing your request"}), 500
-
 
 @auth_bp.route("/api/verify-reset-token", methods=["POST"])
 def verify_reset_token():
