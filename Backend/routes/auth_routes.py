@@ -80,23 +80,38 @@ def logout():
     session.clear()
     return jsonify({"message": "Logged out successfully"})
 
-@auth_bp.route("/api/session", methods=["GET"])
+@auth_bp.route('/check-session')
 def check_session():
-    if "user_id" in session:
-        user = db.session.get(User, session["user_id"])
-        if user is None:
-            return jsonify({"logged_in": False}), 401
+    try:
+        if "user_id" not in session:
+            return jsonify({"authenticated": False}), 401
         
+        user_id = session.get("user_id")
+        user = User.query.get(user_id)
+        
+        if user is None:
+            # User not found, clear the invalid session
+            session.clear()
+            return jsonify({"authenticated": False, "message": "User not found"}), 401
+            
         # Update last active timestamp
         user.last_active = datetime.datetime.utcnow()
         db.session.commit()
         
         return jsonify({
-            "logged_in": True, 
-            "user": user.serialize(),
-            "role": user.role
+            "authenticated": True,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "role": user.role
+            }
         })
-    return jsonify({"logged_in": False}), 401
+    except Exception as e:
+        # Log the error
+        logging.error(f"Session check error: {str(e)}")
+        # Rollback any failed transaction
+        db.session.rollback()
+        return jsonify({"authenticated": False, "message": "Server error"}), 500
 
 # --------------------------------------------------------------------
 # Registration and Account Management Endpoints
