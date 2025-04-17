@@ -340,7 +340,7 @@ const assignedAgent = computed(() => {
 });
 
 // Socket configuration
-const SOCKET_SERVER_URL = 'http://54.86.99.85:5000';
+const SOCKET_SERVER_URL = 'https://54.86.99.85:5000';
 axios.defaults.withCredentials = true;
 
 // Socket connection

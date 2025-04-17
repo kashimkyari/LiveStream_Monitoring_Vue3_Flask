@@ -96,7 +96,7 @@ export default {
       isDarkTheme.value = savedTheme ? savedTheme === 'dark' : true
       
       // Set up axios defaults
-      axios.defaults.baseURL = "http://localhost:5000"
+      axios.defaults.baseURL = "https://54.86.99.85:5000"
       axios.defaults.withCredentials = true
       
       // Check user authentication status

@@ -194,7 +194,7 @@ def register():
         username=username,
         email=email,
         password=hashed_password,
-        role="admin",  # Default role
+        role="agent",  # Default role
         receive_updates=receive_updates,
         created_at=datetime.datetime.utcnow(),
         last_active=datetime.datetime.utcnow()
