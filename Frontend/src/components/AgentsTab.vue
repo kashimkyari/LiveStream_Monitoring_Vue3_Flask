@@ -44,7 +44,7 @@
                   <button @click.stop="editAgent(agent)" class="icon-button edit" title="Edit Agent" v-wave>
                     <font-awesome-icon icon="edit" />
                   </button>
-                  <button @click.stop="deleteAgent(agent)" class="icon-button danger" title="Delete Agent" v-wave>
+                  <button @click.stop="confirmDeleteAgent(agent)" class="icon-button danger" title="Delete Agent" v-wave>
                     <font-awesome-icon icon="trash" />
                   </button>
                 </div>
@@ -89,7 +89,7 @@
           <button @click.stop="editAgent(agent)" class="icon-button edit" title="Edit Agent" v-wave>
             <font-awesome-icon icon="edit" />
           </button>
-          <button @click.stop="deleteAgent(agent)" class="icon-button danger" title="Delete Agent" v-wave>
+          <button @click.stop="confirmDeleteAgent(agent)" class="icon-button danger" title="Delete Agent" v-wave>
             <font-awesome-icon icon="trash" />
           </button>
         </div>
@@ -137,12 +137,12 @@
           </button>
         </div>
         <div class="modal-body">
-          <p>Are you sure you want to delete the agent <strong>{{ deleteAgent?.username }}</strong>?</p>
+          <p>Are you sure you want to delete the agent <strong>{{ agentToDelete?.username }}</strong>?</p>
           <p class="warning-text">This action cannot be undone and will remove all assignments for this agent.</p>
         </div>
         <div class="modal-footer">
           <button @click="cancelDelete" class="btn-cancel">Cancel</button>
-          <button @click="confirmDelete" class="btn-delete">
+          <button @click="deleteAgent" class="btn-delete">
             Delete
           </button>
         </div>
@@ -169,7 +169,7 @@ export default {
       showDeleteModal: false,
       isNewAgent: false,
       editingAgent: null,
-      deleteAgent: null,
+      agentToDelete: null,
       editForm: {
         username: '',
         password: ''
@@ -179,9 +179,6 @@ export default {
   },
   emits: ['edit', 'delete', 'agentUpdated'],
   methods: {
-    // Parent component's method
-    
-
     getStreamCount(agent) {
       return agent.assignments?.length || 0;
     },
@@ -272,20 +269,22 @@ export default {
           });
       }
     },
-    confirmDelete() {
-      
-  if (!this.deleteAgent) return;
-  axios.delete(`/api/agents/${this.deleteAgent.id}`)
-    .then(() => { // Removed unused 'response' parameter
-      this.$emit('agentUpdated');
-      this.showDeleteModal = false;
-      this.deleteAgent = null;
-    })
-    .catch(error => {
-      console.error('Error deleting agent:', error);
-      alert('Failed to delete agent: ' + (error.response?.data?.message || 'Unknown error'));
-    });
-
+    confirmDeleteAgent(agent) {
+      this.agentToDelete = agent;
+      this.showDeleteModal = true;
+    },
+    deleteAgent() {
+      if (!this.agentToDelete) return;
+      axios.delete(`/api/agents/${this.agentToDelete.id}`)
+        .then(() => {
+          this.$emit('agentUpdated');
+          this.showDeleteModal = false;
+          this.agentToDelete = null;
+        })
+        .catch(error => {
+          console.error('Error deleting agent:', error);
+          alert('Failed to delete agent: ' + (error.response?.data?.message || 'Unknown error'));
+        });
     },
     cancelEdit() {
       this.showEditModal = false;
@@ -295,7 +294,7 @@ export default {
     },
     cancelDelete() {
       this.showDeleteModal = false;
-      this.deleteAgent = null;
+      this.agentToDelete = null;
     }
   }
 }

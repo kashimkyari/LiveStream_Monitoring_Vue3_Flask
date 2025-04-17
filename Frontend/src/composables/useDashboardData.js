@@ -28,7 +28,7 @@ export function useDashboardData(router, toast) {
       hasError.value = false
       
       const userResponse = await axios.get('/api/session')
-      if (userResponse.data.logged_in) {
+      if (userResponse.data.isLoggedIn) {
         user.value = userResponse.data.user
       } else {
         router.push('/login')

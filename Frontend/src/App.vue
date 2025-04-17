@@ -259,7 +259,7 @@ export default {
         console.log("Checking authentication status...")
         const response = await axios.get('/api/session');
         
-        if (response.data.logged_in) {
+        if (response.data.isLoggedIn) {
           console.log("User is logged in as:", response.data.user.role)
           isLoggedIn.value = true;
           userRole.value = response.data.user.role;

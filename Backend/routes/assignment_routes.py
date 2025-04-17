@@ -1,7 +1,7 @@
 # routes/assignment_routes.py
 from flask import Blueprint, request, jsonify
 from extensions import db
-from models import Assignment
+from models import Assignment, Stream, User
 from utils import login_required
 
 assignment_bp = Blueprint('assignment', __name__)
@@ -17,6 +17,16 @@ def assign_agent_to_stream():
     stream_id = data.get("stream_id")
     if not agent_id or not stream_id:
         return jsonify({"message": "Both agent_id and stream_id are required."}), 400
+    
+    # Validate the agent and stream exist
+    agent = User.query.get(agent_id)
+    stream = Stream.query.get(stream_id)
+    
+    if not agent:
+        return jsonify({"message": "Agent not found"}), 404
+    if not stream:
+        return jsonify({"message": "Stream not found"}), 404
+        
     try:
         assignment = Assignment(agent_id=agent_id, stream_id=stream_id)
         db.session.add(assignment)

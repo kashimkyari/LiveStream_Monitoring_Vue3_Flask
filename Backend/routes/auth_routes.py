@@ -6,10 +6,10 @@ from utils import login_required
 from utils.enhanced_email import email_service, send_welcome_email, send_password_reset_email
 import re
 import secrets
-import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 import hashlib
 from datetime import datetime, timedelta
+import logging
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -59,7 +59,7 @@ def login():
             session["user_role"] = user.role
             
             # Update last login timestamp
-            user.last_active = datetime.datetime.utcnow()
+            user.last_active = datetime.utcnow()
             db.session.commit()
             
             return jsonify({
@@ -80,11 +80,11 @@ def logout():
     session.clear()
     return jsonify({"message": "Logged out successfully"})
 
-@auth_bp.route('/check-session')
+@auth_bp.route('/api/session')
 def check_session():
     try:
         if "user_id" not in session:
-            return jsonify({"authenticated": False}), 401
+            return jsonify({"isLoggedIn": False}), 401
         
         user_id = session.get("user_id")
         user = User.query.get(user_id)
@@ -92,14 +92,14 @@ def check_session():
         if user is None:
             # User not found, clear the invalid session
             session.clear()
-            return jsonify({"authenticated": False, "message": "User not found"}), 401
+            return jsonify({"isLoggedIn": False, "message": "User not found"}), 401
             
         # Update last active timestamp
-        user.last_active = datetime.datetime.utcnow()
+        user.last_active = datetime.utcnow()
         db.session.commit()
         
         return jsonify({
-            "authenticated": True,
+            "isLoggedIn": True,
             "user": {
                 "id": user.id,
                 "username": user.username,
@@ -111,7 +111,7 @@ def check_session():
         logging.error(f"Session check error: {str(e)}")
         # Rollback any failed transaction
         db.session.rollback()
-        return jsonify({"authenticated": False, "message": "Server error"}), 500
+        return jsonify({"isLoggedIn": False, "message": "Server error"}), 500
 
 # --------------------------------------------------------------------
 # Registration and Account Management Endpoints
@@ -213,8 +213,8 @@ def register():
         password=hashed_password,
         role="agent",  # Default role
         receive_updates=receive_updates,
-        created_at=datetime.datetime.utcnow(),
-        last_active=datetime.datetime.utcnow()
+        created_at=datetime.utcnow(),
+        last_active=datetime.utcnow()
     )
     
     try:
@@ -270,7 +270,7 @@ def forgot_password():
     
     # Mix in user-specific data and timestamp for uniqueness
     user_id_bytes = str(user.id).encode('utf-8')
-    timestamp = str(datetime.datetime.utcnow().timestamp()).encode('utf-8')
+    timestamp = str(datetime.utcnow().timestamp()).encode('utf-8')
     
     # Create a combined token hash
     token_seed = random_bytes + user_id_bytes + timestamp
@@ -279,7 +279,7 @@ def forgot_password():
     # Use a portion of the hash for the actual token
     secure_token = token_hash[:40]
     
-    expiration = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+    expiration = datetime.utcnow() + datetime.timedelta(hours=1)
     
     # Store the reset token in the database
     password_reset = PasswordReset(
@@ -328,7 +328,7 @@ def verify_reset_token():
         return jsonify({"valid": False, "message": "Invalid or expired token"}), 400
     
     # Check if token is expired
-    if reset_entry.expires_at < datetime.datetime.utcnow():
+    if reset_entry.expires_at < datetime.utcnow():
         return jsonify({"valid": False, "message": "Token has expired"}), 400
     
     return jsonify({"valid": True})
@@ -365,7 +365,7 @@ def reset_password():
         return jsonify({"message": "Invalid or expired token"}), 400
     
     # Check if token is expired
-    if reset_entry.expires_at < datetime.datetime.utcnow():
+    if reset_entry.expires_at < datetime.utcnow():
         return jsonify({"message": "Token has expired"}), 400
     
     try:

@@ -341,16 +341,25 @@ export default {
     this.initializeAnimations();
   },
   methods: {
-    handleBack() {
-      if (this.accountCreated || this.currentStep === 1) {
-        this.$emit('back');
-        return;
-      }
-      if (this.currentStep > 1) {
-        this.currentStep--;
-        this.animateStepChange();
-      }
-    },
+   handleBack() {
+  if (this.accountCreated) {
+    this.$emit('back');
+    return;
+  }
+  
+  if (this.currentStep > 1) {
+    // Store the previous step
+    const previousStep = this.currentStep;
+    
+    // Move to previous step
+    this.currentStep--;
+    
+    // Run enhanced animation
+    this.animateStepChange(previousStep, this.currentStep);
+  } else {
+    this.$emit('back');
+  }
+},
     
     initializeAnimations() {
       // Initial animations when component mounts
@@ -405,27 +414,149 @@ export default {
       // Animate decorative circles continuously
       this.animateDecorations();
     },
-    
-    animateStepChange() {
-      anime.timeline({
-        easing: 'easeOutExpo'
-      })
-      .add({
-        targets: this.$refs.formContent,
-        opacity: [1, 0],
-        translateY: [0, -10],
+    animateSuccess() {
+  anime.timeline({
+    easing: 'easeOutExpo'
+  })
+  .add({
+    targets: this.$refs.formContent,
+    opacity: [1, 0],
+    translateY: [0, -20],
+    duration: 400,
+    easing: 'easeInQuad'
+  })
+  .add({
+    targets: this.$refs.successContainer,
+    scale: [0.9, 1],
+    opacity: [0, 1],
+    duration: 800,
+    easing: 'easeOutElastic(1, .5)'
+  })
+  .add({
+    targets: this.$refs.successContainer.querySelector('.success-icon'),
+    scale: [0.5, 1.2, 1],
+    opacity: [0, 1],
+    duration: 800,
+    easing: 'easeOutElastic(1, .5)'
+  }, '-=400')
+  .add({
+    targets: [
+      this.$refs.successContainer.querySelector('.success-title'),
+      this.$refs.successContainer.querySelector('.success-message')
+    ],
+    opacity: [0, 1],
+    translateY: [20, 0],
+    duration: 600,
+    delay: anime.stagger(150),
+    easing: 'easeOutQuad'
+  }, '-=400')
+  .add({
+    targets: this.$refs.successContainer.querySelector('.loader'),
+    opacity: [0, 1],
+    duration: 400,
+    easing: 'easeOutQuad'
+  }, '-=200');
+}
+,
+    animateStepIndicator(currentStep) {
+  // Reset all steps
+  anime({
+    targets: '.step',
+    backgroundColor: 'var(--bg-color)',
+    color: 'var(--text-color)',
+    opacity: 0.7,
+    borderColor: 'rgba(var(--primary-color-rgb), 0.3)',
+    boxShadow: '0 0 0 0px rgba(var(--primary-color-rgb), 0)',
+    duration: 400,
+    easing: 'easeOutQuad'
+  });
+  
+  // Highlight current step
+  anime({
+    targets: `.step:nth-child(${currentStep * 2 - 1})`,
+    backgroundColor: 'var(--primary-color)',
+    opacity: 1,
+    color: '#FFFFFF',
+    borderColor: 'var(--primary-color)',
+    boxShadow: '0 0 0 5px rgba(var(--primary-color-rgb), 0.15)',
+    duration: 600,
+    delay: 200,
+    easing: 'easeOutQuad'
+  });
+  
+  // Animate the step lines
+  anime({
+    targets: '.step-line',
+    scaleX: [0.3, 1],
+    opacity: [0.3, 1],
+    duration: 400,
+    delay: 100,
+    easing: 'easeOutQuad'
+  });
+},
+   animateStepChange(previousStep, currentStep) {
+  // Direction of transition (forward or backward)
+  const direction = currentStep > previousStep ? 1 : -1;
+  
+  anime.timeline({
+    easing: 'easeOutExpo'
+  })
+  .add({
+    targets: this.$refs.formContent,
+    opacity: [1, 0],
+    translateX: [0, -20 * direction],
+    duration: 400,
+    easing: 'easeInQuad',
+    complete: () => {
+      // Content has faded out
+    }
+  })
+  .add({
+    targets: this.$refs.formContent,
+    opacity: [0, 1],
+    translateX: [20 * direction, 0],
+    duration: 500,
+    easing: 'easeOutQuad'
+  });
+  
+  // Animate the step indicators
+  anime({
+    targets: '.step',
+    scale: [1, 0.8],
+    duration: 300,
+    easing: 'easeInOutQuad',
+    delay: anime.stagger(100, {start: 150}),
+    complete: () => {
+      anime({
+        targets: '.step',
+        scale: [0.8, 1],
         duration: 300,
-        complete: () => {
-          // Animation completed
-        }
-      })
-      .add({
-        targets: this.$refs.formContent,
-        opacity: [0, 1],
-        translateY: [10, 0],
-        duration: 500,
+        easing: 'easeInOutQuad',
+        delay: anime.stagger(100, {start: 150})
       });
-    },
+    }
+  });
+  
+  // Animate the decorative circles
+  anime({
+    targets: [this.$refs.circle1, this.$refs.circle2, this.$refs.circle3],
+    scale: [1, 1.1],
+    opacity: [0.7, 0.9],
+    duration: 800,
+    easing: 'easeInOutSine',
+    direction: 'alternate',
+    complete: () => {
+      anime({
+        targets: [this.$refs.circle1, this.$refs.circle2, this.$refs.circle3],
+        scale: [1.1, 1],
+        opacity: [0.9, 0.7],
+        duration: 800,
+        easing: 'easeInOutSine',
+      });
+    }
+  });
+}
+,
     
     animateDecorations() {
       // Continuous animations for decorative elements
@@ -518,65 +649,99 @@ export default {
       }
     },
     
-    async proceedToStep2() {
-      if (!this.canProceedStep1) return;
-      
-      this.loading = true;
-      
-      try {
-        // Final validation for username and email
-        const usernameResponse = await api.post('/api/check-username', {
-          username: this.username
-        });
-        
-        const emailResponse = await api.post('/api/check-email', {
-          email: this.email
-        });
-        
-        if (!usernameResponse.data.available) {
-          this.toast.error("Username already taken", {
-            position: "top-center"
-          });
-          this.shakeElement(this.$refs.usernameGroup);
-          this.loading = false;
-          return;
-        }
-        
-        if (!emailResponse.data.available) {
-          this.toast.error("Email already registered", {
-            position: "top-center"
-          });
-          this.shakeElement(this.$refs.emailGroup);
-          this.loading = false;
-          return;
-        }
-        
-        // Proceed to next step
-        this.currentStep = 2;
-        this.animateStepChange();
-        
-        // Focus on password field
-        setTimeout(() => {
-          if (this.$refs.passwordInput) {
-            this.$refs.passwordInput.focus();
-          }
-        }, 500);
-      } catch (error) {
-        console.error('Validation error:', error);
-        this.toast.error("An error occurred. Please try again.", {
-          position: "top-center"
-        });
-      } finally {
-        this.loading = false;
-      }
-    },
+   async proceedToStep2() {
+  if (!this.canProceedStep1) return;
+  
+  this.loading = true;
+  
+  try {
+    // Final validation for username and email
+    const usernameResponse = await api.post('/api/check-username', {
+      username: this.username
+    });
     
-    proceedToStep3() {
-      if (!this.canProceedStep2) return;
-      
-      this.currentStep = 3;
-      this.animateStepChange();
-    },
+    const emailResponse = await api.post('/api/check-email', {
+      email: this.email
+    });
+    
+    if (!usernameResponse.data.available) {
+      this.toast.error("Username already taken", {
+        position: "top-center"
+      });
+      this.shakeElement(this.$refs.usernameGroup);
+      this.loading = false;
+      return;
+    }
+    
+    if (!emailResponse.data.available) {
+      this.toast.error("Email already registered", {
+        position: "top-center"
+      });
+      this.shakeElement(this.$refs.emailGroup);
+      this.loading = false;
+      return;
+    }
+    
+    // Store the previous step
+    const previousStep = this.currentStep;
+    
+    // Proceed to next step
+    this.currentStep = 2;
+    
+    // Run enhanced animation
+    this.animateStepChange(previousStep, this.currentStep);
+    
+    // Focus on password field
+    setTimeout(() => {
+      if (this.$refs.passwordInput) {
+        this.$refs.passwordInput.focus();
+      }
+    }, 800);
+    
+    // Animate the step indicator
+    anime({
+      targets: '.step-indicator .step:nth-child(3)',
+      backgroundColor: 'var(--primary-color)',
+      color: '#FFFFFF',
+      duration: 600,
+      delay: 300
+    });
+  } catch (error) {
+    console.error('Validation error:', error);
+    this.toast.error("An error occurred. Please try again.", {
+      position: "top-center"
+    });
+  } finally {
+    this.loading = false;
+  }
+}
+,
+    
+   proceedToStep3() {
+  if (!this.canProceedStep2) return;
+  
+  // Store the previous step
+  const previousStep = this.currentStep;
+  
+  // Proceed to next step
+  this.currentStep = 3;
+  
+  // Run enhanced animation
+  this.animateStepChange(previousStep, this.currentStep);
+  
+  // Additional animation for terms section
+  setTimeout(() => {
+    if (this.$refs.termsSection) {
+      anime({
+        targets: this.$refs.termsSection,
+        opacity: [0, 1],
+        translateY: [10, 0],
+        duration: 600,
+        easing: 'easeOutQuad'
+      });
+    }
+  }, 400);
+},
     
     showTerms() {
       this.toast.info("Terms of Service will open in a new window", {
@@ -593,59 +758,51 @@ export default {
     },
     
     async handleSubmit() {
-      if (this.loading || !this.canSubmit) return;
+  if (this.loading || !this.canSubmit) return;
+  
+  this.loading = true;
+  this.formError = null;
+  
+  try {
+    const response = await api.post('/api/register', {
+      username: this.username,
+      email: this.email,
+      password: this.password,
+      receiveUpdates: this.agreedToUpdates
+    });
+    
+    if (response.status === 201) {
+      this.accountCreated = true;
+      this.toast.success("Account created successfully!", {
+        position: "top-center"
+      });
       
-      this.loading = true;
-      this.formError = null;
+      // Use enhanced success animation
+      this.animateSuccess();
       
-      try {
-        const response = await api.post('/api/register', {
-          username: this.username,
-          email: this.email,
-          password: this.password,
-          receiveUpdates: this.agreedToUpdates
-        });
-        
-        if (response.status === 201) {
-          this.accountCreated = true;
-          this.toast.success("Account created successfully!", {
-            position: "top-center"
-          });
-          
-          // Animate success
-          anime.timeline({
-            easing: 'easeOutExpo'
-          })
-          .add({
-            targets: this.$refs.successContainer,
-            scale: [0.9, 1],
-            opacity: [0, 1],
-            duration: 800,
-          });
-          
-          // Start redirection process after successful account creation
-          this.startRedirection();
-          
-          // Emit event
-          this.$emit('account-created', this.username);
-        } else {
-          this.formError = response.data.message || "Failed to create account";
-          this.toast.error(this.formError, {
-            position: "top-center"
-          });
-          this.shakeElement(this.$refs.createAccountForm);
-        }
-      } catch (error) {
-        console.error('Registration error:', error);
-        this.formError = error.response?.data?.message || "An error occurred while creating your account";
-        this.toast.error(this.formError, {
-          position: "top-center"
-        });
-        this.shakeElement(this.$refs.createAccountForm);
-      } finally {
-        this.loading = false;
-      }
-    },
+      // Start redirection process after successful account creation
+      this.startRedirection();
+      
+      // Emit event
+      this.$emit('account-created', this.username);
+    } else {
+      this.formError = response.data.message || "Failed to create account";
+      this.toast.error(this.formError, {
+        position: "top-center"
+      });
+      this.shakeElement(this.$refs.createAccountForm);
+    }
+  } catch (error) {
+    console.error('Registration error:', error);
+    this.formError = error.response?.data?.message || "An error occurred while creating your account";
+    this.toast.error(this.formError, {
+      position: "top-center"
+    });
+    this.shakeElement(this.$refs.createAccountForm);
+  } finally {
+    this.loading = false;
+  }
+},
     
     startRedirection() {
       // Wait 2 seconds with loading animation before redirecting
@@ -654,33 +811,49 @@ export default {
       }, 2000);
     },
     
-    animatePageTransition() {
-      // Show the page transition overlay with animation
-      this.isRedirecting = true;
-      
-      anime.timeline({
-        easing: 'easeOutExpo'
-      })
-      .add({
-        targets: this.$refs.pageTransition,
-        opacity: [0, 1],
-        duration: 500,
-      })
-      .add({
-        targets: '.transition-content',
-        opacity: [0, 1],
-        translateY: [20, 0],
-        duration: 600,
-        complete: () => {
-          // Simulate loading time
-          setTimeout(() => {
-            // Redirect to App.vue (or refresh in a real app)
-            // In a real Vue app with a router, you would use router.push('/app')
-            this.redirectToApp();
-          }, 1000);
-        }
-      });
-    },
+   animatePageTransition() {
+  // Show the page transition overlay with animation
+  this.isRedirecting = true;
+  
+  anime.timeline({
+    easing: 'easeOutExpo'
+  })
+  .add({
+    targets: this.$refs.pageTransition,
+    opacity: [0, 1],
+    duration: 500,
+  })
+  .add({
+    targets: '.transition-content',
+    opacity: [0, 1],
+    translateY: [20, 0],
+    duration: 600,
+    easing: 'easeOutQuad'
+  }, '-=200')
+  .add({
+    targets: '.transition-icon',
+    rotate: [0, 15, -15, 0],
+    duration: 1200,
+    easing: 'easeInOutBack',
+    loop: true
+  }, '-=400')
+  .add({
+    targets: '.transition-content h3',
+    scale: [1, 1.05, 1],
+    duration: 1000,
+    easing: 'easeInOutSine',
+    loop: true
+  }, '-=800')
+  .add({
+    complete: () => {
+      // Simulate loading time
+      setTimeout(() => {
+        // Redirect to App.vue (or refresh in a real app)
+        this.redirectToApp();
+      }, 1000);
+    }
+  });
+},
     
     redirectToApp() {
       // For demonstration, we're just reloading the page
@@ -1209,4 +1382,157 @@ export default {
 
 .mr-1 { margin-right: 0.25rem; }
 .mr-2 { margin-right: 0.5rem; }
+
+/* Additional CSS for animations */
+.loader {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.loader-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  opacity: 0;
+  animation: loadingDots 1.4s infinite ease-in-out;
+}
+
+.loader-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.loader-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loader-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes loadingDots {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0); opacity: 0; }
+}
+
+/* Page transition animation */
+.page-transition {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+
+.page-transition.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.transition-content {
+  text-align: center;
+  color: white;
+  padding: 2rem;
+}
+
+.transition-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: inline-block;
+}
+
+.transition-content h3 {
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.transition-content p {
+  font-size: 1.1rem;
+  opacity: 0.9;
+}
+
+/* Step transition animations */
+.step-indicator {
+  position: relative;
+  overflow: visible;
+}
+
+.step {
+  position: relative;
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.step:after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(var(--primary-color-rgb), 0.15);
+  transform: translate(-50%, -50%) scale(0);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.step.active:after {
+  animation: ripple 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes ripple {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+}
+
+/* Success animation */
+.success-icon {
+  display: inline-block;
+  animation: successPulse 2s infinite alternate ease-in-out;
+}
+
+@keyframes successPulse {
+  0% { transform: scale(1); text-shadow: 0 0 10px rgba(var(--success-color-rgb), 0.2); }
+  100% { transform: scale(1.1); text-shadow: 0 0 20px rgba(var(--success-color-rgb), 0.6); }
+}
+
+/* Form content transitions */
+.form-content > div {
+  animation: formEntrance 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes formEntrance {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Enhanced responsive animations */
+@media (max-width: 600px) {
+  .loader-dot {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .transition-icon {
+    font-size: 2.5rem;
+  }
+  
+  .transition-content h3 {
+    font-size: 1.5rem;
+  }
+}
 </style>

@@ -1,7 +1,6 @@
 # utils/token_manager.py
 
-import secrets
-import string
+import random
 import time
 from datetime import datetime, timedelta
 import hashlib
@@ -23,30 +22,30 @@ class TokenManager:
         self.token_expiry_hours = token_expiry_hours
     
     def generate_reset_token(self, user_id, user_email):
-        """Generate a secure token for password reset
+        """Generate a secure 6-digit token for password reset
         
         Args:
             user_id: User's ID in the database
             user_email: User's email address
             
         Returns:
-            str: The generated token
+            str: The generated 6-digit token
         """
-        # Generate a secure random token (32 bytes = 64 hex chars)
-        raw_token = secrets.token_hex(32)
+        # Generate a secure 6-digit token
+        token = str(random.randint(100000, 999999))
         
         # Create a timestamp for expiration
         expiry_time = datetime.now() + timedelta(hours=self.token_expiry_hours)
         timestamp = int(expiry_time.timestamp())
         
         # Create token hash for storage (we'll store the hash, not the raw token)
-        token_hash = self._hash_token(raw_token)
+        token_hash = self._hash_token(token)
         
         # Store token in database with user_id and expiration
         self._store_token(user_id, token_hash, timestamp)
         
-        # Return the raw token to be included in reset link
-        return raw_token
+        # Return the raw token to be included in the email
+        return token
     
     def verify_token(self, token, user_email):
         """Verify if a token is valid for the given user

@@ -1,6 +1,6 @@
-from datetime import datetime, timezone 
+from datetime import datetime, timezone, timedelta
 from extensions import db
-import datetime
+
 
 # Updated User model in models.py
 class User(db.Model):
@@ -314,10 +314,10 @@ class PasswordReset(db.Model):
     __tablename__ = 'password_resets'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     token = db.Column(db.String(100), nullable=False, unique=True)
     expires_at = db.Column(db.DateTime, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationship with User model
     user = db.relationship('User', backref=db.backref('password_resets', lazy=True))
@@ -326,4 +326,27 @@ class PasswordReset(db.Model):
         return f'<PasswordReset {self.id} for user {self.user_id}>'
     
     def is_expired(self):
-        return self.expires_at < datetime.datetime.utcnow()
+        return self.expires_at < datetime.utcnow()
+
+# Add this near other models in models.py
+class PasswordResetToken(db.Model):
+    """
+    Stores hashed password reset tokens with expiration and CASCADE deletion.
+    """
+    __tablename__ = 'password_reset_tokens'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    token_hash = db.Column(db.Text, unique=True, nullable=False)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    # Relationship with User
+    user = db.relationship('User', backref=db.backref('password_reset_tokens', lazy='dynamic'))
+
+    __table_args__ = (
+        db.Index('idx_password_reset_tokens_expires_at', 'expires_at'),
+    )
+
+    def __repr__(self):
+        return f'<PasswordResetToken {self.id} for user {self.user_id}>'

@@ -128,8 +128,7 @@ export default {
         
         if (response.status === 200 && response.data.logged_in) {
           console.log("User already logged in as:", response.data.user.role);
-          // Emit the login success event with the user's role
-          this.$emit('login-success', response.data.user.role);
+  this.$emit('login-success', response.data.user.role);
           
           this.toast.success("Welcome back!", {
             timeout: 2000,
