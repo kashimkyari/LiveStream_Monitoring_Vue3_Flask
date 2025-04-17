@@ -1,6 +1,8 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone 
 from extensions import db
+import datetime
 
+# Updated User model in models.py
 class User(db.Model):
     """
     User model represents an application user, such as agents or administrators.
@@ -8,10 +10,18 @@ class User(db.Model):
     __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
-    password = db.Column(db.String(120), nullable=False)
+    password = db.Column(db.String(255), nullable=False)  # Increase from 120 to 255
     role = db.Column(db.String(10), nullable=False, default="agent", index=True)
     online = db.Column(db.Boolean, default=False, index=True)
-    last_active = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    last_active = db.Column(
+            db.DateTime(timezone=True), 
+            default=lambda: datetime.now(timezone.utc),  # Use datetime directly
+            onupdate=lambda: datetime.now(timezone.utc),  # No timezone.utc() call
+            index=True
+        )
+    receive_updates = db.Column(db.Boolean, default=False)  # Must match DB
+    email = db.Column(db.String(120), nullable=False, unique=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationship with Assignments (agents may have multiple assignments)
     assignments = db.relationship('Assignment', back_populates='agent', lazy='selectin', cascade="all, delete")
@@ -23,9 +33,10 @@ class User(db.Model):
         return {
             "id": self.id,
             "username": self.username,
+            "email": self.email,
             "role": self.role,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
-
 
 class Stream(db.Model):
     """
@@ -297,3 +308,22 @@ class ChatMessage(db.Model):
             "sender_username": self.sender.username if self.sender else None,
             "receiver_username": self.receiver.username if self.receiver else None
         }
+
+
+class PasswordReset(db.Model):
+    __tablename__ = 'password_resets'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    token = db.Column(db.String(100), nullable=False, unique=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    
+    # Relationship with User model
+    user = db.relationship('User', backref=db.backref('password_resets', lazy=True))
+    
+    def __repr__(self):
+        return f'<PasswordReset {self.id} for user {self.user_id}>'
+    
+    def is_expired(self):
+        return self.expires_at < datetime.datetime.utcnow()

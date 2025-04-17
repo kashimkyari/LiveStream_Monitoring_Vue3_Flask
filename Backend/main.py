@@ -21,7 +21,7 @@ app = create_app()
 # Allowed frontends (comma‑separated in .env)
 ALLOWED_ORIGINS = os.getenv(
     'ALLOWED_ORIGINS',
-    'https://live-stream-monitoring-vue3-flask.vercel.app'
+    'http://localhost:8080'
 ).split(',')
 
 # === Dynamic CORS Handler ===
@@ -71,4 +71,4 @@ if __name__ == "__main__":
     else:
         ssl_ctx = None
         logging.info("Running without SSL")
-    app.run(host='0.0.0.0', port=5000, threaded=True, debug=debug, ssl_context=ssl_ctx)
+    app.run(host='0.0.0.0', port=5000, threaded=True, debug=True, ssl_context=ssl_ctx)

@@ -17,8 +17,25 @@
       
       <div v-else class="dashboard" key="dashboard" ref="dashboardContainer">
         <div class="content-area">
-          <AdminDashboard v-if="userRole === 'admin'" key="admin" ref="dashboard" />
-          <AgentDashboard v-else-if="userRole === 'agent'" key="agent" ref="dashboard" />
+          <!-- Debug info to help troubleshoot -->
+          <div class="debug-info" v-if="showDebugInfo">
+            <p>User Role: {{ userRole }}</p>
+            <p>Is Admin: {{ userRole === 'admin' }}</p>
+            <p>Is Agent: {{ userRole === 'agent' }}</p>
+          </div>
+          
+          <AdminDashboard v-if="userRole === 'admin'" key="admin" />
+          <AgentDashboard v-else-if="userRole === 'agent'" key="agent" />
+          
+          <!-- Fallback content if role doesn't match -->
+          <div v-else class="role-error">
+            <h2>Dashboard Error</h2>
+            <p>Unable to load the appropriate dashboard for role: "{{ userRole }}"</p>
+            <button @click="logout(true)" class="logout-button mt-4">
+              <font-awesome-icon icon="sign-out-alt" class="mr-2" />
+              Logout and Try Again
+            </button>
+          </div>
         </div>
       </div>
     </transition>
@@ -31,7 +48,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { 
   faMoon, faSun, faSignOutAlt, faBroadcastTower,
-  faTachometerAlt, faVideo, faExclamationTriangle, faChartLine, faCog
+  faTachometerAlt, faVideo, faExclamationTriangle, faChartLine, faCog, faUserLock, faUser, faLock
 } from '@fortawesome/free-solid-svg-icons'
 import axios from 'axios'
 import anime from 'animejs/lib/anime.es.js'
@@ -39,11 +56,14 @@ import LoginComponent from './components/Login.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
 import AgentDashboard from './components/AgentDashboard.vue'
 import { SpeedInsights } from "@vercel/speed-insights/vue"
+import { useToast } from "vue-toastification";
+import "vue-toastification/dist/index.css";
 
-
+// Add all required icons
 library.add(
   faMoon, faSun, faSignOutAlt, faBroadcastTower,
-  faTachometerAlt, faVideo, faExclamationTriangle, faChartLine, faCog
+  faTachometerAlt, faVideo, faExclamationTriangle, faChartLine, faCog,
+  faUserLock, faUser, faLock
 )
 
 export default {
@@ -56,6 +76,7 @@ export default {
     SpeedInsights
   },
   setup() {
+    const toast = useToast();
     const isDarkTheme = ref(true)
     const isLoggedIn = ref(false)
     const userRole = ref(null)
@@ -63,25 +84,29 @@ export default {
     const themeToggle = ref(null)
     const sidebar = ref(null)
     const logoutButton = ref(null)
-    const dashboard = ref(null)
     const dashboardContainer = ref(null)
+    const showDebugInfo = ref(false) // Set to true to show debug info
     
     // Initial setup
     onMounted(() => {
+      console.log("App component mounted")
+      
+      // Load theme preference
       const savedTheme = localStorage.getItem('themePreference')
       isDarkTheme.value = savedTheme ? savedTheme === 'dark' : true
       
-      axios.defaults.baseURL = "https://54.86.99.85:5000"
+      // Set up axios defaults
+      axios.defaults.baseURL = "http://localhost:5000"
       axios.defaults.withCredentials = true
       
+      // Check user authentication status
       checkAuthentication()
-      animateControls()
       
-      // Fix for dark mode - ensure html and body have proper background
+      // Apply theme to document
       document.documentElement.style.backgroundColor = isDarkTheme.value ? '#121212' : '#f8f9fa'
       document.body.style.backgroundColor = isDarkTheme.value ? '#121212' : '#f8f9fa'
       
-      // Add resize event listener for responsive design
+      // Listen for window resize events
       window.addEventListener('resize', handleResize)
       handleResize()
     })
@@ -181,6 +206,7 @@ export default {
     }
     
     const animateControls = () => {
+      console.log("Animating controls")
       // Animate header controls with a smooth entrance
       anime({
         targets: '.header-controls',
@@ -226,47 +252,75 @@ export default {
     }
     
     const checkAuthentication = async () => {
+      // Add a loading state
+      const isChecking = ref(true);
+      
       try {
-        const response = await axios.get('/api/session')
+        console.log("Checking authentication status...")
+        const response = await axios.get('/api/session');
+        
         if (response.data.logged_in) {
-          isLoggedIn.value = true
-          userRole.value = response.data.user.role
-          localStorage.setItem('userRole', response.data.user.role)
+          console.log("User is logged in as:", response.data.user.role)
+          isLoggedIn.value = true;
+          userRole.value = response.data.user.role;
+          localStorage.setItem('userRole', response.data.user.role);
           
           // Apply animations after login state is confirmed
           setTimeout(() => {
-            animateControls()
-          }, 100)
+            animateControls();
+          }, 100);
         } else {
-          logout(false)
+          console.log("User is not logged in")
+          logout(false);
         }
       } catch (error) {
-        console.error('Authentication check failed:', error)
-        logout(false)
+        console.error('Authentication check failed:', error);
+        
+        // More specific error handling
+        if (error.response && error.response.status === 401) {
+          // Session expired or invalid
+          toast.warning("Your session has expired. Please log in again.");
+        } else {
+          // Network error or server error
+          toast.error("Could not verify login status. Please check your connection.");
+        }
+        
+        logout(false);
+      } finally {
+        isChecking.value = false;
       }
-    }
+    };
     
     const handleLoginSuccess = (role) => {
+      console.log("Login successful with role:", role)
+      
       isLoggedIn.value = true
       userRole.value = role
       localStorage.setItem('userRole', role)
       
-      // Animate content appearance
-      anime({
-        targets: appContainer.value,
-        opacity: [0.8, 1],
-        scale: [0.98, 1],
-        duration: 600,
-        easing: 'easeOutQuad'
-      })
+      // Ensure role is properly set
+      console.log("Set user role to:", userRole.value)
       
-      // Animate dashboard appearance after login
+      // Animate content appearance with slight delay to ensure state is updated
       setTimeout(() => {
-        animateControls()
-      }, 100)
+        anime({
+          targets: appContainer.value,
+          opacity: [0.8, 1],
+          scale: [0.98, 1],
+          duration: 600,
+          easing: 'easeOutQuad'
+        })
+        
+        // Animate dashboard appearance after login
+        setTimeout(() => {
+          animateControls()
+        }, 100)
+      }, 50)
     }
     
     const logout = async (callApi = true) => {
+      console.log("Logging out, callApi:", callApi)
+      
       if (callApi) {
         try {
           await axios.post('/api/logout')
@@ -294,6 +348,7 @@ export default {
     
     const resetUserState = () => {
       // Reset user authentication state
+      console.log("Resetting user state")
       localStorage.removeItem('userRole')
       isLoggedIn.value = false
       userRole.value = null
@@ -318,8 +373,8 @@ export default {
       themeToggle,
       sidebar,
       logoutButton,
-      dashboard,
       dashboardContainer,
+      showDebugInfo,
       toggleTheme,
       animateControls,
       checkAuthentication,
@@ -360,6 +415,7 @@ export default {
   --transition-fast: 0.2s ease;
   --transition-normal: 0.3s ease;
   --transition-slow: 0.5s ease;
+  --primary-color-rgb: 0, 128, 255;
 }
 
 [data-theme="light"] {
@@ -372,6 +428,7 @@ export default {
   --card-border: #e2e8f0;
   --error-bg: #fff5f5;
   --error-border: #fed7d7;
+  --primary-color-rgb: 0, 128, 255;
 }
 
 /* Fix for dark mode white area issue */
@@ -399,7 +456,6 @@ html, body {
   transition: background-color 0.5s ease, color 0.5s ease;
   position: relative;
   min-height: 100vh;
-  
 }
 
 .header-controls {
@@ -538,9 +594,45 @@ html, body {
 
 .content-area {
   flex: 1;
-  
   padding: 1rem;
-  
+  overflow-y: auto;
+}
+
+/* Debug Info */
+.debug-info {
+  position: fixed;
+  top: 70px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 10px;
+  border-radius: 5px;
+  font-family: monospace;
+  z-index: 9999;
+}
+
+/* Error display for role mismatch */
+.role-error {
+  text-align: center;
+  padding: 2rem;
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: var(--border-radius-lg);
+  max-width: 500px;
+  margin: 3rem auto;
+}
+
+.role-error h2 {
+  color: var(--error-border);
+  margin-bottom: 1rem;
+}
+
+.mt-4 {
+  margin-top: 1rem;
+}
+
+.mr-2 {
+  margin-right: 0.5rem;
 }
 
 /* Page transitions */
@@ -558,7 +650,7 @@ html, body {
 /* Media queries */
 @media (max-width: 992px) {
   .content-area {
-    
+    /* Responsive adjustments for content area if needed */
   }
 }
 
@@ -595,7 +687,6 @@ html, body {
 @media (max-width: 576px) {
   .content-area {
     padding: 0.5rem;
-    
   }
 }
 

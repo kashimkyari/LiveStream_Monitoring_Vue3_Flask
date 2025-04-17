@@ -70,11 +70,14 @@
       </div>
     </form>
     
-    <!-- Show Forgot Password Component when in Forgot Password mode -->
-    <ForgotPasswordComponent v-else-if="showForgotPassword" @back="showForgotPassword = false" />
-    
-    <!-- Show Create Account Component when in Create Account mode -->
-    <CreateAccountComponent v-else-if="showCreateAccount" @back="showCreateAccount = false" />
+    <ForgotPasswordComponent 
+      v-else-if="showForgotPassword" 
+      @back="showForgotPassword = false" 
+    />
+    <CreateAccountComponent 
+      v-else-if="showCreateAccount" 
+      @back="showCreateAccount = false" 
+    />
   </div>
 </template>
 
@@ -106,13 +109,50 @@ export default {
       loading: false,
       error: null,
       showForgotPassword: false,
-      showCreateAccount: false
+      showCreateAccount: false,
+      sessionChecking: false
     }
   },
   mounted() {
     this.initializeAnimations();
+    // Check if user is already authenticated when component mounts
+    this.checkSession();
   },
   methods: {
+    async checkSession() {
+      this.sessionChecking = true;
+      
+      try {
+        console.log("Checking session status...");
+        const response = await api.get('/api/session');
+        
+        if (response.status === 200 && response.data.logged_in) {
+          console.log("User already logged in as:", response.data.user.role);
+          // Emit the login success event with the user's role
+          this.$emit('login-success', response.data.user.role);
+          
+          this.toast.success("Welcome back!", {
+            timeout: 2000,
+            position: "top-center",
+            icon: true
+          });
+        }
+      } catch (error) {
+        console.error('Session check failed:', error);
+        
+        // Only show error if it's not a 401 (which is expected for logged out users)
+        if (error.response && error.response.status !== 401) {
+          this.toast.error("Could not verify login status. Please check your connection.", {
+            timeout: 5000,
+            position: "top-center",
+            icon: true
+          });
+        }
+      } finally {
+        this.sessionChecking = false;
+      }
+    },
+    
     initializeAnimations() {
       // Initial animations when component mounts
       anime.timeline({

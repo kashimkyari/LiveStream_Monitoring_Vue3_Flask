@@ -1,7 +1,7 @@
 <template>
   <div class="create-account-container">
     <form @submit.prevent="handleSubmit" class="create-account-form" ref="createAccountForm">
-      <div class="back-button" @click="$emit('back')" ref="backButton">
+      <div class="back-button" @click="handleBack" ref="backButton">
         <font-awesome-icon icon="arrow-left" />
       </div>
       
@@ -202,11 +202,12 @@
             <font-awesome-icon icon="check-circle" />
           </div>
           <h3 class="success-title">Account Created Successfully!</h3>
-          <p class="success-message">Welcome to our platform. You can now log in with your credentials.</p>
-          <button type="button" class="action-button" @click="$emit('back')">
-            <font-awesome-icon icon="sign-in-alt" class="mr-2" />
-            Go to Login
-          </button>
+          <p class="success-message">Welcome to our platform. Redirecting you to the app...</p>
+          <div class="loader">
+            <span class="loader-dot"></span>
+            <span class="loader-dot"></span>
+            <span class="loader-dot"></span>
+          </div>
         </div>
       </div>
       
@@ -216,6 +217,15 @@
         <div class="circle circle-3" ref="circle3"></div>
       </div>
     </form>
+  </div>
+  
+  <!-- Page transition overlay -->
+  <div class="page-transition" :class="{ active: isRedirecting }" ref="pageTransition">
+    <div class="transition-content">
+      <font-awesome-icon icon="rocket" class="transition-icon" />
+      <h3>Welcome Aboard!</h3>
+      <p>Launching your experience...</p>
+    </div>
   </div>
 </template>
 
@@ -245,10 +255,12 @@ export default {
       agreedToUpdates: false,
       loading: false,
       accountCreated: false,
+      isRedirecting: false,
       usernameAvailable: null,
       emailAvailable: null,
       debounceTimer: null,
-      formError: null
+      formError: null,
+      redirectTimeout: null
     }
   },
   computed: {
@@ -329,6 +341,17 @@ export default {
     this.initializeAnimations();
   },
   methods: {
+    handleBack() {
+      if (this.accountCreated || this.currentStep === 1) {
+        this.$emit('back');
+        return;
+      }
+      if (this.currentStep > 1) {
+        this.currentStep--;
+        this.animateStepChange();
+      }
+    },
+    
     initializeAnimations() {
       // Initial animations when component mounts
       anime.timeline({
@@ -600,6 +623,9 @@ export default {
             duration: 800,
           });
           
+          // Start redirection process after successful account creation
+          this.startRedirection();
+          
           // Emit event
           this.$emit('account-created', this.username);
         } else {
@@ -621,6 +647,56 @@ export default {
       }
     },
     
+    startRedirection() {
+      // Wait 2 seconds with loading animation before redirecting
+      this.redirectTimeout = setTimeout(() => {
+        this.animatePageTransition();
+      }, 2000);
+    },
+    
+    animatePageTransition() {
+      // Show the page transition overlay with animation
+      this.isRedirecting = true;
+      
+      anime.timeline({
+        easing: 'easeOutExpo'
+      })
+      .add({
+        targets: this.$refs.pageTransition,
+        opacity: [0, 1],
+        duration: 500,
+      })
+      .add({
+        targets: '.transition-content',
+        opacity: [0, 1],
+        translateY: [20, 0],
+        duration: 600,
+        complete: () => {
+          // Simulate loading time
+          setTimeout(() => {
+            // Redirect to App.vue (or refresh in a real app)
+            // In a real Vue app with a router, you would use router.push('/app')
+            this.redirectToApp();
+          }, 1000);
+        }
+      });
+    },
+    
+    redirectToApp() {
+      // For demonstration, we're just reloading the page
+      // In a real app with Vue Router, you would use router.push('/app')
+      
+      // Option 1: For SPA with Vue Router (uncomment in a real app)
+      // this.$router.push('/app');
+      
+      // Option 2: For a simple approach without router
+      const appUrl = '/app'; // Change this to the appropriate URL
+      window.location.href = appUrl;
+      
+      // Option 3: Just refresh the current page (fallback)
+      // window.location.reload();
+    },
+    
     shakeElement(element) {
       if (!element) return;
       
@@ -640,12 +716,13 @@ export default {
   },
   beforeUnmount() {
     clearTimeout(this.debounceTimer);
+    clearTimeout(this.redirectTimeout);
   }
 }
 </script>
 
 <style scoped>
-
+/* Original styles maintained */
 .create-account-container {
   display: flex;
   align-items: center;

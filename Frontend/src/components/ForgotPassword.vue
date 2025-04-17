@@ -1,7 +1,7 @@
 <template>
   <div class="forgot-password-container">
     <form @submit.prevent="handleSubmit" class="forgot-password-form" ref="forgotForm">
-      <div class="back-button" @click="$emit('back')" ref="backButton">
+      <div class="back-button" @click="handleBack" ref="backButton">
         <font-awesome-icon icon="arrow-left" />
       </div>
       
@@ -9,15 +9,13 @@
         <font-awesome-icon icon="key" class="logo-icon" />
       </div>
       <h2 class="title-text" ref="titleText">Password Recovery</h2>
-      <p class="subtitle" ref="subtitle">For agent accounts only</p>
+      <p class="subtitle" ref="subtitle">Recover your account access</p>
       
       <div class="form-content" ref="formContent">
-        <div class="step-indicator" v-if="!codeVerified" ref="stepIndicator">
+        <div class="step-indicator" v-if="!resetCompleted" ref="stepIndicator">
           <div class="step" :class="{ active: currentStep === 1 }">1</div>
           <div class="step-line"></div>
           <div class="step" :class="{ active: currentStep === 2 }">2</div>
-          <div class="step-line"></div>
-          <div class="step" :class="{ active: currentStep === 3 }">3</div>
         </div>
         
         <!-- Step 1: Email Entry -->
@@ -36,64 +34,43 @@
                 required
                 ref="emailInput"
               />
-              <label for="email" class="input-label">Agency Email</label>
+              <label for="email" class="input-label">Email Address</label>
             </div>
-            <p class="input-hint">Enter your registered agency email address</p>
+            <p class="input-hint">Enter your registered email address</p>
           </div>
           
-          <button type="button" class="action-button" :disabled="loading || !email" @click="requestCode" ref="requestButton">
+          <button type="button" class="action-button" :disabled="loading || !email" @click="requestPasswordReset" ref="requestButton">
             <template v-if="loading">
               <font-awesome-icon icon="spinner" spin class="mr-2" />
               Sending...
             </template>
             <template v-else>
               <font-awesome-icon icon="paper-plane" class="mr-2" />
-              Send Verification Code
+              Send Reset Link
             </template>
           </button>
         </div>
         
-        <!-- Step 2: Code Verification -->
+        <!-- Step 2: Reset Password with Token -->
         <div v-if="currentStep === 2">
-          <div class="input-group" ref="codeGroup">
-            <div class="code-container">
+          <div class="input-group" ref="tokenGroup">
+            <div class="input-container">
+              <font-awesome-icon icon="fingerprint" class="input-icon" />
               <input
-                v-for="(_, index) in 6"
-                :key="index"
-                :ref="el => { if(el) codeInputs[index] = el }"
                 type="text"
-                class="code-input"
-                maxlength="1"
-                pattern="[0-9]"
-                inputmode="numeric"
-                v-model="verificationCode[index]"
-                @input="handleCodeInput(index)"
-                @keydown="handleKeyDown($event, index)"
-                @paste="handlePaste"
+                id="token"
+                v-model="token"
                 :disabled="loading"
+                class="input-field"
+                placeholder=" "
+                required
+                ref="tokenInput"
               />
+              <label for="token" class="input-label">Reset Token</label>
             </div>
-            <p class="input-hint">Enter the 6-digit code sent to {{ maskEmail(email) }}</p>
-            <div class="resend-container">
-              <span v-if="cooldown > 0">Resend code in {{ cooldown }}s</span>
-              <a href="#" v-else class="resend-link" @click.prevent="requestCode">Resend code</a>
-            </div>
+            <p class="input-hint">Enter the token from the email we sent you</p>
           </div>
           
-          <button type="button" class="action-button" :disabled="loading || !isCodeComplete" @click="verifyCode" ref="verifyButton">
-            <template v-if="loading">
-              <font-awesome-icon icon="spinner" spin class="mr-2" />
-              Verifying...
-            </template>
-            <template v-else>
-              <font-awesome-icon icon="check-circle" class="mr-2" />
-              Verify Code
-            </template>
-          </button>
-        </div>
-        
-        <!-- Step 3: New Password -->
-        <div v-if="currentStep === 3">
           <div class="input-group" ref="passwordGroup">
             <div class="input-container">
               <font-awesome-icon icon="lock" class="input-icon" />
@@ -149,7 +126,7 @@
         </div>
         
         <!-- Success State -->
-        <div v-if="codeVerified && resetCompleted" class="success-container" ref="successContainer">
+        <div v-if="resetCompleted" class="success-container" ref="successContainer">
           <div class="success-icon">
             <font-awesome-icon icon="check-circle" />
           </div>
@@ -190,27 +167,17 @@ export default {
     return {
       currentStep: 1,
       email: '',
-      verificationCode: Array(6).fill(''),
-      codeInputs: [],
+      token: '',
       newPassword: '',
       confirmPassword: '',
       loading: false,
-      cooldown: 0,
-      cooldownInterval: null,
-      codeVerified: false,
       resetCompleted: false,
-      agentVerified: false
+      tokenVerified: false
     }
   },
   computed: {
-    isCodeComplete() {
-      return this.verificationCode.every(digit => digit !== '');
-    },
-    fullVerificationCode() {
-      return this.verificationCode.join('');
-    },
     passwordStrength() {
-      // Simple password strength calculation
+      // Password strength calculation
       let strength = 0;
       const password = this.newPassword;
       
@@ -250,17 +217,39 @@ export default {
     },
     canResetPassword() {
       return (
+        this.token &&
         this.newPassword.length >= 8 &&
         this.confirmPassword.length >= 8 &&
         this.newPassword === this.confirmPassword &&
-        this.passwordStrength >= 2
+        this.passwordStrength >= 3 // Require at least Strong password
       );
     }
   },
   mounted() {
     this.initializeAnimations();
+    
+    // Check if token is provided in URL (for direct access from email)
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenFromUrl = urlParams.get('token');
+    
+    if (tokenFromUrl) {
+      this.token = tokenFromUrl;
+      this.currentStep = 2;
+      this.verifyToken();
+    }
   },
   methods: {
+    handleBack() {
+      if (this.resetCompleted || this.currentStep === 1) {
+        this.$emit('back');
+        return;
+      }
+      if (this.currentStep > 1) {
+        this.currentStep--;
+        this.animateStepChange();
+      }
+    },
+    
     initializeAnimations() {
       // Initial animations when component mounts
       anime.timeline({
@@ -363,39 +352,8 @@ export default {
       });
     },
     
-    maskEmail(email) {
-      if (!email) return '';
-      const parts = email.split('@');
-      if (parts.length !== 2) return email;
-      
-      const name = parts[0];
-      const domain = parts[1];
-      
-      let masked = '';
-      if (name.length <= 2) {
-        masked = name[0] + '*';
-      } else {
-        masked = name[0] + '*'.repeat(name.length - 2) + name[name.length - 1];
-      }
-      
-      return masked + '@' + domain;
-    },
-    
-    startCooldown() {
-      this.cooldown = 60;
-      if (this.cooldownInterval) {
-        clearInterval(this.cooldownInterval);
-      }
-      this.cooldownInterval = setInterval(() => {
-        this.cooldown--;
-        if (this.cooldown <= 0) {
-          clearInterval(this.cooldownInterval);
-        }
-      }, 1000);
-    },
-    
-    async requestCode() {
-      if (this.loading || this.cooldown > 0) return;
+    async requestPasswordReset() {
+      if (this.loading) return;
       
       if (!this.email.trim() || !this.email.includes('@') || !this.email.includes('.')) {
         this.toast.error("Please enter a valid email address", {
@@ -408,50 +366,32 @@ export default {
       this.loading = true;
       
       try {
-        // Check if email belongs to an agent
-        const agentCheckResponse = await api.post('/api/check-agent-email', {
-          email: this.email
-        });
-        
-        if (agentCheckResponse.status !== 200 || !agentCheckResponse.data.isAgent) {
-          this.toast.error("Recovery is only available for verified agent accounts", {
-            position: "top-center"
-          });
-          this.shakeElement(this.$refs.emailGroup);
-          this.loading = false;
-          return;
-        }
-        
-        this.agentVerified = true;
-        
-        // If it's an agent, send verification code
-        const response = await api.post('/api/request-password-reset', {
+        const response = await api.post('/api/forgot-password', {
           email: this.email
         });
         
         if (response.status === 200) {
-          this.toast.success("Verification code sent to your email", {
+          this.toast.success("Reset link sent to your email. Please check your inbox.", {
             position: "top-center"
           });
-          this.startCooldown();
           this.currentStep = 2;
           this.animateStepChange();
           
-          // Focus on first code input field
+          // Focus on token input field
           setTimeout(() => {
-            if (this.codeInputs[0]) {
-              this.codeInputs[0].focus();
+            if (this.$refs.tokenInput) {
+              this.$refs.tokenInput.focus();
             }
           }, 500);
         } else {
-          this.toast.error(response.data.message || "Failed to send verification code", {
+          this.toast.error(response.data.message || "Failed to send reset link", {
             position: "top-center"
           });
           this.shakeElement(this.$refs.emailGroup);
         }
       } catch (error) {
-        console.error('Request code error:', error);
-        this.toast.error(error.response?.data?.message || "An error occurred while sending the code", {
+        console.error('Request reset link error:', error);
+        this.toast.error(error.response?.data?.message || "An error occurred while sending the reset link", {
           position: "top-center"
         });
         this.shakeElement(this.$refs.emailGroup);
@@ -460,49 +400,37 @@ export default {
       }
     },
     
-    async verifyCode() {
-      if (this.loading || !this.isCodeComplete) return;
+    async verifyToken() {
+      if (!this.token) return;
       
       this.loading = true;
       
       try {
-        const response = await api.post('/api/verify-reset-code', {
-          email: this.email,
-          code: this.fullVerificationCode
+        const response = await api.post('/api/verify-reset-token', {
+          token: this.token
         });
         
-        if (response.status === 200) {
-          this.toast.success("Code verified successfully", {
-            position: "top-center"
-          });
-          this.codeVerified = true;
-          this.currentStep = 3;
-          this.animateStepChange();
-          
-          // Focus on password field
-          setTimeout(() => {
-            if (this.$refs.passwordInput) {
-              this.$refs.passwordInput.focus();
-            }
-          }, 500);
-        } else {
-          this.toast.error(response.data.message || "Invalid verification code", {
-            position: "top-center"
-          });
-          this.shakeElement(this.$refs.codeGroup);
-          
-          // Clear code inputs
-          this.verificationCode = Array(6).fill('');
-          if (this.codeInputs[0]) {
-            this.codeInputs[0].focus();
+        if (response.status === 200 && response.data.valid) {
+          this.tokenVerified = true;
+          if (this.$refs.passwordInput) {
+            this.$refs.passwordInput.focus();
           }
+        } else {
+          this.toast.error("Invalid or expired reset token. Please request a new reset link.", {
+            position: "top-center"
+          });
+          this.token = '';
+          this.currentStep = 1;
+          this.animateStepChange();
         }
       } catch (error) {
-        console.error('Verify code error:', error);
-        this.toast.error(error.response?.data?.message || "Failed to verify code", {
+        console.error('Verify token error:', error);
+        this.toast.error(error.response?.data?.message || "Invalid or expired reset token", {
           position: "top-center"
         });
-        this.shakeElement(this.$refs.codeGroup);
+        this.token = '';
+        this.currentStep = 1;
+        this.animateStepChange();
       } finally {
         this.loading = false;
       }
@@ -511,12 +439,40 @@ export default {
     async handleSubmit() {
       if (this.loading || !this.canResetPassword) return;
       
+      // Verify token first if not already verified
+      if (!this.tokenVerified) {
+        try {
+          this.loading = true;
+          const verifyResponse = await api.post('/api/verify-reset-token', {
+            token: this.token
+          });
+          
+          if (!verifyResponse.data.valid) {
+            this.toast.error("Invalid or expired reset token. Please request a new reset link.", {
+              position: "top-center"
+            });
+            this.shakeElement(this.$refs.tokenGroup);
+            this.loading = false;
+            return;
+          }
+          
+          this.tokenVerified = true;
+        } catch (error) {
+          console.error('Token verification error:', error);
+          this.toast.error(error.response?.data?.message || "Invalid or expired reset token", {
+            position: "top-center"
+          });
+          this.shakeElement(this.$refs.tokenGroup);
+          this.loading = false;
+          return;
+        }
+      }
+      
       this.loading = true;
       
       try {
         const response = await api.post('/api/reset-password', {
-          email: this.email,
-          code: this.fullVerificationCode,
+          token: this.token,
           password: this.newPassword
         });
         
@@ -553,46 +509,6 @@ export default {
       }
     },
     
-    handleCodeInput(index) {
-      // Format to ensure only numbers
-      this.verificationCode[index] = this.verificationCode[index].replace(/[^0-9]/g, '');
-      
-      // Auto move to next input
-      if (this.verificationCode[index] && index < 5 && this.codeInputs[index + 1]) {
-        this.codeInputs[index + 1].focus();
-      }
-    },
-    
-    handleKeyDown(event, index) {
-      // Handle backspace
-      if (event.key === 'Backspace') {
-        if (!this.verificationCode[index] && index > 0 && this.codeInputs[index - 1]) {
-          this.codeInputs[index - 1].focus();
-        }
-      }
-    },
-    
-    handlePaste(event) {
-      event.preventDefault();
-      const pastedData = (event.clipboardData || window.clipboardData).getData('text');
-      
-      // Extract only numbers and limit to 6 digits
-      const digits = pastedData.replace(/[^0-9]/g, '').slice(0, 6);
-      
-      // Fill each input with pasted digits
-      for (let i = 0; i < digits.length; i++) {
-        if (i < 6) {
-          this.verificationCode[i] = digits[i];
-        }
-      }
-      
-      // Focus last filled input or next empty input
-      const focusIndex = Math.min(digits.length, 5);
-      if (this.codeInputs[focusIndex]) {
-        this.codeInputs[focusIndex].focus();
-      }
-    },
-    
     shakeElement(element) {
       if (!element) return;
       
@@ -608,11 +524,6 @@ export default {
         ],
         easing: 'easeInOutSine'
       });
-    }
-  },
-  beforeUnmount() {
-    if (this.cooldownInterval) {
-      clearInterval(this.cooldownInterval);
     }
   }
 }
@@ -813,50 +724,6 @@ export default {
   padding-left: 0.5rem;
 }
 
-.code-container {
-  display: flex;
-  justify-content: space-between;
-  margin: 1rem 0;
-}
-
-.code-input {
-  width: 50px;
-  height: 60px;
-  border: 2px solid var(--input-border);
-  border-radius: 10px;
-  background: var(--bg-color);
-  font-size: 1.5rem;
-  font-weight: 700;
-  text-align: center;
-  color: var(--text-color);
-  transition: all 0.3s ease;
-}
-
-.code-input:focus {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.15);
-}
-
-.resend-container {
-  text-align: center;
-  margin-top: 1rem;
-  font-size: 0.9rem;
-  color: var(--text-color);
-  opacity: 0.8;
-}
-
-.resend-link {
-  color: var(--primary-color);
-  text-decoration: none;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.resend-link:hover {
-  opacity: 0.8;
-  text-decoration: underline;
-}
-
 .password-strength {
   font-size: 0.85rem;
   margin-top: 0.5rem;
@@ -996,16 +863,6 @@ export default {
     padding: 2rem 1.5rem;
   }
   
-  .code-input {
-    width: 40px;
-    height: 50px;
-    font-size: 1.2rem;
-  }
-  
-  .step-line {
-    width: 40px;
-  }
-  
   .title-text {
     font-size: 1.6rem;
   }
@@ -1037,38 +894,18 @@ export default {
   }
 }
 
-/* Animations */
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-    opacity: 0.7;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 0.85;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 0.7;
-  }
-}
-
 /* Accessibility improvements */
 .input-field:focus, 
-.code-input:focus, 
 .action-button:focus, 
-.back-button:focus,
-.resend-link:focus {
+.back-button:focus {
   outline: none;
   box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.5);
 }
 
 /* Focus visible */
 .input-field:focus-visible, 
-.code-input:focus-visible, 
 .action-button:focus-visible, 
-.back-button:focus-visible,
-.resend-link:focus-visible {
+.back-button:focus-visible {
   outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }

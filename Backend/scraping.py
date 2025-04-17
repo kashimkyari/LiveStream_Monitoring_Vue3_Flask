@@ -58,7 +58,7 @@ from notifications import send_text_message
 # Global dictionaries to hold job statuses.
 scrape_jobs = {}
 stream_creation_jobs = {}
-executor = ThreadPoolExecutor(max_workers=5)  # Thread pool for parallel scraping
+executor = ThreadPoolExecutor(max_workers=1)  # Thread pool for parallel scraping
 
 PROXY_LIST = []
 PROXY_LIST_LAST_UPDATED = None
@@ -1134,7 +1134,7 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
             completion_time = time.time() - start_time
             logging.info(f"Stream creation job {job_id} completed in {completion_time:.2f} seconds")
 
-            
+
 def send_telegram_notifications(platform, streamer, room_url):
     """Robust notification handler"""
     try:
