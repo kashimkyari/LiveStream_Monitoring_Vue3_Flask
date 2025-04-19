@@ -62,6 +62,11 @@ def delete_agent(agent_id):
     agent = User.query.filter_by(id=agent_id, role="agent").first()
     if not agent:
         return jsonify({"message": "Agent not found"}), 404
+    
+    # Delete related password resets first
+    PasswordReset.query.filter_by(user_id=agent_id).delete()
+    
+    # Now delete the agent
     db.session.delete(agent)
     db.session.commit()
     return jsonify({"message": "Agent deleted"})
@@ -76,3 +81,101 @@ def get_agent_assignments(agent_id):
     
     assignments = agent.assignments
     return jsonify([assignment.serialize() for assignment in assignments])
+
+
+# Add to agent_routes.py
+
+@agent_bp.route("/api/agent/notifications", methods=["GET"])
+@login_required(role="agent")
+def get_agent_notifications():
+    agent_id = session.get("user_id")
+    if not agent_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    agent = User.query.get(agent_id)
+    if not agent:
+        return jsonify({"error": "Agent not found"}), 404
+    
+    try:
+        # Get all notifications from the detection log
+        notifications = DetectionLog.query.order_by(DetectionLog.timestamp.desc()).all()
+        
+        # Filter for ones assigned to this agent
+        agent_notifications = []
+        for notification in notifications:
+            details = notification.details or {}
+            assigned_agent = details.get('assigned_agent')
+            
+            # Check if this notification is assigned to the current agent
+            if assigned_agent and assigned_agent.lower() == agent.username.lower():
+                agent_notifications.append({
+                    "id": notification.id,
+                    "event_type": notification.event_type,
+                    "timestamp": notification.timestamp.isoformat(),
+                    "details": notification.details,
+                    "read": notification.read,
+                    "room_url": notification.room_url,
+                    "assigned_agent": assigned_agent
+                })
+        
+        return jsonify(agent_notifications), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@agent_bp.route("/api/agent/notifications/<int:notification_id>/read", methods=["PUT"])
+@login_required(role="agent")
+def mark_agent_notification_read(notification_id):
+    agent_id = session.get("user_id")
+    if not agent_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    agent = User.query.get(agent_id)
+    if not agent:
+        return jsonify({"error": "Agent not found"}), 404
+    
+    try:
+        notification = DetectionLog.query.get(notification_id)
+        if not notification:
+            return jsonify({"message": "Notification not found"}), 404
+        
+        # Verify this notification is assigned to this agent
+        details = notification.details or {}
+        assigned_agent = details.get('assigned_agent')
+        
+        if not assigned_agent or assigned_agent.lower() != agent.username.lower():
+            return jsonify({"error": "Notification not assigned to this agent"}), 403
+        
+        notification.read = True
+        db.session.commit()
+        return jsonify({"message": "Notification marked as read"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@agent_bp.route("/api/agent/notifications/read-all", methods=["PUT"])
+@login_required(role="agent")
+def mark_all_agent_notifications_read():
+    agent_id = session.get("user_id")
+    if not agent_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    agent = User.query.get(agent_id)
+    if not agent:
+        return jsonify({"error": "Agent not found"}), 404
+    
+    try:
+        # Get all notifications assigned to this agent
+        notifications = DetectionLog.query.all()
+        
+        count = 0
+        for notification in notifications:
+            details = notification.details or {}
+            assigned_agent = details.get('assigned_agent')
+            
+            if assigned_agent and assigned_agent.lower() == agent.username.lower() and not notification.read:
+                notification.read = True
+                count += 1
+        
+        db.session.commit()
+        return jsonify({"message": f"Marked {count} notifications as read"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

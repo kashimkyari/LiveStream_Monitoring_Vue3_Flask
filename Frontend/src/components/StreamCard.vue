@@ -1,27 +1,70 @@
 <template>
-  <div class="stream-card" @click="$emit('click', $event)" ref="streamCard">
+  <div 
+    class="stream-card" 
+    :class="{ 'compact-view': isCompactView }"
+    @click="$emit('click', $event)" 
+    @mouseenter="addHoverAnimation" 
+    @mouseleave="removeHoverAnimation" 
+    ref="streamCard"
+  >
     <div class="video-container">
       <video ref="videoPlayer" class="video-player"></video>
       <DetectionBadge v-if="detectionCount > 0" :count="detectionCount" />
+      <div class="stream-overlay" ref="streamOverlay">
+        <button class="view-details-btn">
+          <font-awesome-icon icon="eye" />
+          <span class="btn-text">View Details</span>
+        </button>
+      </div>
+      <div class="stream-controls">
+        <button class="control-btn mute-btn" @click.stop="toggleMute">
+          <font-awesome-icon :icon="isMuted ? 'volume-mute' : 'volume-up'" />
+        </button>
+        <button class="control-btn fullscreen-btn" @click.stop="toggleFullscreen">
+          <font-awesome-icon icon="expand" />
+        </button>
+      </div>
     </div>
     <div class="stream-info">
-      <h3 class="stream-title">{{ stream.streamer_username }}</h3>
-      <div class="stream-meta">
+      <div class="info-top-row">
+        <h3 class="stream-title" :title="stream.streamer_username">{{ stream.streamer_username }}</h3>
         <span class="platform-tag" :class="stream.platform.toLowerCase()">
           {{ stream.platform }}
         </span>
-        <span class="agent-name">
-          {{ stream.agent?.username || 'Unassigned' }}
-        </span>
       </div>
+      <div class="stream-meta">
+        <div class="agent-badge" :class="{'unassigned': !stream.agent?.username}">
+          <font-awesome-icon :icon="stream.agent?.username ? 'user-check' : 'user-clock'" />
+          <span>{{ stream.agent?.username || 'Unassigned' }}</span>
+        </div>
+      </div>
+      <div class="stream-stats" ref="streamStats">
+        <div class="stat-item">
+          <font-awesome-icon icon="clock" />
+          <span>{{ getStreamTime() }}</span>
+        </div>
+        <div class="stat-item alert-stat" :class="{'has-alerts': detectionCount > 0}">
+          <font-awesome-icon icon="bell" />
+          <span>{{ detectionCount }} {{ detectionCount === 1 ? 'alert' : 'alerts' }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="quick-actions">
+      <button class="action-btn assign-btn" @click.stop="$emit('assign')" v-if="!stream.agent?.username">
+        <font-awesome-icon icon="user-plus" />
+      </button>
+      <button class="action-btn bookmark-btn" @click.stop="toggleBookmark">
+        <font-awesome-icon :icon="isBookmarked ? 'bookmark' : 'bookmark-o'" />
+      </button>
     </div>
   </div>
 </template>
 
 <script>
 import Hls from 'hls.js'
-import anime from 'animejs'
+import anime from 'animejs/lib/anime.es.js'
 import DetectionBadge from './DetectionBadge.vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, inject } from 'vue'
 
 export default {
   name: 'StreamCard',
@@ -30,30 +73,47 @@ export default {
   },
   props: {
     stream: Object,
-    detectionCount: Number
-  },
-  emits: ['click'],
-  data() {
-    return {
-      hls: null
+    detectionCount: Number,
+    index: {
+      type: Number,
+      default: 0
+    },
+    totalStreams: {
+      type: Number,
+      default: 1
     }
   },
-  mounted() {
-    this.initializeVideo()
-    this.addEntranceAnimation()
-  },
-  beforeUnmount() {
-    this.destroyHls()
-  },
-  methods: {
-    initializeVideo() {
+  emits: ['click', 'assign', 'bookmark', 'mute-change', 'fullscreen'],
+  setup(props, { emit }) {
+    const streamCard = ref(null)
+    const videoPlayer = ref(null)
+    const streamOverlay = ref(null)
+    const streamStats = ref(null)
+    let hls = null
+    
+    const isMuted = ref(true)
+    const isBookmarked = ref(false)
+    const isFullscreen = ref(false)
+    
+    // Get the global store or event bus if available
+    const eventBus = inject('eventBus', null)
+    
+    // Get the theme from parent component (App.vue)
+    const isDarkTheme = inject('theme', ref(true))
+    
+    // Computed property to determine if compact view should be used
+    const isCompactView = computed(() => {
+      return props.totalStreams > 8
+    })
+
+    const initializeVideo = () => {
       // Get the correct m3u8 URL directly from the stream object
       let m3u8Url = null
       
-      if (this.stream.platform.toLowerCase() === 'chaturbate' && this.stream.chaturbate_m3u8_url) {
-        m3u8Url = this.stream.chaturbate_m3u8_url
-      } else if (this.stream.platform.toLowerCase() === 'stripchat' && this.stream.stripchat_m3u8_url) {
-        m3u8Url = this.stream.stripchat_m3u8_url
+      if (props.stream.platform.toLowerCase() === 'chaturbate' && props.stream.chaturbate_m3u8_url) {
+        m3u8Url = props.stream.chaturbate_m3u8_url
+      } else if (props.stream.platform.toLowerCase() === 'stripchat' && props.stream.stripchat_m3u8_url) {
+        m3u8Url = props.stream.stripchat_m3u8_url
       }
       
       if (!m3u8Url) {
@@ -62,88 +122,251 @@ export default {
       }
       
       // Initialize HLS.js if supported
-      if (Hls.isSupported()) {
-        this.destroyHls() // Clean up any existing instance
+      if (Hls.isSupported() && videoPlayer.value) {
+        destroyHls() // Clean up any existing instance
         
-        this.hls = new Hls({
+        hls = new Hls({
           startLevel: 0,
           capLevelToPlayerSize: true,
           maxBufferLength: 30
         })
         
-        this.hls.loadSource(m3u8Url)
-        this.hls.attachMedia(this.$refs.videoPlayer)
+        hls.loadSource(m3u8Url)
+        hls.attachMedia(videoPlayer.value)
         
-        this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          this.$refs.videoPlayer.muted = true // Muted for autoplay
-          this.$refs.videoPlayer.play().catch(e => {
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          videoPlayer.value.muted = isMuted.value
+          videoPlayer.value.play().catch(e => {
             console.warn('Autoplay prevented:', e)
           })
         })
         
-        this.hls.on(Hls.Events.ERROR, (event, data) => {
+        hls.on(Hls.Events.ERROR, (event, data) => {
           console.error('HLS error:', data)
           if (data.fatal) {
             switch(data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                this.hls.startLoad()
+                hls.startLoad()
                 break
               case Hls.ErrorTypes.MEDIA_ERROR:
-                this.hls.recoverMediaError()
+                hls.recoverMediaError()
                 break
               default:
-                this.destroyHls()
+                destroyHls()
                 break
             }
           }
         })
       } 
       // Fallback for browsers with native HLS support
-      else if (this.$refs.videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
-        this.$refs.videoPlayer.src = m3u8Url
-        this.$refs.videoPlayer.addEventListener('loadedmetadata', () => {
-          this.$refs.videoPlayer.muted = true // Muted for autoplay
-          this.$refs.videoPlayer.play().catch(e => {
+      else if (videoPlayer.value && videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) {
+        videoPlayer.value.src = m3u8Url
+        videoPlayer.value.addEventListener('loadedmetadata', () => {
+          videoPlayer.value.muted = isMuted.value
+          videoPlayer.value.play().catch(e => {
             console.warn('Autoplay prevented:', e)
           })
         })
       }
-    },
-    destroyHls() {
-      if (this.hls) {
-        this.hls.destroy()
-        this.hls = null
+    }
+
+    const destroyHls = () => {
+      if (hls) {
+        hls.destroy()
+        hls = null
       }
-    },
-    addEntranceAnimation() {
-      // Add fancy entrance animation with anime.js
+    }
+
+    const addEntranceAnimation = () => {
+      if (streamCard.value) {
+        anime({
+          targets: streamCard.value,
+          translateY: [60, 0],
+          opacity: [0, 1],
+          scale: [0.85, 1],
+          easing: 'spring(1, 80, 10, 0)',
+          duration: 800,
+          delay: 100 + (props.index * 120) // Staggered effect
+        })
+      }
+
+      if (streamStats.value) {
+        anime({
+          targets: streamStats.value.querySelectorAll('.stat-item'),
+          translateY: [20, 0],
+          opacity: [0, 1],
+          delay: anime.stagger(100, {start: 600 + (props.index * 120)}),
+          easing: 'easeOutQuad',
+          duration: 500
+        })
+      }
+    }
+
+    const addHoverAnimation = () => {
+      if (streamCard.value) {
+        anime({
+          targets: streamCard.value,
+          scale: 1.03,
+          boxShadow: '0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22)',
+          duration: 300,
+          easing: 'easeOutQuad'
+        })
+      }
+
+      if (streamOverlay.value) {
+        anime({
+          targets: streamOverlay.value,
+          opacity: [0, 1],
+          duration: 250,
+          easing: 'easeOutQuad'
+        })
+
+        anime({
+          targets: streamOverlay.value.querySelector('.view-details-btn'),
+          translateY: [20, 0],
+          scale: [0.9, 1],
+          opacity: [0, 1],
+          duration: 350,
+          easing: 'easeOutQuad'
+        })
+      }
+    }
+
+    const removeHoverAnimation = () => {
+      if (streamCard.value) {
+        anime({
+          targets: streamCard.value,
+          scale: 1,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+          duration: 300,
+          easing: 'easeOutQuad'
+        })
+      }
+
+      if (streamOverlay.value) {
+        anime({
+          targets: streamOverlay.value,
+          opacity: 0,
+          duration: 200,
+          easing: 'easeOutQuad'
+        })
+      }
+    }
+
+    const getStreamTime = () => {
+      // Calculate how long the stream has been active based on creation_time
+      if (!props.stream.creation_time) return 'New'
+      
+      const createdAt = new Date(props.stream.creation_time)
+      const now = new Date()
+      const diffMs = now - createdAt
+      const diffMins = Math.floor(diffMs / 60000)
+      
+      if (diffMins < 60) return `${diffMins}m`
+      const hours = Math.floor(diffMins / 60)
+      const mins = diffMins % 60
+      return `${hours}h ${mins}m`
+    }
+
+    const toggleMute = () => {
+      if (videoPlayer.value) {
+        isMuted.value = !isMuted.value
+        videoPlayer.value.muted = isMuted.value
+        emit('mute-change', isMuted.value)
+        
+        // Provide haptic feedback through animation
+        anime({
+          targets: '.mute-btn',
+          scale: [1, 1.2, 1],
+          duration: 300,
+          easing: 'easeOutQuad'
+        })
+      }
+    }
+
+    const toggleBookmark = () => {
+      isBookmarked.value = !isBookmarked.value
+      emit('bookmark', { stream: props.stream, bookmarked: isBookmarked.value })
+      
+      // Animate bookmark button
       anime({
-        targets: this.$refs.streamCard,
-        translateY: [20, 0],
-        opacity: [0, 1],
-        scale: [0.95, 1],
-        easing: 'easeOutElastic(1, .8)',
-        duration: 800,
-        delay: this.stream.id * 100 % 500 // Stagger based on stream ID
-      })
-    },
-    addHoverAnimation() {
-      anime({
-        targets: this.$refs.streamCard,
-        scale: 1.05,
-        boxShadow: '0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22)',
-        duration: 300,
+        targets: '.bookmark-btn',
+        scale: [1, 1.2, 1],
+        rotate: ['0deg', '20deg', '0deg'],
+        duration: 400,
         easing: 'easeOutQuad'
       })
-    },
-    removeHoverAnimation() {
-      anime({
-        targets: this.$refs.streamCard,
-        scale: 1,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-        duration: 300,
-        easing: 'easeOutQuad'
-      })
+    }
+
+    const toggleFullscreen = () => {
+      emit('fullscreen', props.stream)
+      isFullscreen.value = !isFullscreen.value
+      
+      // This would typically be handled by the parent component
+      // which would implement the actual fullscreen functionality
+    }
+
+    // Watch for changes in totalStreams to adjust the layout
+    watch(() => props.totalStreams, (newCount) => {
+      if (newCount > 8 && !isCompactView.value) {
+        // Animate transition to compact view
+        anime({
+          targets: streamCard.value,
+          scale: [1, 0.95, 1],
+          duration: 400,
+          easing: 'easeOutQuad'
+        })
+      } else if (newCount <= 8 && isCompactView.value) {
+        // Animate transition to standard view
+        anime({
+          targets: streamCard.value,
+          scale: [0.95, 1.05, 1],
+          duration: 400,
+          easing: 'easeOutQuad'
+        })
+      }
+    })
+
+    // Listen for global events
+    onMounted(() => {
+      initializeVideo()
+      addEntranceAnimation()
+      
+      // Listen for global mute all event if event bus exists
+      if (eventBus) {
+        eventBus.$on('muteAllStreams', (exceptId) => {
+          if (props.stream.id !== exceptId) {
+            isMuted.value = true
+            if (videoPlayer.value) videoPlayer.value.muted = true
+          }
+        })
+      }
+    })
+
+    onBeforeUnmount(() => {
+      destroyHls()
+      
+      // Clean up event listeners
+      if (eventBus) {
+        eventBus.$off('muteAllStreams')
+      }
+    })
+
+    return {
+      streamCard,
+      videoPlayer,
+      streamOverlay,
+      streamStats,
+      isMuted,
+      isBookmarked,
+      isCompactView,
+      isDarkTheme,
+      addHoverAnimation,
+      removeHoverAnimation,
+      getStreamTime,
+      toggleMute,
+      toggleBookmark,
+      toggleFullscreen
     }
   }
 }
@@ -152,18 +375,51 @@ export default {
 <style scoped>
 .stream-card {
   background-color: var(--input-bg);
-  border-radius: 10px;
+  border-radius: 16px;
   overflow: hidden;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid var(--input-border);
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  will-change: transform, box-shadow;
+  position: relative;
 }
 
-.stream-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
-  border-color: var(--primary-color);
+/* Compact view styling */
+.stream-card.compact-view {
+  border-radius: 12px;
+}
+
+.compact-view .stream-title {
+  font-size: 1rem;
+}
+
+.compact-view .stream-meta {
+  margin-bottom: 8px;
+}
+
+.compact-view .stream-stats {
+  padding-top: 8px;
+}
+
+.compact-view .stat-item {
+  font-size: 0.7rem;
+}
+
+.compact-view .agent-badge {
+  font-size: 0.7rem;
+}
+
+.compact-view .platform-tag {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+}
+
+.compact-view .view-details-btn .btn-text {
+  display: none;
 }
 
 .video-container {
@@ -180,32 +436,114 @@ export default {
   background-color: #000;
 }
 
+.stream-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.view-details-btn {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 30px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transform: translateY(20px);
+  opacity: 0;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.view-details-btn:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(0) scale(1.05);
+}
+
+.stream-controls {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.video-container:hover .stream-controls {
+  opacity: 1;
+}
+
+.control-btn {
+  background-color: rgba(var(--primary-color-rgb), 0.8);
+  color: white;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.control-btn:hover {
+  background-color: var(--primary-hover);
+  transform: scale(1.1);
+  box-shadow: var(--shadow-md);
+}
+
 .stream-info {
-  padding: 15px;
+  padding: 16px;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.info-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
 }
 
 .stream-title {
-  margin: 0 0 5px 0;
-  font-size: 1.1rem;
+  margin: 0;
+  font-size: 1.2rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-weight: 600;
+  max-width: 70%;
 }
 
 .stream-meta {
   display: flex;
   justify-content: space-between;
-  font-size: 0.85rem;
-  color: var(--text-color);
-  opacity: 0.8;
+  margin-bottom: 16px;
 }
 
 .platform-tag {
-  padding: 3px 8px;
-  border-radius: 4px;
+  padding: 3px 10px;
+  border-radius: 20px;
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .platform-tag.chaturbate {
@@ -218,10 +556,172 @@ export default {
   color: #2196f3;
 }
 
-.agent-name {
+.agent-badge {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  background-color: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 50%;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.agent-badge.unassigned {
+  background-color: rgba(158, 158, 158, 0.2);
+  color: #9e9e9e;
+}
+
+.stream-stats {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  padding-top: 16px;
+  border-top: 1px solid var(--input-border);
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-color);
+  opacity: 0.7;
+}
+
+.alert-stat.has-alerts {
+  color: #f44336;
+  font-weight: 500;
+  opacity: 1;
+}
+
+.quick-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+  z-index: 3;
+}
+
+.action-btn {
+  background-color: rgba(var(--primary-color-rgb), 0.8);
+  color: white;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.action-btn:hover {
+  background-color: var(--primary-hover);
+  transform: scale(1.1);
+  box-shadow: var(--shadow-md);
+}
+
+.bookmark-btn {
+  color: #ffeb3b;
+}
+
+.assign-btn {
+  color: white;
+}
+
+/* Responsive styles */
+@media (max-width: 1400px) {
+  .stream-card:not(.compact-view) {
+    border-radius: 14px;
+  }
+  
+  .stream-card:not(.compact-view) .stream-title {
+    font-size: 1.1rem;
+  }
+}
+
+@media (max-width: 1200px) {
+  .stream-card:not(.compact-view) {
+    border-radius: 12px;
+  }
+  
+  .stream-card:not(.compact-view) .stream-title {
+    font-size: 1rem;
+  }
+  
+  .stream-card:not(.compact-view) .stat-item {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .stream-card {
+    border-radius: 10px;
+  }
+  
+  .stream-title {
+    font-size: 0.9rem;
+  }
+  
+  .stream-meta {
+    margin-bottom: 12px;
+  }
+  
+  .stream-stats {
+    padding-top: 12px;
+  }
+  
+  .stat-item {
+    font-size: 0.75rem;
+  }
+  
+  .control-btn,
+  .action-btn {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .platform-tag,
+  .agent-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+  }
+  
+  .view-details-btn {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+  }
+  
+  .view-details-btn .btn-text {
+    display: none;
+  }
+}
+
+/* Animation classes */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.pulse-animation {
+  animation: pulse 1s infinite;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s forwards;
 }
 </style>

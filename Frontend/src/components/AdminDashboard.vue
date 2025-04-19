@@ -60,7 +60,7 @@
           v-if="activeTab === 'messages'"
           :user="user"
         />
-        <NotificationsPage
+        <AdminNotificationsPage
           v-if="activeTab === 'notifications'"
           :user="user"
         />
@@ -133,7 +133,7 @@ import CreateStreamModal from './CreateStreamModal.vue'
 import CreateAgentModal from './CreateAgentModal.vue'
 import ConfirmationModal from './ConfirmationModal.vue'
 import SettingsModals from './SettingsModals.vue'
-import NotificationsPage from './NotificationsPage.vue'
+import AdminNotificationsPage from './AdminNotificationsPage.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import axios from 'axios'
 
@@ -151,7 +151,7 @@ export default {
     ConfirmationModal,
     SettingsModals,
     FontAwesomeIcon,
-    NotificationsPage
+    AdminNotificationsPage
   },
   // In your main component that uses StreamsTab
 methods: {
@@ -352,7 +352,7 @@ const handleSidebarToggle = (isMinimized) => {
 /* Add this to your <style> section */
 :root {
   /* Existing variables */
-  --sidebar-width-expanded: 280px;
+  --sidebar-width-expanded: 0px;
   --sidebar-width-collapsed: 50px;
   --sidebar-mobile-height: 65px;
   
@@ -361,6 +361,26 @@ const handleSidebarToggle = (isMinimized) => {
   --stream-base-height: 360px;
   --stream-min-width: 240px;
   --stream-min-height: 180px;
+  
+  /* Color variables with RGB format for opacity control */
+  --primary-rgb: 59, 130, 246; /* blue-500 */
+  --secondary-rgb: 156, 163, 175; /* gray-400 */
+  --success-rgb: 16, 185, 129; /* green-500 */
+  --danger-rgb: 239, 68, 68; /* red-500 */
+  --warning-rgb: 245, 158, 11; /* yellow-500 */
+  --info-rgb: 14, 165, 233; /* sky-500 */
+}
+
+[data-theme="dark"] {
+  /* Existing dark theme variables */
+  
+  /* RGB variables for dark theme */
+  --primary-rgb: 96, 165, 250; /* blue-400 */
+  --secondary-rgb: 156, 163, 175; /* gray-400 */
+  --success-rgb: 34, 197, 94; /* green-400 */
+  --danger-rgb: 248, 113, 113; /* red-400 */
+  --warning-rgb: 251, 191, 36; /* yellow-400 */
+  --info-rgb: 56, 189, 248; /* sky-400 */
 }
 
 .admin-container {

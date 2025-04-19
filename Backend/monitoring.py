@@ -13,7 +13,10 @@ monitoring_executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
 
 def monitor_stream(stream_url):
     from config import create_app
-    app = create_app()
+    app_result = create_app()
+    
+    # Get just the Flask app from the result
+    app = app_result[0] if isinstance(app_result, tuple) else app_result
     
     while True:
         with app.app_context():
@@ -26,7 +29,10 @@ def monitor_stream(stream_url):
 
 def start_monitoring():
     from config import create_app
-    app = create_app()
+    app_result = create_app()
+    
+    # Get just the Flask app from the result
+    app = app_result[0] if isinstance(app_result, tuple) else app_result
     
     with app.app_context():
         streams = Stream.query.all()
@@ -39,7 +45,10 @@ def start_monitoring():
 def start_notification_monitor():
     def monitor_notifications():
         from config import create_app
-        app = create_app()
+        app_result = create_app()
+        
+        # Get just the Flask app from the result
+        app = app_result[0] if isinstance(app_result, tuple) else app_result
         
         # Start with a timestamp slightly in the past
         last_notified_time = datetime.utcnow() - timedelta(seconds=5)

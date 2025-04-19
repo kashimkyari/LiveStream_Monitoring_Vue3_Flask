@@ -8,14 +8,24 @@
       </div>
     </div>
     
+    <!-- Loading spinner while checking authentication -->
+    <div v-if="isCheckingAuth" class="loading-overlay">
+      <div class="spinner-container" ref="spinnerContainer">
+        <div class="spinner">
+          <div class="spinner-circle" v-for="n in 12" :key="n" :style="`--i: ${n}`"></div>
+        </div>
+        <div class="spinner-text">Verifying session...</div>
+      </div>
+    </div>
+    
     <transition name="page-transition" mode="out-in">
       <LoginComponent 
-        v-if="!isLoggedIn" 
+        v-if="!isCheckingAuth && !isLoggedIn" 
         @login-success="handleLoginSuccess" 
         key="login"
       />
       
-      <div v-else class="dashboard" key="dashboard" ref="dashboardContainer">
+      <div v-else-if="!isCheckingAuth && isLoggedIn" class="dashboard" key="dashboard" ref="dashboardContainer">
         <div class="content-area">
           <!-- Debug info to help troubleshoot -->
           <div class="debug-info" v-if="showDebugInfo">
@@ -43,7 +53,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, provide } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { 
@@ -79,13 +89,18 @@ export default {
     const toast = useToast();
     const isDarkTheme = ref(true)
     const isLoggedIn = ref(false)
+    const isCheckingAuth = ref(true)
     const userRole = ref(null)
     const appContainer = ref(null)
     const themeToggle = ref(null)
     const sidebar = ref(null)
     const logoutButton = ref(null)
     const dashboardContainer = ref(null)
+    const spinnerContainer = ref(null)
     const showDebugInfo = ref(false) // Set to true to show debug info
+    
+    // Provide theme to child components
+    provide('theme', isDarkTheme)
     
     // Initial setup
     onMounted(() => {
@@ -96,11 +111,8 @@ export default {
       isDarkTheme.value = savedTheme ? savedTheme === 'dark' : true
       
       // Set up axios defaults
-      axios.defaults.baseURL = "https://54.86.99.85:5000"
+      axios.defaults.baseURL = "http://localhost:5000"
       axios.defaults.withCredentials = true
-      
-      // Check user authentication status
-      checkAuthentication()
       
       // Apply theme to document
       document.documentElement.style.backgroundColor = isDarkTheme.value ? '#121212' : '#f8f9fa'
@@ -109,6 +121,14 @@ export default {
       // Listen for window resize events
       window.addEventListener('resize', handleResize)
       handleResize()
+      
+      // Initialize spinner animation
+      initSpinnerAnimation();
+      
+      // Check user authentication status with a small delay for spinner to show
+      setTimeout(() => {
+        checkAuthentication()
+      }, 200)
     })
     
     onBeforeUnmount(() => {
@@ -121,6 +141,70 @@ export default {
       document.documentElement.style.backgroundColor = newValue ? '#121212' : '#f8f9fa'
       document.body.style.backgroundColor = newValue ? '#121212' : '#f8f9fa'
     })
+    
+    // Initialize loading spinner animation
+    const initSpinnerAnimation = () => {
+      if (!spinnerContainer.value) return;
+      
+      // Animate the spinner container
+      anime({
+        targets: spinnerContainer.value,
+        opacity: [0, 1],
+        translateY: ['-20px', '0px'],
+        duration: 800,
+        easing: 'easeOutExpo'
+      });
+      
+      // Animate the spinner circles
+      anime({
+        targets: '.spinner-circle',
+        scale: [0, 1],
+        opacity: [0, 1],
+        delay: anime.stagger(100, {start: 300}),
+        easing: 'easeOutExpo'
+      });
+      
+      // Pulsing animation for the text
+      anime({
+        targets: '.spinner-text',
+        opacity: [0.6, 1],
+        duration: 800,
+        direction: 'alternate',
+        loop: true,
+        easing: 'easeInOutSine'
+      });
+      
+      // Continuous rotation animation
+      anime({
+        targets: '.spinner',
+        rotate: '360deg',
+        duration: 2000,
+        loop: true,
+        easing: 'linear'
+      });
+      
+      // Interactive hover effect setup
+      const spinnerEl = document.querySelector('.spinner-container');
+      if (spinnerEl) {
+        spinnerEl.addEventListener('mouseenter', () => {
+          anime({
+            targets: '.spinner-circle',
+            scale: 1.2,
+            duration: 300,
+            easing: 'easeOutElastic(1, .5)'
+          });
+        });
+        
+        spinnerEl.addEventListener('mouseleave', () => {
+          anime({
+            targets: '.spinner-circle',
+            scale: 1,
+            duration: 500,
+            easing: 'easeOutElastic(1, .5)'
+          });
+        });
+      }
+    };
     
     // Methods
     const toggleTheme = () => {
@@ -252,9 +336,6 @@ export default {
     }
     
     const checkAuthentication = async () => {
-      // Add a loading state
-      const isChecking = ref(true);
-      
       try {
         console.log("Checking authentication status...")
         const response = await axios.get('/api/session');
@@ -265,13 +346,38 @@ export default {
           userRole.value = response.data.user.role;
           localStorage.setItem('userRole', response.data.user.role);
           
-          // Apply animations after login state is confirmed
-          setTimeout(() => {
-            animateControls();
-          }, 100);
+          // Animate loading spinner exit
+          anime({
+            targets: spinnerContainer.value,
+            translateY: [0, '-20px'],
+            opacity: [1, 0],
+            duration: 600,
+            easing: 'easeInOutExpo',
+            complete: () => {
+              // Set checking state to false only after animation completes
+              isCheckingAuth.value = false;
+              
+              // Apply animations after login state is confirmed
+              setTimeout(() => {
+                animateControls();
+              }, 100);
+            }
+          });
         } else {
           console.log("User is not logged in")
-          logout(false);
+          
+          // Animate loading spinner exit
+          anime({
+            targets: spinnerContainer.value,
+            translateY: [0, '-20px'],
+            opacity: [1, 0],
+            duration: 600,
+            easing: 'easeInOutExpo',
+            complete: () => {
+              logout(false);
+              isCheckingAuth.value = false;
+            }
+          });
         }
       } catch (error) {
         console.error('Authentication check failed:', error);
@@ -285,9 +391,18 @@ export default {
           toast.error("Could not verify login status. Please check your connection.");
         }
         
-        logout(false);
-      } finally {
-        isChecking.value = false;
+        // Animate loading spinner exit
+        anime({
+          targets: spinnerContainer.value,
+          translateY: [0, '-20px'],
+          opacity: [1, 0],
+          duration: 600,
+          easing: 'easeInOutExpo',
+          complete: () => {
+            logout(false);
+            isCheckingAuth.value = false;
+          }
+        });
       }
     };
     
@@ -368,12 +483,14 @@ export default {
     return {
       isDarkTheme,
       isLoggedIn,
+      isCheckingAuth,
       userRole,
       appContainer,
       themeToggle,
       sidebar,
       logoutButton,
       dashboardContainer,
+      spinnerContainer,
       showDebugInfo,
       toggleTheme,
       animateControls,
@@ -381,7 +498,8 @@ export default {
       handleLoginSuccess,
       logout,
       resetUserState,
-      handleResize
+      handleResize,
+      initSpinnerAnimation
     }
   }
 }
@@ -458,6 +576,61 @@ html, body {
   min-height: 100vh;
 }
 
+/* Loading overlay and spinner styles */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+}
+
+.spinner-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+}
+
+.spinner {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  transform-origin: center;
+  cursor: pointer;
+}
+
+.spinner-circle {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(calc(30deg * var(--i))) translateY(-60px);
+  transform-origin: center;
+  filter: drop-shadow(0 0 8px rgba(var(--primary-color-rgb), 0.8));
+  opacity: calc(1 - (var(--i) - 1) * 0.08);
+  will-change: transform, opacity;
+}
+
+.spinner-text {
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: var(--text-color);
+  text-align: center;
+  letter-spacing: 0.8px;
+  margin-top: 1rem;
+}
+
+/* Header controls */
 .header-controls {
   position: fixed;
   top: 1rem;
@@ -682,11 +855,37 @@ html, body {
     height: 2.5rem;
     padding: 0.6rem;
   }
+  
+  .spinner {
+    width: 120px;
+    height: 120px;
+  }
+  
+  .spinner-circle {
+    width: 12px;
+    height: 12px;
+    transform: translate(-50%, -50%) rotate(calc(30deg * var(--i))) translateY(-45px);
+  }
 }
 
 @media (max-width: 576px) {
   .content-area {
     padding: 0.5rem;
+  }
+  
+  .spinner {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .spinner-circle {
+    width: 10px;
+    height: 10px;
+    transform: translate(-50%, -50%) rotate(calc(30deg * var(--i))) translateY(-35px);
+  }
+  
+  .spinner-text {
+    font-size: 1rem;
   }
 }
 

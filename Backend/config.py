@@ -1,12 +1,16 @@
+# config.py
 from flask import Flask
 from extensions import db, migrate
 import os
 from dotenv import load_dotenv
+from flask_cors import CORS
+from utils.notifications import init_socketio
 
 load_dotenv()
 
 def create_app():
     app = Flask(__name__)
+    CORS(app, supports_credentials=True)
     
     # Configuration
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
@@ -16,6 +20,9 @@ def create_app():
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
+    
+    # Initialize Socket.IO with threading mode
+    socketio = init_socketio(app)
 
     from routes.auth_routes import auth_bp
     from routes.agent_routes import agent_bp
@@ -40,5 +47,9 @@ def create_app():
     app.register_blueprint(messaging_bp)
     app.register_blueprint(notification_bp)
     app.register_blueprint(telegram_bp)
+    
+    # Set up Socket.IO event handlers
+    from socket_events import register_socket_events
+    register_socket_events(socketio)
 
-    return app
+    return app, socketio

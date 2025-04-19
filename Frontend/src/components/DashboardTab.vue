@@ -2,32 +2,45 @@
   <section class="dashboard-tab">
     <div class="dashboard-header">
       <h2>Stream Dashboard</h2>
-      <div class="stats-container">
-        <StatCard 
-          v-for="stat in stats"
-          :key="stat.label"
-          :value="stat.value"
-          :label="stat.label"
-          :icon="stat.icon"
-        />
-      </div>
     </div>
 
-    <div class="stream-grid">
-      <StreamCard
-        v-for="(stream, index) in streams"
-        :key="stream.id"
-        :stream="stream"
-        :detection-count="getDetectionCount(stream)"
-        @click="openStream(stream, index)"
-        class="stream-card"
+    <!-- Stats section (separate container outside of the stream grid) -->
+    <div class="stats-section" ref="statsSection">
+      <StatCard 
+        v-for="(stat, index) in stats"
+        :key="stat.label"
+        :value="stat.value"
+        :label="stat.label"
+        :icon="stat.icon"
+        :index="index"
+        class="stat-card"
       />
+    </div>
+
+    <!-- Stream section with header -->
+    <div class="streams-section">
+      <div class="section-header">
+        <h3>Active Streams</h3>
+        <span class="stream-count">{{ streams.length }} streams</span>
+      </div>
+      
+      <div class="stream-grid">
+        <StreamCard
+          v-for="(stream, index) in streams"
+          :key="stream.id"
+          :stream="stream"
+          :detection-count="getDetectionCount(stream)"
+          :index="index"
+          @click="openStream(stream, index)"
+          class="stream-card"
+        />
+      </div>
     </div>
   </section>
 </template>
 
 <script>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import anime from 'animejs/lib/anime.es.js'
 import StatCard from './StatCard.vue'
 import StreamCard from './StreamCard.vue'
@@ -45,6 +58,8 @@ export default {
   },
   emits: ['open-stream'],
   setup(props, { emit }) {
+    const statsSection = ref(null);
+    
     const stats = computed(() => [
       { 
         value: props.dashboardStats.ongoing_streams, 
@@ -97,7 +112,7 @@ export default {
       
       // Animate stats cards with a staggered entrance
       anime({
-        targets: '.stats-container .stat-card',
+        targets: '.stat-card',
         opacity: [0, 1],
         translateY: [20, 0],
         scale: [0.9, 1],
@@ -106,13 +121,23 @@ export default {
         easing: 'easeOutElastic(1, .5)'
       })
       
+      // Animate streams section header
+      anime({
+        targets: '.section-header',
+        opacity: [0, 1],
+        translateY: [20, 0],
+        duration: 600,
+        delay: 400,
+        easing: 'easeOutExpo'
+      })
+      
       // Animate stream cards with a staggered entrance
       anime({
         targets: '.stream-card',
         opacity: [0, 1],
         translateY: [30, 0],
         scale: [0.95, 1],
-        delay: anime.stagger(80, {start: 800, from: 'center'}),
+        delay: anime.stagger(80, {start: 700, from: 'center'}),
         duration: 700,
         easing: 'easeOutCubic'
       })
@@ -120,6 +145,7 @@ export default {
     
     return {
       stats,
+      statsSection,
       getDetectionCount,
       openStream
     }
@@ -130,9 +156,8 @@ export default {
 <style scoped>
 .dashboard-tab {
   width: 100%;
-  margin: 0 auto;
+  padding: 1rem;
   box-sizing: border-box;
-  
 }
 
 .dashboard-header {
@@ -140,23 +165,70 @@ export default {
 }
 
 .dashboard-header h2 {
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.5rem;
   font-size: 2rem;
   color: var(--text-color);
   font-weight: 600;
   letter-spacing: -0.5px;
 }
 
-.stats-container {
+/* Stats section styling - separate from stream grid */
+.stats-section {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1.5rem;
-  margin-bottom: 2rem;
+  margin-bottom: 3rem; /* Increased spacing between stats and streams */
+  padding-bottom: 1.5rem;
+  position: relative;
+}
+
+/* Add a subtle separator between stats and streams */
+.stats-section::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--border-color, rgba(0, 0, 0, 0.1)),
+    transparent
+  );
+}
+
+/* Streams section styling */
+.streams-section {
+  padding-top: 0.5rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.section-header h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-color);
+  margin: 0;
+}
+
+.stream-count {
+  background-color: var(--primary-color, #3B82F6);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .stream-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
   perspective: 1000px;
 }
@@ -181,6 +253,14 @@ export default {
     padding: 1.25rem;
     overflow: hidden;
   }
+  
+  .stats-section {
+    gap: 1.25rem;
+  }
+  
+  .stream-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
 }
 
 @media (max-width: 992px) {
@@ -188,8 +268,8 @@ export default {
     padding: 1rem;
   }
   
-  .stats-container {
-    gap: 1.25rem;
+  .stats-section {
+    gap: 1rem;
   }
   
   .stream-grid {
@@ -207,9 +287,14 @@ export default {
     margin-bottom: 1.25rem;
   }
   
-  .stats-container {
+  .stats-section {
     grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  
+  .section-header h3 {
+    font-size: 1.3rem;
   }
   
   .stream-grid {
@@ -219,7 +304,7 @@ export default {
 }
 
 @media (max-width: 640px) {
-  .stats-container {
+  .stats-section {
     grid-template-columns: repeat(2, 1fr);
   }
 }
@@ -229,7 +314,7 @@ export default {
     padding: 0.5rem;
   }
   
-  .stats-container {
+  .stats-section {
     grid-template-columns: 1fr;
   }
   
@@ -240,6 +325,12 @@ export default {
   .dashboard-header h2 {
     font-size: 1.4rem;
     margin-bottom: 1rem;
+  }
+  
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
   }
 }
 </style>

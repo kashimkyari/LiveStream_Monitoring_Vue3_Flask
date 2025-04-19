@@ -12,6 +12,8 @@ import base64
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload
+from utils.notifications import emit_notification
+
 
 detection_bp = Blueprint('detection', __name__)
 detection_threads = {}  # Global variable
@@ -149,9 +151,21 @@ def advanced_detect():
                             "platform": "Chaturbate",
                             "streamer_name": stream.streamer_username if stream else "Unknown"
                         }
+
                     )
                     db.session.add(log_entry)
                     db.session.commit()
+                    notification_data = {
+                        "id": log_entry.id,
+                        "event_type": log_entry.event_type,
+                        "timestamp": log_entry.timestamp.isoformat(),
+                        "details": log_entry.details,
+                        "read": log_entry.read,
+                        "room_url": log_entry.room_url
+                    }
+
+                    # Emit notification
+                    emit_notification(notification_data)
                     return jsonify({"detections": detected}), 200
         
         # Handle JSON data

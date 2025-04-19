@@ -1056,27 +1056,23 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
                     raise RuntimeError(f"Database quantum flux error: {str(e)}")
 
             # PHASE 4: AGENT ASSIGNMENT - Connect stream to an agent if requested
+            stream_creation_jobs[job_id]["progress"] = 95
+            stream_creation_jobs[job_id]["message"] = "Finalizing stream creation..."
+            
             if agent_id:
                 update_with_phase('assignment', 20, "Establishing agent neural connection")
                 try:
-                    agent = User.query.get(agent_id)
-                    if not agent:
-                        raise ValueError("Agent not found in this timeline")
-                    
-                    # Show progress through micro-updates
-                    for i in range(progress_markers['assignment']['microsteps']):
-                        progress_pct = (i / progress_markers['assignment']['microsteps']) * 100
-                        update_with_phase('assignment', progress_pct)
-                        time.sleep(0.15)
-                    
-                    with db.session.begin():
-                        assignment = Assignment(
-                            agent_id=agent_id,
-                            stream_id=stream.id
-                        )
-                        db.session.add(assignment)
-                    
-                    update_with_phase('assignment', 100, "Agent-stream quantum entanglement established")
+                    with app.app_context():
+                        try:
+                            from models import Assignment
+                            assignment = Assignment(agent_id=agent_id, stream_id=stream.id)
+                            db.session.add(assignment)
+                            db.session.commit()
+                            update_with_phase('assignment', 100, "Stream created and assigned successfully.")
+                        except Exception as e:
+                            update_with_phase('assignment', 100, f"Stream created but assignment failed: {str(e)}")
+                            # Log the error but don't fail the stream creation
+                            logging.error(f"Assignment creation failed: {str(e)}")
                 except Exception as e:
                     raise RuntimeError(f"Assignment failed: {str(e)}")
             else:
@@ -1102,11 +1098,12 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
             except Exception as e:
                 logging.error("Notifications failed: %s", str(e))
                 update_with_phase('finalization', 95, "Notification subspace transmission jammed (non-critical)")
-
+            
             # Success! We're done!
             update_stream_job_progress(job_id, 100, "Stream successfully created and ready for observation")
             stream_creation_jobs[job_id].update({
                 'stream': stream.serialize(),
+                'stream_data': stream.serialize(),  # Added as per your request
                 'estimated_time': 0
             })
 
@@ -1133,7 +1130,6 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
             # Log completion metrics
             completion_time = time.time() - start_time
             logging.info(f"Stream creation job {job_id} completed in {completion_time:.2f} seconds")
-
 
 def send_telegram_notifications(platform, streamer, room_url):
     """Robust notification handler"""

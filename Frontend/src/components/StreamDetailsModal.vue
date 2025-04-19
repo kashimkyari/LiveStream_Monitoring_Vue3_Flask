@@ -8,9 +8,20 @@
         <h3>{{ stream.streamer_username }}</h3>
         <div class="stream-tags">
           <span class="tag platform">{{ stream.platform }}</span>
-          <span class="tag agent">
-            {{ (stream.assignments[0]?.agent?.username || 'Unassigned') }}
-          </span>
+          <!-- Updated agent tags to properly display usernames -->
+          <div class="agent-tags">
+            <span v-if="!hasAssignedAgents" class="tag agent unassigned">
+              Unassigned
+            </span>
+            <span 
+              v-for="assignment in stream.assignments" 
+              :key="assignment.id" 
+              class="tag agent"
+              v-tooltip="'Agent ID: ' + assignment.agent_id"
+            >
+              {{ getAgentUsername(assignment) }}
+            </span>
+          </div>
           <span class="tag stream-id">ID: {{ stream.id }}</span>
         </div>
       </div>
@@ -77,7 +88,7 @@
 <script>
 import Hls from 'hls.js'
 import anime from 'animejs'
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 
 export default {
   name: 'StreamDetailsModal',
@@ -101,6 +112,27 @@ export default {
     const videoPlayer = ref(null)
     const hls = ref(null)
     const isLoading = ref(true)
+    
+    // Computed property to check if there are any assigned agents
+    const hasAssignedAgents = computed(() => {
+      return props.stream.assignments && props.stream.assignments.length > 0;
+    })
+
+    // Helper function to get agent username from assignment
+    const getAgentUsername = (assignment) => {
+      // Check if agent username is directly available in assignment
+      if (assignment.agent_username) {
+        return assignment.agent_username;
+      }
+      
+      // Check if agent object is available
+      if (assignment.agent && assignment.agent.username) {
+        return assignment.agent.username;
+      }
+      
+      // Fallback to Unknown Agent with ID
+      return `Agent ${assignment.agent_id}`;
+    }
 
     const formatTime = (timestamp) => {
       return new Date(timestamp).toLocaleString('en-US', {
@@ -274,7 +306,9 @@ export default {
       handleRefresh,
       refreshError,
       videoPlayer,
-      isLoading
+      isLoading,
+      hasAssignedAgents,
+      getAgentUsername
     }
   }
 }
@@ -343,6 +377,13 @@ export default {
   gap: 8px;
   margin-top: 10px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.agent-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .tag {
@@ -361,6 +402,11 @@ export default {
 .tag.agent {
   background-color: rgba(40, 167, 69, 0.2);
   color: #28a745;
+}
+
+.tag.agent.unassigned {
+  background-color: rgba(108, 117, 125, 0.2);
+  color: #6c757d;
 }
 
 .tag.stream-id {

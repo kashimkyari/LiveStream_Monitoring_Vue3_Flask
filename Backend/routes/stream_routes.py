@@ -10,6 +10,8 @@ import uuid
 import threading
 from sqlalchemy.orm import joinedload
 import logging
+# Import the notification emitter
+from utils.notifications import emit_notification, emit_stream_update
 
 detection_threads = {}  # Moved here if needed
 
@@ -19,7 +21,6 @@ stream_bp = Blueprint('stream', __name__)
 # Stream Management Endpoints
 # --------------------------------------------------------------------
 @stream_bp.route("/api/streams", methods=["GET"])
-@login_required(role="admin")
 def get_streams():
     platform = request.args.get("platform", "").strip().lower()
     streamer = request.args.get("streamer", "").strip().lower()
@@ -41,6 +42,34 @@ def get_streams():
 @stream_bp.route("/api/streams", methods=["POST"])
 @login_required(role="admin")
 def create_stream():
+    # Inside the create_stream function within stream_routes.py
+    # After creating the DetectionLog entry:
+
+    # Prepare notification data for Socket.IO
+    detection_log_data = {
+        "id": detection_log.id,
+        "event_type": "stream_created",
+        "timestamp": detection_log.timestamp.isoformat(),
+        "details": detection_log.details,
+        "read": False,
+        "room_url": room_url,
+        "streamer": streamer_username,
+        "platform": platform.lower()
+    }
+
+    
+
+   
+
+    # Also emit stream update event
+    stream_data = {
+        "id": stream.id,
+        "type": stream.type,
+        "room_url": stream.room_url,
+        "streamer_username": stream.streamer_username,
+        "action": "created"
+    }
+    emit_stream_update(stream_data)
     data = request.get_json()
     room_url = data.get("room_url", "").strip().lower()
     platform = data.get("platform", "Chaturbate").strip()
@@ -80,6 +109,7 @@ def create_stream():
     db.session.add(stream)
     db.session.commit()
 
+
     # Log a new stream creation event in the notifications table.
     # Here, we log using the DetectionLog model with event_type "stream_created".
     from models import DetectionLog  # Ensure DetectionLog is imported from your models.
@@ -96,6 +126,8 @@ def create_stream():
     )
     db.session.add(detection_log)
     db.session.commit()
+    # Emit notification about new stream
+    emit_notification(detection_log_data)
 
     # Send Telegram alert to all recipients about the new stream.
     try:
@@ -325,6 +357,8 @@ def interactive_create_stream():
             "error": "server_error",
             "details": str(e)
         }), 500
+
+
 @stream_bp.route("/api/streams/interactive/sse")
 @login_required(role="admin")
 def stream_creation_sse():
@@ -425,6 +459,8 @@ def refresh_stripchat_stream(room_url):
     
     return scraped_data['stripchat_m3u8_url']
 @stream_bp.route("/api/streams/refresh/stripchat", methods=["POST"])
+
+
 @login_required(role="admin")
 def refresh_stripchat_route():
     data = request.get_json()

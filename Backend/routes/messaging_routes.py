@@ -1,9 +1,9 @@
-# routes/messaging_routes.py
 from flask import Blueprint, request, jsonify, session
 from extensions import db
 from models import ChatMessage, User
 from utils import login_required
 from datetime import datetime
+from utils.notifications import emit_message_update
 
 messaging_bp = Blueprint('messaging', __name__)
 
@@ -13,24 +13,54 @@ messaging_bp = Blueprint('messaging', __name__)
 @messaging_bp.route("/api/messages", methods=["POST"])
 @login_required()
 def send_message():
+    message_data = {
+        "id": new_message.id,
+        "sender_id": new_message.sender_id,
+        "receiver_id": new_message.receiver_id,
+        "message": new_message.message,
+        "timestamp": new_message.timestamp.isoformat(),
+        "is_system": new_message.is_system,
+        "read": new_message.read
+    }
     data = request.get_json()
     receiver_id = data.get("receiver_id")
     message_text = data.get("message")
+    attachment_id = data.get("attachment_id")
 
-    if not receiver_id or not message_text:
-        return jsonify({"error": "Missing required fields"}), 400
+    if hasattr(new_message, 'attachment_id') and new_message.attachment_id:
+        message_data["attachment_id"] = new_message.attachment_id
+
+
+    if not receiver_id:
+        return jsonify({"error": "Missing receiver_id"}), 400
+        
+    if not message_text and not attachment_id:
+        return jsonify({"error": "Message or attachment required"}), 400
 
     try:
         new_message = ChatMessage(
             sender_id=session["user_id"],
             receiver_id=receiver_id,
-            message=message_text,
-            timestamp=datetime.utcnow(),  # Fixed timestamp
-            is_system=False
+            message=message_text or "",
+            timestamp=datetime.utcnow(),
+            is_system=False,
+            read=False
         )
+        
+        # Link attachment if provided
+        if attachment_id:
+            attachment = MessageAttachment.query.get(attachment_id)
+            if attachment and attachment.user_id == session["user_id"]:
+                new_message.attachment_id = attachment_id
+            
         db.session.add(new_message)
         db.session.commit()
-        return jsonify(new_message.serialize()), 201
+        
+        # Serialize with attachment
+        result = new_message.serialize()
+        emit_message_update(message_data)
+        
+        return jsonify(result), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -87,4 +117,94 @@ def get_agent_messages(agent_id):
         
         return jsonify([message.serialize() for message in messages])
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@messaging_bp.route("/api/attachments/upload", methods=["POST"])
+@login_required()
+def upload_attachment():
+    """Upload a file attachment"""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+        
+    try:
+        # Get secure filename
+        filename = secure_filename(file.filename)
+        
+        # Generate unique filename
+        unique_filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{filename}"
+        
+        # Determine MIME type
+        mime_type = file.content_type or 'application/octet-stream'
+        
+        # Create uploads directory if it doesn't exist
+        uploads_dir = os.path.join(app.static_folder, 'uploads')
+        os.makedirs(uploads_dir, exist_ok=True)
+        
+        # Save file
+        file_path = os.path.join(uploads_dir, unique_filename)
+        file.save(file_path)
+        
+        # Create file record in database
+        attachment = MessageAttachment(
+            filename=filename,
+            path=f"/static/uploads/{unique_filename}",
+            mime_type=mime_type,
+            size=os.path.getsize(file_path),
+            user_id=session["user_id"]
+        )
+        
+        db.session.add(attachment)
+        db.session.commit()
+        
+        return jsonify({
+            "id": attachment.id,
+            "url": attachment.path,
+            "name": attachment.filename,
+            "type": attachment.mime_type,
+            "size": attachment.size
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@messaging_bp.route("/api/messages/<int:user_id>/unread-count", methods=["GET"])
+@login_required()
+def get_unread_count(user_id):
+    """Get count of unread messages from a specific user"""
+    current_user_id = session["user_id"]
+    
+    try:
+        count = ChatMessage.query.filter_by(
+            sender_id=user_id, 
+            receiver_id=current_user_id,
+            read=False
+        ).count()
+        
+        return jsonify({"count": count})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@messaging_bp.route("/api/messages/<int:message_id>/mark-read", methods=["PUT"])
+@login_required()
+def mark_message_read(message_id):
+    """Mark a single message as read"""
+    try:
+        # Find message and verify permissions
+        message = ChatMessage.query.get(message_id)
+        if not message:
+            return jsonify({"error": "Message not found"}), 404
+            
+        if message.receiver_id != session["user_id"]:
+            return jsonify({"error": "Unauthorized"}), 403
+            
+        message.read = True
+        db.session.commit()
+        
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500

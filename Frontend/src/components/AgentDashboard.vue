@@ -1,164 +1,144 @@
+<!-- Enhanced AgentDashboard.vue -->
 <template>
-  <div class="agent-app">
+  <div class="agent-container" ref="appContainer" :data-theme="isDarkTheme ? 'dark' : 'light'">
     <AgentSidebar 
       :activeTab="currentTab" 
       @tab-change="handleTabChange" 
       :isOnline="isOnline"
       :messageUnreadCount="stats.unreadMessages"
+      
     />
     
-    <div class="agent-dashboard" :class="{ 'with-sidebar': !isMobile }">
+    <div class="main-content" :class="{ 'sidebar-minimized': sidebarMinimized }" ref="mainContent">
       <div class="dashboard-header" ref="dashboardHeader">
-        <h1>{{ pageTitle }}</h1>
-        <div class="status-display">
-          <div class="status-badge" :class="{ online: isOnline }">
+        <h1 class="page-title" ref="pageTitle">{{ pageTitle }}</h1>
+        <div class="status-display" ref="statusDisplay">
+          <div class="status-badge" :class="{ online: isOnline }" ref="statusBadge">
+            <span class="status-dot"></span>
             {{ isOnline ? 'Online' : 'Offline' }}
           </div>
-          <span class="last-refresh">Last updated: {{ formattedLastRefresh }}</span>
-          <button @click="refreshDashboard" class="refresh-button" title="Refresh Dashboard">
+          <span class="last-refresh" ref="lastRefreshTime">Last updated: {{ formattedLastRefresh }}</span>
+          <button 
+            @click="refreshDashboard" 
+            class="refresh-button" 
+            title="Refresh Dashboard"
+            ref="refreshButton"
+          >
             <font-awesome-icon :icon="['fas', 'sync']" :class="{ 'rotate': isRefreshing }" />
           </button>
         </div>
       </div>
 
       <div class="dashboard-content" ref="dashboardContent">
-        <div v-if="currentTab === 'dashboard'" class="dashboard-grid" ref="dashboardGrid">
-          <!-- Stats Overview -->
-          <div class="dashboard-card stats-card" ref="statsCard">
-            <div class="card-header">
-              <h2>Monitoring Stats</h2>
-              <span class="card-period">Last 24 hours</span>
-            </div>
-            <div class="stats-container">
-              <div class="stat-item" v-for="(value, key, index) in stats" :key="key" :ref="el => { if (el) statItems[index] = el }">
-                <div class="stat-value">{{ value }}</div>
-                <div class="stat-label">{{ formatStatLabel(key) }}</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Recent Alerts -->
-          <div class="dashboard-card alerts-card" ref="alertsCard">
-            <div class="card-header">
-              <h2>Recent Alerts</h2>
-              <span class="view-all" @click="navigateToTab('notifications')">View All</span>
-            </div>
-            <div v-if="recentAlerts.length > 0">
-              <div v-for="(alert, index) in recentAlerts" :key="index" class="alert-item" :ref="el => { if (el) alertItems[index] = el }">
-                <div class="alert-icon" :class="alert.level">
-                  <font-awesome-icon :icon="getAlertIcon(alert.level)" />
-                </div>
-                <div class="alert-content">
-                  <div class="alert-title">{{ alert.title }}</div>
-                  <div class="alert-description">{{ alert.description }}</div>
-                  <div class="alert-time">{{ formatTimestamp(alert.timestamp) }}</div>
-                </div>
-              </div>
-            </div>
-            <div v-else class="empty-state">
-              <font-awesome-icon :icon="['fas', 'bell-slash']" class="empty-icon" />
-              <div class="empty-message">No recent alerts</div>
-            </div>
-          </div>
-
-          <!-- Active Streams -->
-          <div class="dashboard-card streams-card" ref="streamsCard">
-            <div class="card-header">
-              <h2>Active Streams</h2>
-              <span class="view-all" @click="navigateToTab('streams')">View All</span>
-            </div>
-            <div v-if="activeStreams.length > 0">
-              <div v-for="(stream, index) in activeStreams" :key="index" class="stream-item" :ref="el => { if (el) streamItems[index] = el }">
-                <div class="stream-preview">
-                  <div class="stream-status-indicator" :class="{ live: stream.isLive }"></div>
-                  <div class="stream-thumbnail"></div>
-                </div>
-                <div class="stream-content">
-                  <div class="stream-name">{{ stream.streamer_username || 'Unnamed Stream' }}</div>
-                  <div class="stream-location">{{ getPlatformName(stream.type) }}</div>
-                  <div class="stream-duration">{{ stream.assigned_agent ? `Agent: ${stream.assigned_agent}` : 'Unassigned' }}</div>
-                </div>
-              </div>
-            </div>
-            <div v-else class="empty-state">
-              <font-awesome-icon :icon="['fas', 'video-slash']" class="empty-icon" />
-              <div class="empty-message">No active streams</div>
-            </div>
-          </div>
-
-          <!-- Keywords Detection -->
-          <div class="dashboard-card keywords-card" ref="keywordsCard">
-            <div class="card-header">
-              <h2>Keywords Detection</h2>
-              <span class="card-count">{{ chatKeywords.length }} active</span>
-            </div>
-            <div class="keywords-container">
-              <div v-for="(keyword, index) in chatKeywords" :key="index" class="keyword-item" :ref="el => { if (el) keywordItems[index] = el }">
-                <div class="keyword-name">{{ keyword.keyword }}</div>
-                <div class="keyword-badge" :class="getPriorityClass(index)">
-                  {{ getPriorityLabel(index) }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Flagged Objects -->
-          <div class="dashboard-card objects-card" ref="objectsCard">
-            <div class="card-header">
-              <h2>Object Detection</h2>
-              <span class="card-count">{{ flaggedObjects.length }} active</span>
-            </div>
-            <div class="objects-container">
-              <div v-for="(object, index) in flaggedObjects" :key="index" class="object-item" :ref="el => { if (el) objectItems[index] = el }">
-                <div class="object-icon">
-                  <font-awesome-icon :icon="getObjectIcon(object.object_name)" />
-                </div>
-                <div class="object-name">{{ object.object_name }}</div>
-                <div class="object-badge" :class="getRandomConfidence()">
-                  {{ getRandomConfidence() }}%
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Telegram Recipients -->
-          <div class="dashboard-card telegram-card" ref="telegramCard">
-            <div class="card-header">
-              <h2>Telegram Recipients</h2>
-              <span class="card-count">{{ telegramRecipients.length }} active</span>
-            </div>
-            <div class="recipients-container">
-              <div v-for="(recipient, index) in telegramRecipients" :key="index" class="recipient-item" :ref="el => { if (el) recipientItems[index] = el }">
-                <div class="recipient-avatar"></div>
-                <div class="recipient-name">{{ recipient.telegram_username }}</div>
-                <div class="recipient-status" :class="recipient.active ? 'active' : 'inactive'">
-                  {{ recipient.active ? 'active' : 'inactive' }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <!-- Dashboard Tab (Overview) -->
+        <transition name="fade-slide" mode="out-in">
+          <AgentDashboardOverview 
+            v-if="currentTab === 'dashboard'" 
+            ref="dashboardGrid"
+            :stats="stats"
+            :recentAlerts="recentAlerts"
+            :activeStreams="activeStreams"
+            :chatKeywords="chatKeywords"
+            :flaggedObjects="flaggedObjects"
+            :telegramRecipients="telegramRecipients"
+            @navigate="navigateToTab"
+          />
+        </transition>
         
-        <!-- Other tabs content here -->
-        <div v-if="currentTab !== 'dashboard'" class="tab-content">
-          <div class="placeholder-content">
-            <div class="placeholder-icon">
-              <font-awesome-icon :icon="getTabIcon(currentTab)" />
+        <!-- Streams Tab -->
+        <transition name="fade-slide" mode="out-in">
+          <AgentStreamsComponent
+            v-if="currentTab === 'streams'"
+            :streams="validatedStreams"
+            :isLoading="isLoadingStreams"
+            :error="streamErrors"
+            :lastRefreshed="lastRefresh"
+            @refresh-streams="refreshStreams"
+            @update-stream="updateStreamStatus"
+          />
+        </transition>
+        
+        <!-- Tasks Tab -->
+        <transition name="fade-slide" mode="out-in">
+          <AgentTasksComponent
+            v-if="currentTab === 'tasks'"
+            :tasks="tasks"
+            @refresh-tasks="fetchTasks"
+            @complete-task="handleTaskComplete"
+          />
+        </transition>
+        
+        <!-- Notifications Tab -->
+        <transition name="fade-slide" mode="out-in">
+          <AgentNotificationsComponent
+            v-if="currentTab === 'notifications'"
+            :alerts="allAlerts"
+            @refresh-notifications="fetchAllLogs"
+            @mark-read="handleMarkNotificationRead"
+          />
+        </transition>
+        
+        <!-- Messages Tab -->
+        <transition name="fade-slide" mode="out-in">
+          <AgentMessageComponent 
+            v-if="currentTab === 'messages'"
+            :currentUser="user" 
+            @refresh-messages="handleMessagesRefresh"
+          />
+        </transition>
+      </div>
+      
+      
+      
+      <!-- Quick navigation menu -->
+      <transition name="fade-scale">
+        <div class="quick-nav-menu" v-if="showQuickNav" ref="quickNavMenu">
+          <div class="quick-nav-header">
+            <h3>Quick Navigation</h3>
+            <button class="close-btn" @click="toggleQuickNav">
+              <font-awesome-icon :icon="['fas', 'times']" />
+            </button>
+          </div>
+          <div class="quick-nav-items">
+            <div 
+              v-for="(tab, index) in navTabs" 
+              :key="tab.id"
+              class="quick-nav-item"
+              :class="{ 'active': currentTab === tab.id }"
+              @click="quickNavTo(tab.id)"
+              :data-index="index"
+              ref="navItems"
+            >
+              <font-awesome-icon :icon="tab.icon" />
+              <span>{{ tab.label }}</span>
+              <div class="badge" v-if="getBadgeCount(tab.id) > 0">{{ getBadgeCount(tab.id) }}</div>
             </div>
-            <h2>{{ getTabTitle(currentTab) }}</h2>
-            <p>This tab content is under development</p>
           </div>
         </div>
-      </div>
+      </transition>
+      
+      <!-- Action feedback tooltip -->
+      <transition name="fade">
+        <div class="action-tooltip" v-if="showTooltip" ref="tooltip" :style="tooltipStyle">
+          {{ tooltipText }}
+        </div>
+      </transition>
     </div>
+    
+    <!-- Theme toggle button removed - now using App.vue's theme toggle -->
   </div>
 </template>
 
 <script>
-import { ref, computed, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, nextTick, onBeforeUnmount, watch, provide, inject } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import AgentSidebar from './AgentSidebar.vue'
+import AgentDashboardOverview from './AgentDashboardOverview.vue'
+import AgentStreamsComponent from './AgentStreamsComponent.vue'
+import AgentTasksComponent from './AgentTasksComponent.vue'
+import AgentNotificationsComponent from './AgentNotificationsComponent.vue'
+import AgentMessageComponent from './AgentMessageComponent.vue'
 import anime from 'animejs/lib/anime.es.js'
 import axios from 'axios'
 import {
@@ -181,7 +161,15 @@ import {
   faClipboardList,
   faBell,
   faComments,
-  faBox
+  faBox,
+  faPlayCircle,
+  faCheck,
+  faCheckDouble,
+  faClipboardCheck,
+  faBars,
+  faTimes,
+  faSun,
+  faMoon
 } from '@fortawesome/free-solid-svg-icons'
 
 library.add(
@@ -204,14 +192,27 @@ library.add(
   faClipboardList,
   faBell,
   faComments,
-  faBox
+  faBox,
+  faPlayCircle,
+  faCheck,
+  faCheckDouble,
+  faClipboardCheck,
+  faBars,
+  faTimes,
+  faSun,
+  faMoon
 )
 
 export default {
   name: 'AgentDashboard',
   components: {
     FontAwesomeIcon,
-    AgentSidebar
+    AgentSidebar,
+    AgentDashboardOverview,
+    AgentStreamsComponent,
+    AgentTasksComponent,
+    AgentNotificationsComponent,
+    AgentMessageComponent
   },
   props: {
     isOnline: {
@@ -220,12 +221,56 @@ export default {
     }
   },
   setup() {
+    // Inject theme from App.vue
+    const appTheme = inject('theme', ref(true))
+    
+    // Create a computed property for isDarkTheme to match App.vue's naming
+    const isDarkTheme = computed(() => appTheme.value === true)
+    
     // State variables
+    const user = ref(null)
     const lastRefresh = ref(new Date())
     const isRefreshing = ref(false)
     const currentTab = ref('dashboard')
     const isMobile = ref(window.innerWidth <= 768)
     const refreshInterval = ref(null)
+    const showQuickNav = ref(false)
+    const sidebarMinimized = ref(false)
+    
+    // Tooltip state
+    const showTooltip = ref(false)
+    const tooltipText = ref('')
+    const tooltipStyle = ref({})
+    const tooltipTimeout = ref(null)
+    
+    // Navigation tabs
+    const navTabs = [
+      { id: 'dashboard', label: 'Dashboard', icon: ['fas', 'tachometer-alt'] },
+      { id: 'streams', label: 'Streams', icon: ['fas', 'video'] },
+      { id: 'tasks', label: 'Tasks', icon: ['fas', 'clipboard-list'] },
+      { id: 'notifications', label: 'Notifications', icon: ['fas', 'bell'] },
+      { id: 'messages', label: 'Messages', icon: ['fas', 'comments'] }
+    ]
+    
+    // Animation refs
+    const appContainer = ref(null)
+    const sidebar = ref(null)
+    const mainContent = ref(null)
+    const dashboardHeader = ref(null)
+    const dashboardContent = ref(null)
+    const dashboardGrid = ref(null)
+    const statusDisplay = ref(null)
+    const statusBadge = ref(null)
+    const lastRefreshTime = ref(null)
+    const refreshButton = ref(null)
+    const quickNavButton = ref(null)
+    const quickNavMenu = ref(null)
+    const navItems = ref([])
+    const tooltip = ref(null)
+    const themeToggle = ref(null)
+    
+    // Re-provide app theme to child components
+    provide('appTheme', appTheme)
     
     // Data states
     const stats = ref({
@@ -235,1211 +280,1979 @@ export default {
       unreadMessages: 0
     })
     
+    // Stream-specific states
+    const allStreams = ref([])
+    const validatedStreams = ref([])
+    const isLoadingStreams = ref(false)
+    const streamErrors = ref(null)
+    const streamRefreshTimer = ref(null)
+    
     const recentAlerts = ref([])
     const activeStreams = ref([])
     const chatKeywords = ref([])
     const flaggedObjects = ref([])
     const telegramRecipients = ref([])
+    const tasks = ref([])
+    const allAlerts = ref([])
     
     // Error handling
     const errors = ref({})
     
-    // Refs for animation
-    const dashboardHeader = ref(null)
-    const dashboardContent = ref(null)
-    const dashboardGrid = ref(null)
-    const statsCard = ref(null)
-    const alertsCard = ref(null)
-    const streamsCard = ref(null)
-    const keywordsCard = ref(null)
-    const objectsCard = ref(null)
-    const telegramCard = ref(null)
-    const statItems = ref([])
-    const alertItems = ref([])
-    const streamItems = ref([])
-    const keywordItems = ref([])
-    const objectItems = ref([])
-    const recipientItems = ref([])
+    // Page title based on current tab
+    const pageTitle = computed(() => {
+      switch (currentTab.value) {
+        case 'dashboard':
+          return 'Dashboard'
+        case 'streams':
+          return 'Assigned Streams'
+        case 'tasks':
+          return 'Tasks'
+        case 'notifications':
+          return 'Notifications'
+        case 'messages':
+          return 'Messages'
+        default:
+          return 'Dashboard'
+      }
+    })
     
-    // Fetch all the data for dashboard
+    // Format the last refresh time
+    const formattedLastRefresh = computed(() => {
+      return lastRefresh.value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    })
+    
+    // Get badge count by tab
+    const getBadgeCount = (tabId) => {
+      switch (tabId) {
+        case 'streams':
+          return stats.value.activeStreams
+        case 'tasks':
+          return stats.value.pendingTasks
+        case 'notifications':
+          return stats.value.flaggedEvents
+        case 'messages':
+          return stats.value.unreadMessages
+        default:
+          return 0
+      }
+    }
+    
+    // Theme toggle function removed - using App.vue's toggle instead
+    
+    // Toggle quick navigation menu
+    const toggleQuickNav = () => {
+      showQuickNav.value = !showQuickNav.value
+      
+      if (showQuickNav.value) {
+        // Animate menu items entrance
+        nextTick(() => {
+          if (navItems.value && navItems.value.length) {
+            anime({
+              targets: navItems.value,
+              translateX: [-20, 0],
+              opacity: [0, 1],
+              delay: anime.stagger(70),
+              easing: 'easeOutQuad',
+              duration: 500
+            })
+          }
+        })
+      }
+    }
+    
+    // Navigate using quick nav
+    const quickNavTo = (tabId) => {
+      handleTabChange(tabId)
+      showQuickNav.value = false
+    }
+    
+    // Show tooltip message
+    const showTooltipMessage = (message, duration = 2000) => {
+      // Clear any existing timeout
+      if (tooltipTimeout.value) clearTimeout(tooltipTimeout.value)
+      
+      tooltipText.value = message
+      
+      // Position near the refresh button
+      if (refreshButton.value) {
+        const btnRect = refreshButton.value.getBoundingClientRect()
+        tooltipStyle.value = {
+          top: `${btnRect.bottom + 10}px`,
+          right: `20px`
+        }
+      } else {
+        tooltipStyle.value = {
+          top: '20%',
+          right: '20px'
+        }
+      }
+      
+      showTooltip.value = true
+      
+      // Animate tooltip
+      nextTick(() => {
+        if (tooltip.value) {
+          anime({
+            targets: tooltip.value,
+            translateY: ['-10px', '0px'],
+            opacity: [0, 1],
+            duration: 300,
+            easing: 'easeOutQuad'
+          })
+        }
+      })
+      
+      // Hide after duration
+      tooltipTimeout.value = setTimeout(() => {
+        if (tooltip.value) {
+          anime({
+            targets: tooltip.value,
+            translateY: ['0px', '-10px'],
+            opacity: [1, 0],
+            duration: 300,
+            easing: 'easeInQuad',
+            complete: () => {
+              showTooltip.value = false
+            }
+          })
+        } else {
+          showTooltip.value = false
+        }
+      }, duration)
+    }
+    
+    // Check if the device is mobile
+    const checkMobile = () => {
+      isMobile.value = window.innerWidth <= 768
+    }
+    
+    // Handle sidebar toggle with animations (matches AdminDashboard approach)
+   
+    
+    // Handle tab change with animation
+    const handleTabChange = (tab) => {
+      // Store previous tab for cleanup
+      const previousTab = currentTab.value
+      
+      // Update current tab
+      currentTab.value = tab
+      
+      // If leaving streams tab, stop any stream refresh interval
+      if (previousTab === 'streams' && tab !== 'streams') {
+        if (streamRefreshTimer.value) {
+          clearInterval(streamRefreshTimer.value)
+          streamRefreshTimer.value = null
+        }
+      }
+      
+      // If entering streams tab, load streams if needed and start refresh timer
+      if (tab === 'streams') {
+        // Load streams if we don't have any yet
+        if (validatedStreams.value.length === 0 && !isLoadingStreams.value) {
+          loadStreamData()
+        }
+        
+        // Start auto-refresh timer for streams
+        startStreamRefreshTimer()
+      }
+      
+      // Wait for tab to be rendered before animating
+      nextTick(() => {
+        // Animate the page title
+        if (pageTitle.value) {
+          anime({
+            targets: pageTitle.value,
+            translateX: [20, 0],
+            opacity: [0, 1],
+            duration: 500,
+            easing: 'easeOutQuad'
+          })
+        }
+        
+        // Run tab-specific animations
+        if (tab === 'dashboard') {
+          animateDashboardEntrance()
+        } else if (tab === 'streams') {
+          animateTabEntrance()
+        } else if (tab === 'tasks') {
+          animateTabEntrance()
+        } else if (tab === 'notifications') {
+          animateTabEntrance()
+        } else if (tab === 'messages') {
+          animateTabEntrance()
+        }
+      })
+    }
+    
+    // Enhanced tab entrance animation
+    const animateTabEntrance = () => {
+      // Animate header elements with more fluidity
+      if (dashboardHeader.value) {
+        // Staggered entrance for header elements
+        anime({
+          targets: [statusBadge.value, lastRefreshTime.value, refreshButton.value],
+          translateY: ['-20px', 0],
+          opacity: [0, 1],
+          delay: anime.stagger(100),
+          duration: 600,
+          easing: 'spring(1, 80, 10, 0)'
+        })
+        
+        // Highlight animation for active elements
+        anime({
+          targets: dashboardHeader.value,
+          boxShadow: [
+            '0 0 0 rgba(0, 123, 255, 0)',
+            '0 0 15px rgba(0, 123, 255, 0.3)',
+            '0 0 0 rgba(0, 123, 255, 0)'
+          ],
+          duration: 1500,
+          easing: 'easeOutQuad'
+        })
+      }
+      
+      // Find and animate any table elements if present
+      const table = dashboardContent.value.querySelector('table')
+      if (table) {
+        // Animate table rows with staggered entrance
+        anime({
+          targets: table.querySelectorAll('tbody tr'),
+          translateX: ['-20px', 0],
+          opacity: [0, 1],
+          backgroundColor: [
+            'rgba(0, 123, 255, 0.1)',
+            'rgba(0, 123, 255, 0)'
+          ],
+          delay: anime.stagger(50),
+          duration: 800,
+          easing: 'easeOutQuad'
+        })
+        
+        // Bounce in effect for table headers
+        anime({
+          targets: table.querySelectorAll('th'),
+          translateY: ['-15px', 0],
+          opacity: [0, 1],
+          delay: anime.stagger(80),
+          duration: 700,
+          easing: 'easeOutElastic(1, .6)'
+        })
+      }
+      
+      // Animate any cards or sections within the tab
+      const sections = dashboardContent.value.querySelectorAll('.section, .card')
+      if (sections.length) {
+        anime({
+          targets: sections,
+          scale: [0.95, 1],
+          opacity: [0, 1],
+          translateY: ['20px', 0],
+          delay: anime.stagger(120),
+          duration: 700,
+          easing: 'easeOutExpo'
+        })
+      }
+    }
+    
+    // Enhanced dashboard entrance with spectacular animations
+    const animateDashboardEntrance = () => {
+      // Animate dashboard grid using advanced staggered animations
+      if (dashboardGrid.value && dashboardGrid.value.$el) {
+        // Create an initial wave effect across the entire dashboard
+        anime({
+          targets: dashboardGrid.value.$el,
+          backgroundColor: [
+            'rgba(0, 123, 255, 0.05)',
+            'rgba(0, 123, 255, 0)'
+          ],
+          duration: 1200,
+          easing: 'easeOutQuad'
+        });
+        
+        // Get all the card elements in the dashboard
+        const cards = dashboardGrid.value.$el.querySelectorAll('.dashboard-card')
+        if (cards && cards.length) {
+          // Create a ripple effect from center
+          anime({
+            targets: cards,
+            scale: [0.8, 1],
+            translateY: [30, 0],
+            opacity: [0, 1],
+            rotateX: ['5deg', '0deg'],
+            boxShadow: [
+              '0 0 0 rgba(0,0,0,0)',
+              '0 10px 25px rgba(0,0,0,0.1)'
+            ],
+            delay: anime.stagger(80, {grid: [2, Math.ceil(cards.length/2)], from: 'center'}),
+            easing: 'easeOutExpo',
+            duration: 800
+          });
+          
+          // Add subtle continuous hover animation to cards
+          cards.forEach(card => {
+            card.addEventListener('mouseenter', () => {
+              anime({
+                targets: card,
+                translateY: -8,
+                boxShadow: '0 15px 30px rgba(0,0,0,0.15)',
+                duration: 400,
+                easing: 'easeOutCubic'
+              });
+            });
+            
+            card.addEventListener('mouseleave', () => {
+              anime({
+                targets: card,
+                translateY: 0,
+                boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+                duration: 500,
+                easing: 'easeOutElastic(1, .5)'
+              });
+            });
+          });
+        }
+        
+        // Animate specific sections within each card with sequence
+        const cardHeaders = dashboardGrid.value.$el.querySelectorAll('.card-header')
+        if (cardHeaders && cardHeaders.length) {
+          anime({
+            targets: cardHeaders,
+            translateX: ['-30px', 0],
+            opacity: [0, 1],
+            delay: anime.stagger(70),
+            easing: 'easeOutQuint',
+            duration: 700,
+            endDelay: 200
+          });
+        }
+        
+        // Find and animate any chart containers with scaling effect
+        const chartContainers = dashboardGrid.value.$el.querySelectorAll('.chart-container, canvas')
+        if (chartContainers.length) {
+          anime({
+            targets: chartContainers,
+            scale: [0.7, 1],
+            opacity: [0, 1],
+            delay: anime.stagger(150, {start: 300}),
+            duration: 800,
+            easing: 'easeOutElastic(1, .6)'
+          });
+        }
+        
+        // Animate stat counters with counting effect and text highlighting
+        const statValues = dashboardGrid.value.$el.querySelectorAll('.stat-value')
+        if (statValues && statValues.length) {
+          // First make them visible with scaling
+          anime({
+            targets: statValues,
+            scale: [0.5, 1],
+            opacity: [0, 1],
+            delay: anime.stagger(150, {start: 400}),
+            duration: 800,
+            easing: 'easeOutElastic(1, .5)'
+          });
+          
+          // Then animate the counting
+          setTimeout(() => {
+            anime({
+              targets: statValues,
+              innerHTML: [0, el => el.innerHTML],
+              round: 1,
+              easing: 'easeInOutExpo',
+              duration: 2000,
+              delay: anime.stagger(100)
+            });
+          }, 500);
+          
+          // Add pulse highlight to emphasize important stats
+          anime({
+            targets: statValues,
+            color: [
+              'rgba(0, 123, 255, 1)',
+              'rgba(33, 37, 41, 1)'
+            ],
+            delay: 1500,
+            duration: 1500,
+            easing: 'easeOutQuad'
+          });
+        }
+        
+        // Enhance alert/notification items with sequential fade in
+        const alertItems = dashboardGrid.value.$el.querySelectorAll('.alert-item, .notification-item')
+        if (alertItems.length) {
+          anime({
+            targets: alertItems,
+            translateX: ['-20px', 0],
+            opacity: [0, 1],
+            delay: anime.stagger(80, {start: 600}),
+            duration: 600,
+            easing: 'easeOutCubic'
+          });
+        }
+      }
+    }
+    
+    // Enhanced tab navigation with fluid transition effects
+    const navigateToTab = (tab) => {
+      // Store current tab content for transition
+      const currentTabEl = dashboardContent.value.querySelector(':scope > *:not(.action-tooltip):not(.quick-nav-menu)');
+      
+      if (!currentTabEl) {
+        // If no current tab content, just switch
+        handleTabChange(tab);
+        return;
+      }
+      
+      // Create an impressive transition effect
+      
+      // 1. First, prepare the content for exit animation
+      anime({
+        targets: currentTabEl,
+        translateX: [0, -30],
+        opacity: [1, 0],
+        filter: ['blur(0px)', 'blur(5px)'],
+        duration: 400,
+        easing: 'easeInOutQuad',
+        complete: () => {
+          // 2. Change the tab
+          handleTabChange(tab);
+          
+          // 3. When the new tab is rendered, animate it in
+          nextTick(() => {
+            const newTabEl = dashboardContent.value.querySelector(':scope > *:not(.action-tooltip):not(.quick-nav-menu)');
+            if (newTabEl) {
+              // Create page transition reveal effect
+              anime.set(newTabEl, {
+                translateX: 50,
+                opacity: 0,
+                filter: 'blur(5px)'
+              });
+              
+              // Ripple effect on background during tab change
+              const ripple = document.createElement('div');
+              ripple.className = 'tab-change-ripple';
+              ripple.style.position = 'absolute';
+              ripple.style.top = '50%';
+              ripple.style.left = '50%';
+              ripple.style.transform = 'translate(-50%, -50%) scale(0)';
+              ripple.style.width = '10px';
+              ripple.style.height = '10px';
+              ripple.style.borderRadius = '50%';
+              ripple.style.backgroundColor = 'rgba(0, 123, 255, 0.1)';
+              ripple.style.zIndex = '-1';
+              
+              dashboardContent.value.appendChild(ripple);
+              
+              // Animate the ripple
+              anime({
+                targets: ripple,
+                scale: 100,
+                opacity: [0.5, 0],
+                duration: 800,
+                easing: 'easeOutQuad',
+                complete: () => {
+                  dashboardContent.value.removeChild(ripple);
+                }
+              });
+              
+              // Animate the new tab content
+              anime({
+                targets: newTabEl,
+                translateX: [50, 0],
+                opacity: [0, 1],
+                filter: ['blur(5px)', 'blur(0px)'],
+                duration: 600,
+                delay: 150,
+                easing: 'easeOutQuint'
+              });
+              
+              // Enhance the page title for new tab
+              anime({
+                targets: pageTitle.value,
+                translateY: ['-20px', 0],
+                opacity: [0, 1],
+                duration: 800,
+                easing: 'easeOutElastic(1, .5)'
+              });
+            }
+          });
+        }
+      });
+    }
+    
+    // Fetch current user information
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await axios.get('/api/me')
+        user.value = response.data
+      } catch (error) {
+        console.error('Error fetching user data:', error)
+      }
+    }
+    
+    // Check if m3u8 URL returns a video stream
+    const checkM3u8Status = async (url) => {
+      if (!url) return false
+      
+      try {
+        // HTTP HEAD request to check if the URL exists without downloading content
+        const response = await axios.head(url, { 
+          timeout: 5000,
+          validateStatus: status => status !== 404 // Accept any status except 404
+        })
+        return response.status >= 200 && response.status < 400
+      } catch (err) {
+        console.log(`M3u8 URL not available (network error): ${url}`)
+        // Mark as offline if we get a network error
+        return false
+      }
+    }
+    
+    // Get m3u8 URL for a stream
+    const getStreamM3u8Url = (stream) => {
+      if (!stream) return null
+      
+      const platform = (stream.platform || '').toLowerCase()
+      if (platform === 'chaturbate' && stream.chaturbate_m3u8_url) {
+        return stream.chaturbate_m3u8_url
+      } else if (platform === 'stripchat' && stream.stripchat_m3u8_url) {
+        return stream.stripchat_m3u8_url
+      }
+      return null
+    }
+    
+    // Validate stream status by checking m3u8 URL
+    const validateStreamStatus = async (streamsList) => {
+      const validatedStreams = [...streamsList]
+      const statusCheckPromises = []
+      
+      for (let i = 0; i < validatedStreams.length; i++) {
+        const currentStream = validatedStreams[i]
+        const m3u8Url = getStreamM3u8Url(currentStream)
+        
+        // Create a promise for each stream to check its status
+        const statusPromise = async () => {
+          try {
+            if (m3u8Url) {
+              currentStream.isLive = await checkM3u8Status(m3u8Url)
+            } else {
+              currentStream.isLive = false
+            }
+          } catch (err) {
+            // If there's any error during validation, mark the stream as offline
+            console.error(`Error validating stream status for ${currentStream.id}:`, err)
+            currentStream.isLive = false
+          }
+          return currentStream
+        }
+        
+        statusCheckPromises.push(statusPromise())
+      }
+      
+      // Wait for all status checks to complete
+      return Promise.all(statusCheckPromises)
+    }
+    
+    // Update a single stream's status with animation feedback
+    const updateStreamStatus = async (streamId) => {
+      try {
+        const streamIndex = validatedStreams.value.findIndex(s => s.id === streamId)
+        if (streamIndex === -1) return
+        
+        // Get updated stream data
+        const response = await axios.get(`/api/streams/${streamId}`)
+        if (response.data) {
+          const updatedStream = response.data
+          
+          // Check m3u8 URL status
+          const m3u8Url = getStreamM3u8Url(updatedStream)
+          try {
+            updatedStream.isLive = m3u8Url ? await checkM3u8Status(m3u8Url) : false
+          } catch (error) {
+            console.error('Network error checking stream status:', error)
+            updatedStream.isLive = false
+          }
+          
+          // Fetch detections
+          try {
+            const detectionsResponse = await axios.get(`/api/streams/${streamId}/detections`)
+            updatedStream.detections = detectionsResponse.data || []
+          } catch (detErr) {
+            console.error(`Error fetching detections for stream ${streamId}:`, detErr)
+            updatedStream.detections = []
+          }
+          
+          // Update the stream in the list
+          validatedStreams.value[streamIndex] = updatedStream
+          
+          // Show feedback
+          showTooltipMessage(`Stream ${updatedStream.title || streamId} updated`)
+        }
+      } catch (err) {
+        console.error('Error updating stream status:', err)
+        showTooltipMessage('Error updating stream', 3000)
+      }
+    }
+    
+    // Start auto-refresh timer for streams with animation
+    const startStreamRefreshTimer = () => {
+      // Clear existing timer if any
+      if (streamRefreshTimer.value) {
+        clearInterval(streamRefreshTimer.value)
+      }
+      
+      // Set up new refresh timer (every 5 minutes)
+      streamRefreshTimer.value = setInterval(() => {
+        if (currentTab.value === 'streams') {
+          refreshStreams()
+          
+          // Animate refresh button when auto-refresh triggers
+          if (refreshButton.value) {
+            anime({
+              targets: refreshButton.value,
+              rotate: '360deg',
+              scale: [1, 1.2, 1],
+              duration: 1000,
+              easing: 'easeInOutBack'
+            })
+          }
+        }
+      }, 5 * 60 * 1000) // 5 minutes
+    }
+    
+    // Load all streams and validate their status with loading animation
+    const loadStreamData = async () => {
+      if (isLoadingStreams.value) return
+      
+      isLoadingStreams.value = true
+      streamErrors.value = null
+      
+      // Animate refresh button during loading
+      if (refreshButton.value) {
+        anime({
+          targets: refreshButton.value,
+          rotate: '360deg',
+          loop: true,
+          duration: 1000,
+          easing: 'linear'
+        })
+      }
+      
+      try {
+        // Get all streams
+        const response = await axios.get('/api/streams')
+        const allStreamsData = response.data || []
+        
+        // Store all streams
+        allStreams.value = allStreamsData
+        
+        // Filter streams assigned to current user
+        const assignedStreams = allStreamsData.filter(stream => {
+          if (!stream.assignments || !Array.isArray(stream.assignments)) {
+            return false
+          }
+          
+          return stream.assignments.some(assignment => {
+            return Number(assignment.agent_id) === Number(user.value?.id)
+          })
+        })
+        
+        // Validate each stream's status
+        const validated = await validateStreamStatus(assignedStreams)
+        
+        // Fetch detections for each stream
+        for (const stream of validated) {
+          try {
+            const detectionsResponse = await axios.get(`/api/streams/${stream.id}/detections`)
+            stream.detections = detectionsResponse.data || []
+          } catch (detErr) {
+            console.error(`Error fetching detections for stream ${stream.id}:`, detErr)
+            stream.detections = []
+          }
+        }
+        
+        // Update validated streams
+        validatedStreams.value = validated
+        
+        // Update stats
+        stats.value.activeStreams = validated.filter(s => s.isLive).length
+        
+        // Update last refresh time
+        lastRefresh.value = new Date()
+        
+        // Show success feedback
+        showTooltipMessage(`${validated.length} streams loaded`)
+        
+      } catch (err) {
+        console.error('Error loading streams:', err)
+        streamErrors.value = err.response?.data?.message || 'Failed to load streams. Please try again.'
+        
+        // Show error feedback
+        showTooltipMessage('Error loading streams', 3000)
+      } finally {
+        isLoadingStreams.value = false
+        
+        // Stop refresh button animation
+        if (refreshButton.value) {
+          anime.remove(refreshButton.value)
+          // Reset rotation
+          anime({
+            targets: refreshButton.value,
+            rotate: '0deg',
+            duration: 300,
+            easing: 'easeOutQuad'
+          })
+        }
+      }
+    }
+    
+    // Refresh streams data with animation
+    const refreshStreams = async () => {
+      if (isLoadingStreams.value) return
+      
+      isRefreshing.value = true
+      
+      // Animate refresh button
+      if (refreshButton.value) {
+        anime({
+          targets: refreshButton.value,
+          rotate: '360deg',
+          scale: [1, 1.2, 1],
+          duration: 1000,
+          easing: 'easeInOutQuad'
+        })
+      }
+      
+      await loadStreamData()
+      isRefreshing.value = false
+    }
+    
+    // Fetch all the data for dashboard with loading animation
     const fetchDashboardData = async () => {
+      isRefreshing.value = true
+      
+      // Animate refresh
+      if (refreshButton.value) {
+        anime({
+          targets: refreshButton.value,
+          rotate: '360deg',
+          scale: [1, 1.2, 1],
+          duration: 1000,
+          easing: 'easeInOutQuad'
+        })
+      }
+      
       try {
         await Promise.all([
           fetchKeywords(),
           fetchObjects(),
           fetchTelegramRecipients(),
           fetchActiveStreams(),
-          fetchRecentLogs()
+          fetchRecentLogs(),
+          fetchTasks(),
+          fetchUnreadMessageCount()
         ])
         
         // Update stats based on retrieved data
         updateStats()
+        
+        // Show success feedback
+        showTooltipMessage('Dashboard updated')
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
-      }
-    }
-    
-    // Fetch keywords from API - updated to use real endpoint
-   // Update these functions to use the correct endpoints
-const fetchKeywords = async () => {
-  try {
-    const response = await axios.get('/api/agent/keywords')
-    chatKeywords.value = response.data
-  } catch (error) {
-    console.error('Error fetching keywords:', error)
-    errors.value.keywords = 'Failed to fetch keywords'
-    chatKeywords.value = []
-  }
-}
-
-const fetchObjects = async () => {
-  try {
-    const response = await axios.get('/api/agent/objects')
-    flaggedObjects.value = response.data
-  } catch (error) {
-    console.error('Error fetching objects:', error)
-    errors.value.objects = 'Failed to fetch objects'
-    flaggedObjects.value = []
-  }
-}
-
-const fetchTelegramRecipients = async () => {
-  try {
-    const response = await axios.get('/api/agent/telegram_recipients')
-    telegramRecipients.value = response.data
-  } catch (error) {
-    console.error('Error fetching telegram recipients:', error)
-    errors.value.telegram = 'Failed to fetch recipients'
-    telegramRecipients.value = []
-  }
-}
-
-const fetchRecentLogs = async () => {
-  try {
-    const response = await axios.get('/api/logs')
-    
-    recentAlerts.value = response.data.map(log => {
-      console.log(log)
-    }).slice(0, 5)
-  } catch (error) {
-    console.error('Error fetching recent logs:', error)
-    errors.value.logs = 'Failed to fetch recent alerts'
-    recentAlerts.value = []
-  }
-}
-    // Fetch active streams - we need to create this endpoint
-   const fetchActiveStreams = async () => {
-  try {
-    const response = await axios.get('/api/agent/dashboard')
-    activeStreams.value = response.data.assignments
-      .filter(a => a.stream) // Ensure stream exists
-      .map(assignment => ({
-        ...assignment.stream,
-        isLive: true, // Assume streams are live
-        assigned_agent: 'You' // Since these are agent's own assignments
-      }))
-  } catch (error) {
-    console.error('Error fetching active streams:', error)
-    errors.value.streams = 'Failed to fetch active streams'
-    activeStreams.value = []
-  }
-}
-    
-   
-    // Update stats based on fetched data
-    const updateStats = () => {
-      stats.value = {
-        activeStreams: activeStreams.value.length,
-        flaggedEvents: recentAlerts.value.length,
-        pendingTasks: 0, // No endpoint available
-        unreadMessages: 0 // No endpoint available
-      }
-    }
-    
-    // Count unread messages (would need a proper API endpoint)
-    // const countUnreadMessages = () => {
-    //   // This is a placeholder - in real implementation, fetch from API
-    //   return Math.floor(Math.random() * 10)
-    // }
-    
-    // Format log description based on event type
-    // eslint-disable-next-line
-    const getLogDescription = (log) => {
-      if (!log || !log.details) return 'No details available'
-      
-      const details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details
-      
-      if (log.event_type === 'object_detection' && details.detections) {
-        const objects = Array.isArray(details.detections) ? 
-          details.detections.map(d => d.name || d.label || 'Unknown').join(', ') : 
-          'Unknown object'
-        
-        return `${objects} detected in ${details.streamer_name || 'stream'}`
-      }
-      
-      if (log.event_type === 'audio_detection' && details.keyword) {
-        return `Keyword "${details.keyword}" detected in ${details.streamer_name || 'stream'}`
-      }
-      
-      if (log.event_type === 'chat_detection' && details.detections) {
-        const keywords = Array.isArray(details.detections) ? 
-          details.detections.map(d => d.keywords?.join(', ') || 'Unknown').join(', ') : 
-          'Unknown keywords'
-        
-        return `Chat keywords (${keywords}) detected in ${details.streamer_name || 'stream'}`
-      }
-      
-      return log.details.message || 'Detection event occurred'
-    }
-    
-    const formattedLastRefresh = computed(() => {
-      const now = new Date()
-      const diff = now - lastRefresh.value
-      
-      if (diff < 60000) { // less than a minute
-        return 'Just now'
-      } else if (diff < 3600000) { // less than an hour
-        return `${Math.floor(diff / 60000)} minutes ago`
-      } else {
-        const hours = lastRefresh.value.getHours().toString().padStart(2, '0')
-        const mins = lastRefresh.value.getMinutes().toString().padStart(2, '0')
-        return `Today at ${hours}:${mins}`
-      }
-    })
-    
-    const getAlertIcon = (level) => {
-      switch (level) {
-        case 'critical': return ['fas', 'exclamation-circle']
-        case 'warning': return ['fas', 'exclamation-triangle']
-        case 'info': return ['fas', 'info-circle']
-        default: return ['fas', 'check-circle']
-      }
-    }
-    
-    const getObjectIcon = (type) => {
-      if (type?.toLowerCase().includes('weapon')) return ['fas', 'exclamation']
-      if (type?.toLowerCase().includes('mask')) return ['fas', 'user']
-      if (type?.toLowerCase().includes('package')) return ['fas', 'box']
-      return ['fas', 'flag']
-    }
-    
-    const getTabIcon = (tab) => {
-      switch (tab) {
-        case 'dashboard': return ['fas', 'tachometer-alt']
-        case 'streams': return ['fas', 'video'] 
-        case 'tasks': return ['fas', 'clipboard-list']
-        case 'messages': return ['fas', 'comments']
-        case 'notifications': return ['fas', 'bell']
-        default: return ['fas', 'tachometer-alt']
-      }
-    }
-    
-    const getTabTitle = (tab) => {
-      switch (tab) {
-        case 'dashboard': return 'Dashboard'
-        case 'streams': return 'Streams'
-        case 'tasks': return 'Tasks'
-        case 'messages': return 'Messages'
-        case 'notifications': return 'Notifications'
-        default: return 'Dashboard'
-      }
-    }
-    
-    const pageTitle = computed(() => {
-      return getTabTitle(currentTab.value)
-    })
-    
-    const formatStatLabel = (key) => {
-      // Convert camelCase to Title Case with spaces
-      return key
-        .replace(/([A-Z])/g, ' $1')
-        .replace(/^./, function(str) { return str.toUpperCase(); })
-    }
-    
-    const formatTimestamp = (timestamp) => {
-      if (!timestamp) return 'Unknown time'
-      
-      try {
-        const date = new Date(timestamp)
-        const now = new Date()
-        const diffMs = now - date
-        const diffMins = Math.floor(diffMs / 60000)
-        
-        if (diffMins < 1) return 'Just now'
-        if (diffMins < 60) return `${diffMins} minutes ago`
-        if (diffMins < 1440) return `${Math.floor(diffMins / 60)} hours ago`
-        return `${Math.floor(diffMins / 1440)} days ago`
-      } catch (e) {
-        return 'Invalid date'
-      }
-    }
-    
-    const getPlatformName = (type) => {
-      if (!type) return 'Unknown Platform'
-      
-      const platforms = {
-        'chaturbate': 'Chaturbate',
-        'myfreecams': 'MyFreeCams',
-        'cam4': 'Cam4',
-        'bongacams': 'BongaCams',
-        'streamate': 'Streamate'
-      }
-      
-      return platforms[type.toLowerCase()] || type
-    }
-    
-    // These methods provide consistent coloring based on priority
-    const getPriorityClass = (index) => {
-      // Use a more deterministic approach
-      if (chatKeywords.value[index]?.keyword?.toLowerCase().includes('payment')) {
-        return 'high'
-      } else if (chatKeywords.value[index]?.keyword?.toLowerCase().includes('private')) {
-        return 'medium'
-      }
-      return 'low'
-    }
-    
-    const getPriorityLabel = (index) => {
-      if (chatKeywords.value[index]?.keyword?.toLowerCase().includes('payment')) {
-        return 'high'
-      } else if (chatKeywords.value[index]?.keyword?.toLowerCase().includes('private')) {
-        return 'medium'
-      }
-      return 'low'
-    }
-    
-    const getRandomConfidence = () => {
-      // Make this more deterministic based on object type
-      if (!flaggedObjects.value[0]) return 95
-      
-      const obj = flaggedObjects.value[0].object_name?.toLowerCase() || ''
-      if (obj.includes('weapon')) return 95
-      if (obj.includes('mask')) return 88
-      if (obj.includes('package')) return 75
-      return 82
-    }
-    
-    const refreshDashboard = async () => {
-      if (isRefreshing.value) return
-      
-      isRefreshing.value = true
-      
-      // Animate the refresh button
-      anime({
-        targets: '.refresh-button',
-        rotate: '360deg',
-        duration: 1000,
-        easing: 'easeInOutQuad'
-      })
-      
-      try {
-        await fetchDashboardData()
-        
-        // Update refresh time
-        lastRefresh.value = new Date()
-        
-        // Animation for cards to indicate fresh data
-        anime({
-          targets: [statsCard.value, alertsCard.value, streamsCard.value, keywordsCard.value, objectsCard.value, telegramCard.value],
-          boxShadow: [
-            '0 2px 8px rgba(0, 0, 0, 0.08)',
-            '0 4px 12px rgba(0, 0, 0, 0.15)',
-            '0 2px 8px rgba(0, 0, 0, 0.08)'
-          ],
-          duration: 600,
-          easing: 'easeOutQuad'
-        })
-        
-      } catch (error) {
-        console.error('Error refreshing dashboard:', error)
+        showTooltipMessage('Error updating dashboard', 3000)
       } finally {
         isRefreshing.value = false
       }
     }
     
-    const handleTabChange = (tabId) => {
-      // First fade out current content
-      anime({
-        targets: dashboardContent.value,
-        opacity: 0,
-        translateY: 10,
-        duration: 300,
-        easing: 'easeInQuad',
-        complete: () => {
-          currentTab.value = tabId
-          
-          // Then fade in new content
-          nextTick(() => {
+    // Fetch keywords from API
+    const fetchKeywords = async () => {
+      try {
+        const response = await axios.get('/api/keywords')
+        chatKeywords.value = response.data || []
+      } catch (error) {
+        console.error('Error fetching keywords:', error)
+        errors.value.keywords = 'Failed to fetch keywords'
+        chatKeywords.value = []
+      }
+    }
+
+    // Handle messages refresh with animation
+    const handleMessagesRefresh = () => {
+      // Animate refresh
+      if (refreshButton.value) {
+        anime({
+          targets: refreshButton.value,
+          rotate: '360deg',
+          scale: [1, 1.2, 1],
+          duration: 800,
+          easing: 'easeInOutBack'
+        })
+      }
+      
+      // Update unread message count in the stats
+      fetchUnreadMessageCount()
+    }
+
+    // Fetch unread message count with animation
+    const fetchUnreadMessageCount = async () => {
+      try {
+        const response = await axios.get('/api/messages/unread-count')
+        
+        // If count changed, animate the badge
+        if (stats.value.unreadMessages !== (response.data.count || 0)) {
+          // Find message badge if it exists
+          const msgBadge = document.querySelector('.sidebar-nav-item[data-tab="messages"] .badge')
+          if (msgBadge) {
             anime({
-              targets: dashboardContent.value,
-              opacity: 1,
-              translateY: [10, 0],
-              duration: 500,
-              easing: 'easeOutQuad'
+              targets: msgBadge,
+              scale: [1, 1.5, 1],
+              backgroundColor: [
+                'rgb(59, 130, 246)', // Default blue
+                'rgb(239, 68, 68)',  // Highlight red
+                'rgb(59, 130, 246)'  // Back to blue
+              ],
+              duration: 800,
+              easing: 'easeInOutQuad'
             })
-            
-            // If it's the dashboard tab, animate the cards
-            if (tabId === 'dashboard') {
-              animateDashboardEntrance()
+          }
+        }
+        
+        stats.value.unreadMessages = response.data.count || 0
+      } catch (error) {
+        console.error('Error fetching unread message count:', error)
+      }
+    }
+
+    // Fetch objects from API
+    const fetchObjects = async () => {
+      try {
+        const response = await axios.get('/api/objects')
+        flaggedObjects.value = response.data || []
+      } catch (error) {
+        console.error('Error fetching objects:', error)
+        errors.value.objects = 'Failed to fetch objects'
+        flaggedObjects.value = []
+      }
+    }
+
+    // Fetch telegram recipients from API
+    const fetchTelegramRecipients = async () => {
+      try {
+        const response = await axios.get('/api/telegram_recipients')
+        telegramRecipients.value = response.data || []
+      } catch (error) {
+        console.error('Error fetching telegram recipients:', error)
+        errors.value.telegram = 'Failed to fetch recipients'
+        telegramRecipients.value = []
+      }
+    }
+
+    // Fetch tasks with animation feedback
+    const fetchTasks = async () => {
+      try {
+        const response = await axios.get('/api/tasks')
+        
+        // If task count changed, animate the badge
+        if (tasks.value.length !== (response.data || []).length) {
+          // Find tasks badge if it exists
+          const taskBadge = document.querySelector('.sidebar-nav-item[data-tab="tasks"] .badge')
+          if (taskBadge) {
+            anime({
+              targets: taskBadge,
+              scale: [1, 1.5, 1],
+              backgroundColor: [
+                'rgb(59, 130, 246)', // Default blue
+                'rgb(239, 68, 68)',  // Highlight red
+                'rgb(59, 130, 246)'  // Back to blue
+              ],
+              duration: 800,
+              easing: 'easeInOutQuad'
+            })
+          }
+        }
+        
+        tasks.value = response.data || []
+        
+        // Update task count in stats
+        stats.value.pendingTasks = tasks.value.length
+      } catch (error) {
+        console.error('Error fetching tasks:', error)
+        tasks.value = []
+      }
+    }
+
+    // Fetch all notifications/logs with animation
+    const fetchAllLogs = async () => {
+      isRefreshing.value = true
+      
+      // Animate refresh button
+      if (refreshButton.value) {
+        anime({
+          targets: refreshButton.value,
+          rotate: '360deg',
+          scale: [1, 1.2, 1],
+          duration: 800,
+          easing: 'easeInOutBack'
+        })
+      }
+      
+      try {
+        const response = await axios.get('/api/logs')
+        allAlerts.value = response.data || []
+        
+        // Show feedback
+        showTooltipMessage(`${allAlerts.value.length} notifications loaded`)
+      } catch (error) {
+        console.error('Error fetching all logs:', error)
+        allAlerts.value = []
+        showTooltipMessage('Error loading notifications', 3000)
+      } finally {
+        isRefreshing.value = false
+      }
+    }
+
+    // Fetch recent alert logs
+    const fetchRecentLogs = async () => {
+      try {
+        const response = await axios.get('/api/logs')
+        
+        // Transform the raw log data into alert format
+        recentAlerts.value = (response.data || []).map(log => {
+          let level = 'info'
+          if (log.event_type?.includes('detection')) {
+            level = log.event_type.includes('object') ? 'warning' : 'info'
+          }
+          
+          return {
+            title: log.event_type ? formatEventType(log.event_type) : 'System Event',
+            description: getLogDescription(log),
+            timestamp: log.timestamp || new Date(),
+            level: level
+          }
+        }).slice(0, 5) // Only show 5 most recent alerts
+      } catch (error) {
+        console.error('Error fetching recent logs:', error)
+        errors.value.logs = 'Failed to fetch recent alerts'
+        recentAlerts.value = []
+      }
+    }
+    
+    // Format event types for display
+    const formatEventType = (eventType) => {
+      if (!eventType) return 'Unknown Event'
+      
+      // Convert snake_case to Title Case
+      return eventType
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ')
+    }
+    
+    // Get a human-readable description for a log
+    const getLogDescription = (log) => {
+      if (!log) return 'No details available'
+      
+      // Return a human-readable description based on event type
+      const eventType = log.event_type || ''
+      
+      if (eventType.includes('object_detection')) {
+        return `Object detected: ${log.details?.object || 'Unknown object'}`
+      } else if (eventType.includes('chat_keyword')) {
+        return `Keyword detected in chat: ${log.details?.keyword || 'Unknown keyword'}`
+      } else {
+        return log.details?.message || 'System event occurred'
+      }
+    }
+    
+    // Fetch active streams assigned to the agent
+    const fetchActiveStreams = async () => {
+      try {
+        const response = await axios.get('/api/dashboard')
+        
+        if (response.data?.assignments) {
+          activeStreams.value = response.data.assignments.map(stream => ({
+            ...stream,
+            isLive: true, // Assuming all returned streams are live
+          }))
+        } else {
+          activeStreams.value = []
+        }
+        
+        // Update stream count in stats
+        stats.value.activeStreams = activeStreams.value.length
+      } catch (error) {
+        console.error('Error fetching active streams:', error)
+        errors.value.streams = 'Failed to fetch active streams'
+        activeStreams.value = []
+      }
+    }
+    
+    // Update dashboard stats
+    const updateStats = () => {
+      stats.value = {
+        activeStreams: validatedStreams.value.filter(s => s.isLive).length || 0,
+        flaggedEvents: recentAlerts.value.length || 0,
+        pendingTasks: tasks.value.length || 0,
+        unreadMessages: stats.value.unreadMessages || 0
+      }
+    }
+    
+    // Handle task completion with animation
+    const handleTaskComplete = async (taskId) => {
+      isRefreshing.value = true
+      
+      try {
+        await axios.put(`/api/tasks/${taskId}/complete`)
+        
+        // Find the task item in DOM to animate it
+        const taskItem = document.querySelector(`.task-item[data-id="${taskId}"]`)
+        if (taskItem) {
+          // Animate task completion
+          anime({
+            targets: taskItem,
+            translateX: [0, '100%'],
+            opacity: [1, 0],
+            duration: 500,
+            easing: 'easeInQuad',
+            complete: () => {
+              // Remove from local list
+              tasks.value = tasks.value.filter(task => task.id !== taskId)
+              // Update task count
+              stats.value.pendingTasks = tasks.value.length
             }
           })
+        } else {
+          // No animation, just update data
+          tasks.value = tasks.value.filter(task => task.id !== taskId)
+          stats.value.pendingTasks = tasks.value.length
         }
-      })
+        
+        // Show feedback
+        showTooltipMessage('Task completed')
+      } catch (error) {
+        console.error('Error completing task:', error)
+        showTooltipMessage('Error completing task', 3000)
+      } finally {
+        isRefreshing.value = false
+      }
     }
-    
-    const navigateToTab = (tabId) => {
-      handleTabChange(tabId)
-    }
-    
-    const checkMobile = () => {
-      isMobile.value = window.innerWidth <= 768
-    }
-    
-    const animateDashboardEntrance = () => {
-      // Animate header
-      anime({
-        targets: dashboardHeader.value,
-        opacity: [0, 1],
-        translateY: [-20, 0],
-        duration: 800,
-        easing: 'easeOutQuad'
-      })
+
+    // Handle marking notification as read with animation
+    const handleMarkNotificationRead = async (notificationIdOrIds) => {
+      const isArray = Array.isArray(notificationIdOrIds)
+      const endpoint = isArray ? '/api/logs/mark-read' : `/api/logs/${notificationIdOrIds}/mark-read`
+      const method = isArray ? 'put' : 'put'
       
-      // Animate cards with staggered effect
-      anime({
-        targets: [statsCard.value, alertsCard.value, streamsCard.value, keywordsCard.value, objectsCard.value, telegramCard.value],
-        opacity: [0, 1],
-        translateY: [20, 0],
-        delay: anime.stagger(100),
-        duration: 800,
-        easing: 'easeOutElastic(1, .6)'
-      })
-      
-      // Animate stat items
-      anime({
-        targets: statItems.value,
-        opacity: [0, 1],
-        scale: [0.9, 1],
-        delay: anime.stagger(50),
-        duration: 1000,
-        easing: 'easeOutElastic(1, .6)'
-      })
-      
-      // Animate list items in each card
-      const allListItems = [...alertItems.value, ...streamItems.value, ...keywordItems.value, ...objectItems.value, ...recipientItems.value]
-      anime({
-        targets: allListItems,
-        opacity: [0, 1],
-        translateX: ['-20px', 0],
-        delay: anime.stagger(30, {start: 300}),
-        duration: 800,
-        easing: 'easeOutQuad'
-      })
-      
-      // Animate stat numbers counting up
-      Object.keys(stats.value).forEach((key, index) => {
-        anime({
-          targets: { value: 0 },
-          value: stats.value[key],
-          round: 1,
-          easing: 'easeInOutQuad',
-          duration: 1200,
-          delay: 300 + index * 100,
-          update: function(anim) {
-            const obj = anim.animatables[0].target
-            if (statItems.value[index]) {
-              statItems.value[index].querySelector('.stat-value').innerHTML = Math.round(obj.value)
+      try {
+        const response = await axios[method](endpoint, { 
+          ids: isArray ? notificationIdOrIds : null 
+        })
+        
+        if (response.data.success) {
+          // Animate notification items
+          if (isArray) {
+            // Find all notification items to animate
+            const notifications = notificationIdOrIds.map(id => 
+              document.querySelector(`.notification-item[data-id="${id}"]`)
+            ).filter(el => el)
+            
+            if (notifications.length) {
+              anime({
+                targets: notifications,
+                backgroundColor: [
+                  'rgba(59, 130, 246, 0.1)', // Highlight blue
+                  'rgba(255, 255, 255, 0)'   // Fade to transparent
+                ],
+                duration: 800,
+                easing: 'easeOutQuad'
+              })
+            }
+            
+            // Mark multiple as read
+            allAlerts.value = allAlerts.value.map(alert => {
+              if (notificationIdOrIds.includes(alert.id)) {
+                return { ...alert, read: true }
+              }
+              return alert
+            })
+          } else {
+            // Find the notification item to animate
+            const notification = document.querySelector(`.notification-item[data-id="${notificationIdOrIds}"]`)
+            if (notification) {
+              anime({
+                targets: notification,
+                backgroundColor: [
+                  'rgba(59, 130, 246, 0.1)', // Highlight blue
+                  'rgba(255, 255, 255, 0)'   // Fade to transparent
+                ],
+                duration: 800,
+                easing: 'easeOutQuad'
+              })
+            }
+            
+            // Mark one as read
+            const index = allAlerts.value.findIndex(alert => alert.id === notificationIdOrIds)
+            if (index !== -1) {
+              allAlerts.value[index] = { ...allAlerts.value[index], read: true }
             }
           }
-        })
-      })
+          
+          // Show feedback
+          showTooltipMessage(isArray ? 'Notifications marked as read' : 'Notification marked as read')
+        }
+      } catch (error) {
+        console.error('Error marking notification as read:', error)
+        showTooltipMessage('Error updating notification', 3000)
+      }
+    }
+    
+    // Refresh the dashboard with animation
+    const refreshDashboard = async () => {
+      if (isRefreshing.value) return
       
-      // Pulse animation for status indicators
-      anime({
-        targets: '.stream-status-indicator.live',
-        opacity: [0.5, 1],
-        scale: [1, 1.2, 1],
-        duration: 1500,
-        loop: true,
-        easing: 'easeInOutQuad'
-      })
+      isRefreshing.value = true
+      
+      // Animate refresh button
+      if (refreshButton.value) {
+        anime({
+          targets: refreshButton.value,
+          rotate: '360deg',
+          scale: [1, 1.2, 1],
+          duration: 1000,
+          easing: 'easeInOutQuad'
+        })
+      }
+      
+      // Refresh different data based on active tab
+      if (currentTab.value === 'dashboard') {
+        await fetchDashboardData()
+      } else if (currentTab.value === 'streams') {
+        await refreshStreams()
+      } else if (currentTab.value === 'tasks') {
+        await fetchTasks()
+      } else if (currentTab.value === 'notifications') {
+        await fetchAllLogs()
+      } else if (currentTab.value === 'messages') {
+        await handleMessagesRefresh()
+      }
+      
+      lastRefresh.value = new Date()
+      isRefreshing.value = false
+      
+      // Show feedback
+      showTooltipMessage('Data refreshed')
     }
     
-    // Set up auto-refresh interval
-    const setupRefreshInterval = () => {
-      // Refresh every 60 seconds
-      refreshInterval.value = setInterval(() => {
-        refreshDashboard()
-      }, 60000)
+    // Watch for tab changes to update UI
+    watch(currentTab, () => {
+      // Animation handled in handleTabChange
+    })
+    
+    // Watch for theme changes
+    watch(appTheme, (newValue) => {
+      console.log('Theme changed to:', newValue)
+    })
+    
+    // Setup initial animations
+    const setupInitialAnimations = () => {
+      // Staggered entrance of UI elements
+      if (dashboardHeader.value && statusDisplay.value) {
+        anime({
+          targets: dashboardHeader.value,
+          translateY: ['-20px', 0],
+          opacity: [0, 1],
+          easing: 'easeOutQuad',
+          duration: 600
+        })
+        
+        anime({
+          targets: [statusBadge.value, lastRefreshTime.value, refreshButton.value],
+          translateY: ['-10px', 0],
+          opacity: [0, 1],
+          delay: anime.stagger(100, {start: 300}),
+          easing: 'easeOutQuad', 
+          duration: 500
+        })
+      }
+      
+      // Animate sidebar entrance if visible - FIXED Bug in sidebar animation
+      if (sidebar.value && !isMobile.value) {
+        // Check if sidebar has the $el property and it has DOM elements
+        if (sidebar.value.$el) {
+          // Safely query selector on the sidebar element
+          const sidebarNavItems = sidebar.value.$el.querySelectorAll ? 
+            sidebar.value.$el.querySelectorAll('.sidebar-nav-item') : 
+            [];
+            
+          if (sidebarNavItems.length) {
+            anime({
+              targets: sidebarNavItems,
+              translateX: ['-20px', 0],
+              opacity: [0, 1],
+              delay: anime.stagger(70),
+              easing: 'easeOutQuad',
+              duration: 500
+            });
+          } else {
+            // If no nav items found, animate the sidebar element itself
+            anime({
+              targets: sidebar.value.$el,
+              translateX: ['-20px', 0],
+              opacity: [0.8, 1],
+              easing: 'easeOutQuad',
+              duration: 500
+            });
+          }
+        }
+      }
+      
+      // Theme toggle button entrance (if exists)
+      if (themeToggle.value) {
+        anime({
+          targets: themeToggle.value,
+          scale: [0, 1],
+          rotate: ['180deg', '0deg'],
+          opacity: [0, 1],
+          easing: 'easeOutElastic(1, 0.6)',
+          duration: 1000,
+          delay: 800
+        })
+      }
+      
+      // Quick navigation button entrance for mobile
+      if (quickNavButton.value && isMobile.value) {
+        anime({
+          targets: quickNavButton.value,
+          scale: [0, 1],
+          opacity: [0, 1],
+          easing: 'easeOutBack',
+          duration: 600,
+          delay: 1000
+        })
+      }
+      
+      // Run tab-specific entrance animation
+      if (currentTab.value === 'dashboard') {
+        nextTick(() => {
+          animateDashboardEntrance()
+        })
+      }
     }
     
-    onMounted(() => {
-      checkMobile()
-      window.addEventListener('resize', checkMobile)
+    // Setup and cleanup
+    onMounted(async () => {
+      console.log('AgentDashboard mounted, theme:', appTheme.value);
+      
+      // Fetch user data
+      await fetchCurrentUser()
       
       // Initial data fetch
-      fetchDashboardData()
+      await fetchDashboardData()
       
-      // Set up auto-refresh
-      setupRefreshInterval()
-      
-      // Initialize animations
+      // Setup initial animations
       nextTick(() => {
-        animateDashboardEntrance()
+        setupInitialAnimations()
       })
+      
+      // Start refresh interval for dashboard
+      refreshInterval.value = setInterval(() => {
+        refreshDashboard()
+      }, 5 * 60 * 1000) // 5 minutes refresh
+      
+      // Add resize listener
+      window.addEventListener('resize', checkMobile)
+      
+      // Initial mobile check
+      checkMobile()
     })
     
     onBeforeUnmount(() => {
+      // Cleanup event listeners
       window.removeEventListener('resize', checkMobile)
       
-      // Clear refresh interval
+      // Clear intervals
       if (refreshInterval.value) {
         clearInterval(refreshInterval.value)
+      }
+      
+      if (streamRefreshTimer.value) {
+        clearInterval(streamRefreshTimer.value)
+      }
+      
+      // Clear any timeouts
+      if (tooltipTimeout.value) {
+        clearTimeout(tooltipTimeout.value)
       }
     })
     
     return {
+      // State
+      appTheme,
+      user,
+      lastRefresh,
+      isRefreshing,
+      currentTab,
+      isMobile,
       stats,
       recentAlerts,
       activeStreams,
+      validatedStreams,
       chatKeywords,
       flaggedObjects,
       telegramRecipients,
-      formattedLastRefresh,
-      isRefreshing,
-      refreshDashboard,
-      getAlertIcon,
-      getObjectIcon,
-      getTabIcon,
-      getTabTitle,
-      currentTab,
-      handleTabChange,
-      navigateToTab,
-      isMobile,
-      pageTitle,
-      formatStatLabel,
-      formatTimestamp,
-      getPlatformName,
-      getPriorityClass,
-      getPriorityLabel,
-      getRandomConfidence,
+      tasks,
+      allAlerts,
+      isLoadingStreams,
+      streamErrors,
+      navTabs,
+      showQuickNav,
+      showTooltip,
+      tooltipText,
+      tooltipStyle,
+      sidebarMinimized,
       
-      // Refs for animation
+      // Computed
+      formattedLastRefresh,
+      isDarkTheme,
+      
+      // Refs
+      appContainer,
+      sidebar,
+      mainContent,
       dashboardHeader,
       dashboardContent,
       dashboardGrid,
-      statsCard,
-      alertsCard,
-      streamsCard,
-      keywordsCard,
-      objectsCard,
-      telegramCard,
-      statItems,
-      alertItems,
-      streamItems,
-      keywordItems,
-      objectItems,
-      recipientItems
+      pageTitle,
+      statusDisplay,
+      statusBadge,
+      lastRefreshTime,
+      refreshButton,
+      quickNavButton,
+      quickNavMenu,
+      navItems,
+      tooltip,
+      
+      // Methods
+      handleTabChange,
+      
+      navigateToTab,
+      refreshDashboard,
+      refreshStreams,
+      updateStreamStatus,
+      fetchTasks,
+      fetchAllLogs,
+      handleMessagesRefresh,
+      handleTaskComplete,
+      handleMarkNotificationRead,
+      toggleQuickNav,
+      quickNavTo,
+      getBadgeCount,
+      showTooltipMessage,
+      animateDashboardEntrance,
+      animateTabEntrance
     }
   }
 }
 </script>
 
 <style scoped>
-.agent-app {
-  display: flex;
+/* Define CSS variables to control sidebar width and mobile height - match with AdminDashboard */
+:root {
+  /* Existing variables */
+  
+  /* Stream sizing */
+  --stream-base-width: 480px;
+  --stream-base-height: 360px;
+  --stream-min-width: 240px;
+  --stream-min-height: 180px;
+  
+  /* Color variables with RGB format for opacity control */
+  --primary-rgb: 59, 130, 246; /* blue-500 */
+  --secondary-rgb: 156, 163, 175; /* gray-400 */
+  --success-rgb: 16, 185, 129; /* green-500 */
+  --danger-rgb: 239, 68, 68; /* red-500 */
+  --warning-rgb: 245, 158, 11; /* yellow-500 */
+  --info-rgb: 14, 165, 233; /* sky-500 */
+}
+
+[data-theme="dark"] {
+  /* Dark theme variables */
+  --primary-rgb: 96, 165, 250; /* blue-400 */
+  --secondary-rgb: 156, 163, 175; /* gray-400 */
+  --success-rgb: 34, 197, 94; /* green-400 */
+  --danger-rgb: 248, 113, 113; /* red-400 */
+  --warning-rgb: 251, 191, 36; /* yellow-400 */
+  --info-rgb: 56, 189, 248; /* sky-400 */
+  
+  --bg-color: #121212;
+  --header-bg: #1e1f22;
+  --card-bg: #1f2937;
+  --text-color: #e5e7eb;
+  --text-muted: #9ca3af;
+  --heading-color: #f3f4f6;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --hover-bg: rgba(255, 255, 255, 0.05);
+  --button-bg: #374151;
+  --button-hover: #4b5563;
+  --badge-bg: rgba(156, 163, 175, 0.2);
+  --primary-color: #3b82f6;
+  --primary-dark: #2563eb;
+  --success-color: #10b981;
+  --success-bg: rgba(16, 185, 129, 0.2);
+  --danger-color: #ef4444;
+  --error-bg: rgba(239, 68, 68, 0.1);
+  --active-bg: rgba(59, 130, 246, 0.2);
+  --counter-bg: rgba(255, 255, 255, 0.1);
+}
+
+.agent-container {
+  top: 5;
   min-height: 100vh;
-  background-color: var(--bg-color-light);
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  overflow-x: hidden; /* Prevent horizontal scrollbar during animations */
+  padding-left: 55px;
 }
 
-.agent-dashboard {
+.main-content {
+  /* Default state is expanded */
   flex: 1;
-  padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
-  transition: all 0.3s ease;
+  padding: 1rem;
+  height: 90%;
+  
 }
 
-.agent-dashboard.with-sidebar {
-  margin-left: 72px;
-  width: calc(100% - 72px);
-}
 
+
+/* Dashboard header */
 .dashboard-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  padding: 16px 24px;
+  background-color: var(--header-bg, #ffffff);
+  z-index: 20;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.dashboard-header h1 {
-  font-size: 1.8rem;
+.page-title {
+  font-size: 1.5rem;
   font-weight: 600;
-  color: var(--text-color);
+  color: var(--heading-color, #111827);
   margin: 0;
-  position: relative;
-}
-
-.dashboard-header h1::after {
-  content: '';
-  position: absolute;
-  bottom: -8px;
-  left: 0;
-  width: 40px;
-  height: 3px;
-  background-color: var(--primary-color);
-  border-radius: 3px;
 }
 
 .status-display {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .status-badge {
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  background-color: #8e8e8e;
-  color: white;
   display: flex;
   align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 16px;
+  background-color: var(--badge-bg, rgba(156, 163, 175, 0.2));
+  color: var(--text-muted, #6B7280);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.status-badge .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--text-muted, #6B7280);
 }
 
 .status-badge.online {
-  background-color: #4caf50;
+  background-color: var(--success-bg, rgba(16, 185, 129, 0.2));
+  color: var(--success-color, #10B981);
 }
 
-.status-badge.online::before {
-  content: '';
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  background-color: rgba(255, 255, 255, 0.7);
-  border-radius: 50%;
-  margin-right: 6px;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
-  }
-  
-  70% {
-    transform: scale(1);
-    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0);
-  }
-  
-  100% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
-  }
+.status-badge.online .status-dot {
+  background-color: var(--success-color, #10B981);
 }
 
 .last-refresh {
   font-size: 0.8rem;
-  color: var(--text-color-light);
+  color: var(--text-muted, #6B7280);
 }
 
 .refresh-button {
-  background: none;
-  border: none;
-  color: var(--primary-color);
-  cursor: pointer;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
+  background-color: var(--button-bg, #f5f7fa);
+  color: var(--text-color, #374151);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 20px;
 }
 
 .refresh-button:hover {
-  background-color: rgba(var(--primary-color-rgb), 0.1);
+  background-color: var(--button-hover, #e5e7eb);
+  transform: translateY(-2px);
+}
+
+.refresh-button:active {
+  transform: translateY(0);
 }
 
 .refresh-button .rotate {
   animation: rotate 1s linear infinite;
 }
 
+/* Dashboard content */
+.dashboard-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  position: relative;
+}
+
+/* Loading and error states - match AdminDashboard */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  transition: opacity 0.3s ease; /* Smooth transition for content */
+}
+
+.loading-state p {
+  margin-top: 1rem;
+  font-size: 1rem;
+  color: var(--text-color);
+}
+
+.error-state {
+  max-width: 100%;
+  margin: 1rem auto;
+  padding: 1.5rem;
+  text-align: center;
+  background-color: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.error-state h3 {
+  margin-bottom: 0.5rem;
+  color: var(--text-color);
+  font-size: 1.25rem;
+}
+
+.error-state p {
+  margin-bottom: 1rem;
+  color: var(--text-color);
+  font-size: 1rem;
+}
+
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  background-color: var(--primary-color);
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+}
+
+.refresh-button:hover {
+  opacity: 0.9;
+}
+
+.loading-spinner {
+  width: 3rem;
+  height: 3rem;
+  border: 0.25rem solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  border-top-color: var(--primary-color);
+  animation: spin 1s linear infinite;
+}
+
+/* Quick navigation for mobile */
+.quick-nav-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: var(--primary-color, #3B82F6);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  z-index: 100;
+  transition: all 0.3s ease;
+}
+
+.quick-nav-fab:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+.quick-nav-menu {
+  position: fixed;
+  bottom: 84px;
+  right: 20px;
+  width: 240px;
+  background-color: var(--card-bg, #ffffff);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.quick-nav-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.05));
+}
+
+.quick-nav-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--heading-color, #111827);
+}
+
+.quick-nav-header .close-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--button-bg, #f5f7fa);
+  color: var(--text-color, #374151);
+  border: none;
+  cursor: pointer;
+}
+
+.quick-nav-items {
+  padding: 8px 0;
+}
+
+.quick-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.quick-nav-item:hover {
+  background-color: var(--hover-bg, rgba(0, 0, 0, 0.05));
+}
+
+.quick-nav-item.active {
+  background-color: var(--active-bg, rgba(59, 130, 246, 0.1));
+  color: var(--primary-color, #3B82F6);
+}
+
+.quick-nav-item .badge {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background-color: var(--primary-color, #3B82F6);
+  color: white;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+
+/* Theme toggle */
+.theme-toggle {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background-color: var(--card-bg, #ffffff);
+  color: var(--heading-color, #111827);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 90;
+  transition: all 0.3s ease;
+}
+
+.theme-toggle:hover {
+  transform: scale(1.1) rotate(15deg);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Action tooltip */
+.action-tooltip {
+  position: fixed;
+  padding: 8px 12px;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  z-index: 200;
+  pointer-events: none;
+}
+
+/* Enhanced Vue transitions with anime.js inspiration */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Enhanced scale transition */
+.fade-scale-enter-active {
+  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); /* Elastic feel */
+}
+
+.fade-scale-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fade-scale-enter-from,
+.fade-scale-leave-to {
+  transform: scale(0.9);
+  opacity: 0;
+  filter: blur(2px);
+}
+
+/* Enhanced slide transition with direction control */
+.fade-slide-enter-active {
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1); /* Expo ease out feel */
+  position: absolute;
+  width: 100%;
+  top: 0;
+  left: 0;
+}
+
+.fade-slide-leave-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: absolute;
+  width: 100%;
+  top: 0;
+  left: 0;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(30px) scale(0.95);
+  filter: blur(3px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-30px) scale(0.95);
+  filter: blur(3px);
+}
+
+/* New transition for tab content slides */
+.slide-right-enter-active,
+.slide-left-enter-active {
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slide-right-leave-active,
+.slide-left-leave-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.slide-right-enter-from {
+  opacity: 0;
+  transform: translateX(-50px);
+  filter: blur(3px);
+}
+
+.slide-right-leave-to {
+  opacity: 0;
+  transform: translateX(50px);
+  filter: blur(3px);
+}
+
+.slide-left-enter-from {
+  opacity: 0;
+  transform: translateX(50px);
+  filter: blur(3px);
+}
+
+.slide-left-leave-to {
+  opacity: 0;
+  transform: translateX(-50px);
+  filter: blur(3px);
+}
+
+/* Enhanced Animations */
 @keyframes rotate {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  margin-bottom: 24px;
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
-.dashboard-card {
-  background-color: var(--card-bg-color);
-  border-radius: 12px;
-  box-shadow: var(--card-shadow);
-  overflow: hidden;
-  transition: all 0.3s ease;
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
 }
 
-.dashboard-card:hover {
-  box-shadow: var(--card-shadow-hover);
-  transform: translateY(-2px);
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color-light);
+@keyframes notify-bounce {
+  0% { transform: scale(0.8); opacity: 0; }
+  50% { transform: scale(1.15); opacity: 1; }
+  70% { transform: scale(0.95); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
-.card-header h2 {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0;
-  color: var(--text-color);
+@keyframes highlight-fade {
+  0% { background-color: rgba(59, 130, 246, 0.2); }
+  100% { background-color: transparent; }
 }
 
-.card-period, .card-count {
-  font-size: 0.8rem;
-  color: var(--text-color-light);
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
-.view-all {
-  font-size: 0.8rem;
-  color: var(--primary-color);
-  cursor: pointer;
-  font-weight: 500;
+/* Tab transition animations - match AdminDashboard */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
 }
-
-.view-all:hover {
-  text-decoration: underline;
-}
-
-/* Stats card */
-.stats-card {
-  grid-column: span 3;
-}
-
-.stats-container {
-  display: flex;
-  justify-content: space-around;
-  padding: 20px;
-  gap: 10px;
-}
-
-.stat-item {
-  text-align: center;
-  flex: 1;
-  padding: 12px;
-  border-radius: 8px;
-  transition: all 0.3s ease;
-}
-
-.stat-item:hover {
-  background-color: var(--hover-bg-color);
-}
-
-.stat-value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--primary-color);
-  margin-bottom: 8px;
-}
-
-.stat-label {
-  font-size: 0.9rem;
-  color: var(--text-color-light);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* Alerts card */
-.alerts-card {
-  grid-column: span 2;
-}
-
-.alert-item {
-  display: flex;
-  align-items: flex-start;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color-light);
-  transition: background-color 0.2s ease;
-}
-
-.alert-item:last-child {
-  border-bottom: none;
-}
-
-.alert-item:hover {
-  background-color: var(--hover-bg-color);
-}
-
-.alert-icon {
-  margin-right: 12px;
-  font-size: 1.2rem;
-}
-
-.alert-icon.critical {
-  color: var(--danger-color);
-}
-
-.alert-icon.warning {
-  color: var(--warning-color);
-}
-
-.alert-icon.info {
-  color: var(--info-color);
-}
-
-.alert-content {
-  flex: 1;
-}
-
-.alert-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin-bottom: 4px;
-  color: var(--text-color);
-}
-
-.alert-description {
-  font-size: 0.85rem;
-  color: var(--text-color-light);
-  margin-bottom: 6px;
-}
-
-.alert-time {
-  font-size: 0.75rem;
-  color: var(--text-color-lighter);
-}
-
-/* Streams card */
-.streams-card {
-  grid-column: span 1;
-}
-
-.stream-item {
-  display: flex;
-  align-items: center;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border-color-light);
-  transition: background-color 0.2s ease;
-}
-
-.stream-item:last-child {
-  border-bottom: none;
-}
-
-.stream-item:hover {
-  background-color: var(--hover-bg-color);
-}
-
-.stream-preview {
-  position: relative;
-  margin-right: 12px;
-}
-
-.stream-status-indicator {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background-color: #8e8e8e;
-  border: 2px solid var(--card-bg-color);
-  z-index: 1;
-}
-
-.stream-status-indicator.live {
-  background-color: #f44336;
-}
-
-.stream-thumbnail {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  background-color: var(--thumbnail-bg-color);
-  background-image: linear-gradient(45deg, var(--thumbnail-pattern-color) 25%, transparent 25%, transparent 50%, var(--thumbnail-pattern-color) 50%, var(--thumbnail-pattern-color) 75%, transparent 75%, transparent);
-  background-size: 8px 8px;
-}
-
-.stream-content {
-  flex: 1;
-}
-
-.stream-name {
-  font-size: 0.9rem;
-  font-weight: 600;
-  margin-bottom: 2px;
-  color: var(--text-color);
-}
-
-.stream-location, .stream-duration {
-  font-size: 0.8rem;
-  color: var(--text-color-light);
-}
-
-/* Keywords card */
-.keywords-card {
-  grid-column: span 1;
-}
-
-.keywords-container {
-  padding: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.keyword-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background-color: var(--item-bg-color);
-  transition: all 0.2s ease;
-}
-
-.keyword-item:hover {
-  background-color: var(--hover-bg-color);
-}
-
-.keyword-name {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text-color);
-}
-
-.keyword-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 12px;
-  text-transform: uppercase;
-}
-
-.keyword-badge.high {
-  background-color: rgba(var(--danger-color-rgb), 0.2);
-  color: var(--danger-color);
-}
-
-.keyword-badge.medium {
-  background-color: rgba(var(--warning-color-rgb), 0.2);
-  color: var(--warning-color);
-}
-
-.keyword-badge.low {
-  background-color: rgba(var(--success-color-rgb), 0.2);
-  color: var(--success-color);
-}
-
-/* Objects card */
-.objects-card {
-  grid-column: span 1;
-}
-
-.objects-container {
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.object-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background-color: var(--item-bg-color);
-  transition: all 0.2s ease;
-}
-
-.object-item:hover {
-  background-color: var(--hover-bg-color);
-}
-
-.object-icon {
-  margin-right: 10px;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9rem;
-  color: var(--text-color-light);
-}
-
-.object-name {
-  flex: 1;
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text-color);
-}
-
-.object-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 12px;
-  color: white;
-}
-
-.object-badge.high {
-  background-color: var(--success-color);
-}
-
-.object-badge.medium {
-  background-color: var(--primary-color);
-}
-
-.object-badge.low {
-  background-color: var(--text-color-light);
-}
-
-/* Telegram card */
-.telegram-card {
-  grid-column: span 1;
-}
-
-.recipients-container {
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.recipient-item {
-  display: flex;
-  align-items: center;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background-color: var(--item-bg-color);
-  transition: all 0.2s ease;
-}
-
-.recipient-item:hover {
-  background-color: var(--hover-bg-color);
-}
-
-.recipient-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background-color: var(--thumbnail-bg-color);
-  margin-right: 12px;
-  background-image: linear-gradient(45deg, var(--thumbnail-pattern-color) 25%, transparent 25%, transparent 50%, var(--thumbnail-pattern-color) 50%, var(--thumbnail-pattern-color) 75%, transparent 75%, transparent);
-  background-size: 8px 8px;
-}
-
-.recipient-name {
-  flex: 1;
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text-color);
-}
-
-.recipient-status {
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 12px;
-  text-transform: uppercase;
-}
-
-.recipient-status.active {
-  background-color: rgba(var(--success-color-rgb), 0.2);
-  color: var(--success-color);
-}
-
-.recipient-status.inactive {
-  background-color: rgba(var(--text-color-lighter-rgb), 0.2);
-  color: var(--text-color-lighter);
-}
-
-/* Empty states */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-  color: var(--text-color-light);
-}
-
-.empty-icon {
-  font-size: 2rem;
-  margin-bottom: 16px;
-  opacity: 0.6;
-}
-
-.empty-message {
-  font-size: 0.9rem;
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 
-/* Tab content placeholder */
-.tab-content {
-  height: 100%;
+/* Loading state animations */
+.loading-skeleton {
+  background: linear-gradient(90deg, 
+    rgba(255, 255, 255, 0.1), 
+    rgba(255, 255, 255, 0.2), 
+    rgba(255, 255, 255, 0.1)
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite linear;
+  border-radius: 4px;
 }
 
-.placeholder-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 20px;
-  text-align: center;
-  background-color: var(--card-bg-color);
-  border-radius: 12px;
-  box-shadow: var(--card-shadow);
+.dark-theme .loading-skeleton {
+  background: linear-gradient(90deg, 
+    rgba(0, 0, 0, 0.1), 
+    rgba(0, 0, 0, 0.2), 
+    rgba(0, 0, 0, 0.1)
+  );
+  background-size: 1000px 100%;
 }
 
-.placeholder-icon {
-  font-size: 3rem;
-  color: var(--primary-color);
-  margin-bottom: 24px;
-  opacity: 0.7;
+/* Notification animation */
+.notification-bounce {
+  animation: notify-bounce 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.placeholder-content h2 {
-  font-size: 1.5rem;
-  margin-bottom: 16px;
-  color: var(--text-color);
+/* Highlight row effect */
+.highlight-row {
+  animation: highlight-fade 2s ease-out;
 }
 
-.placeholder-content p {
-  font-size: 1rem;
-  color: var(--text-color-light);
+/* Floating elements animation */
+.float-animation {
+  animation: float 6s ease-in-out infinite;
 }
 
-/* Responsive styles */
-@media (max-width: 1200px) {
-  .dashboard-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .stats-card {
-    grid-column: span 2;
-  }
-  
-  .alerts-card {
-    grid-column: span 1;
-  }
+/* Pulse effect for attention */
+.pulse-animation {
+  animation: pulse 2s ease-in-out infinite;
 }
 
+/* Responsive styles - match AdminDashboard */
 @media (max-width: 768px) {
-  .agent-dashboard {
-    padding: 16px;
-  }
-  
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  
-  .stats-card, .alerts-card, .streams-card, .keywords-card, .objects-card, .telegram-card {
-    grid-column: span 1;
-  }
-  
-  .dashboard-header {
+  .agent-container {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
+  }
+
+  .main-content {
+    padding: 0.75rem;
+  }
+  
+  .main-content.sidebar-minimized {
+    margin-left: 0;
+  }
+
+  .dashboard-header {
+    padding: 12px 16px;
+  }
+  
+  .page-title {
+    font-size: 1.3rem;
   }
   
   .status-display {
-    width: 100%;
-    justify-content: space-between;
+    gap: 8px;
   }
   
-  .stats-container {
-    flex-wrap: wrap;
+  .status-badge {
+    padding: 3px 8px;
+    font-size: 0.8rem;
   }
   
-  .stat-item {
-    min-width: 120px;
-    margin-bottom: 10px;
-  }
-}
-
-/* CSS Variables - With Light and Dark mode support */
-:root {
-  /* Colors that remain consistent in both modes */
-  --primary-color: #1976d2;
-  --primary-color-rgb: 25, 118, 210;
-  --danger-color: #f44336;
-  --danger-color-rgb: 244, 67, 54;
-  --warning-color: #ff9800;
-  --warning-color-rgb: 255, 152, 0;
-  --success-color: #4caf50;
-  --success-color-rgb: 76, 175, 80;
-  --info-color: #2196f3;
-  --info-color-rgb: 33, 150, 243;
-  
-  /* Light mode specific */
-  --text-color: #333333;
-  --text-color-light: #666666;
-  --text-color-lighter: #999999;
-  --text-color-lighter-rgb: 153, 153, 153;
-  --bg-color-light: #f5f7fa;
-  --border-color-light: #eeeeee;
-  --card-bg-color: white;
-  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  --card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.12);
-  --item-bg-color: #f5f7fa;
-  --hover-bg-color: rgba(25, 118, 210, 0.05);
-  --thumbnail-bg-color: #e0e0e0;
-  --thumbnail-pattern-color: rgba(0, 0, 0, 0.1);
-}
-
-/* Dark mode */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text-color: #e0e0e0;
-    --text-color-light: #b0b0b0;
-    --text-color-lighter: #808080;
-    --text-color-lighter-rgb: 128, 128, 128;
-    --bg-color-light: #1a1a1a;
-    --border-color-light: #333333;
-    --card-bg-color: #2a2a2a;
-    --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    --card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.3);
-    --item-bg-color: #333333;
-    --hover-bg-color: rgba(25, 118, 210, 0.15);
-    --thumbnail-bg-color: #444444;
-    --thumbnail-pattern-color: rgba(255, 255, 255, 0.1);
+  .last-refresh {
+    display: none;
   }
   
-  /* Improve contrast for badges in dark mode */
-  .keyword-badge.high {
-    background-color: rgba(var(--danger-color-rgb), 0.3);
+  .dashboard-content {
+    padding: 16px;
   }
   
-  .keyword-badge.medium {
-    background-color: rgba(var(--warning-color-rgb), 0.3);
-  }
-  
-  .keyword-badge.low {
-    background-color: rgba(var(--success-color-rgb), 0.3);
-  }
-  
-  .recipient-status.active {
-    background-color: rgba(var(--success-color-rgb), 0.3);
-  }
-  
-  .recipient-status.inactive {
-    background-color: rgba(var(--text-color-lighter-rgb), 0.3);
+  .theme-toggle {
+    bottom: 80px;
+    left: 16px;
+    width: 36px;
+    height: 36px;
   }
 }
 </style>

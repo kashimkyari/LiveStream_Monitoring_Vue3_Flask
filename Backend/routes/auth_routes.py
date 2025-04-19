@@ -11,6 +11,7 @@ import hashlib
 from datetime import datetime, timedelta
 import logging
 
+
 auth_bp = Blueprint('auth', __name__)
 
 def _build_cors_preflight_response():
@@ -279,7 +280,8 @@ def forgot_password():
     # Use a portion of the hash for the actual token
     secure_token = token_hash[:40]
     
-    expiration = datetime.utcnow() + datetime.timedelta(hours=1)
+    # Fix: Use timedelta directly instead of datetime.timedelta
+    expiration = datetime.utcnow() + timedelta(hours=1)
     
     # Store the reset token in the database
     password_reset = PasswordReset(

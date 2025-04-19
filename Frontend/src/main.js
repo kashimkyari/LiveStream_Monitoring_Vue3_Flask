@@ -1,5 +1,6 @@
 import { createApp } from 'vue'
 import App from './App.vue'
+import { io } from 'socket.io-client'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { 
   faUserLock, 
@@ -64,6 +65,10 @@ app.use(Toast, {
   closeButton: "button",
   icon: true,
   rtl: false
+})
+
+app.config.globalProperties.$socket = io(window.location.origin, {
+  withCredentials: true
 })
 
 // Mount the app

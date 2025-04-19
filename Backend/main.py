@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-main.py - Flask application entry point with SSL support and robust CORS.
+main.py - Flask application entry point with SSL support, robust CORS, and Socket.IO integration.
 """
 
 import logging
@@ -11,6 +11,7 @@ from werkzeug.security import generate_password_hash
 import secrets
 import string
 
+# Import the updated create_app function that returns both app and socketio
 from config import create_app
 from extensions import db
 from models import User, Stream
@@ -19,19 +20,24 @@ from cleanup import start_chat_cleanup_thread, start_detection_cleanup_thread
 from monitoring import start_notification_monitor
 
 load_dotenv()
-app = create_app()
+
+# Create the Flask app and initialize Socket.IO with threading mode
+app, socketio = create_app()
+
+# Configure Socket.IO with specific path for WebSockets
+socketio.init_app(app, cors_allowed_origins="*", path="/ws")
 
 # Allowed frontends (comma‑separated in .env)
 ALLOWED_ORIGINS = os.getenv(
     'ALLOWED_ORIGINS',
-    'https://live-stream-monitoring-vue3-flask.vercel.app'
+    'http://localhost:8080,http://localhost:5173,http://127.0.0.1:8080,http://127.0.0.1:5173'
 ).split(',')
 
 # === Dynamic CORS Handler ===
 @app.after_request
 def apply_cors(response):
     origin = request.headers.get('Origin')
-    if origin in ALLOWED_ORIGINS:
+    if origin in ALLOWED_ORIGINS or origin == 'http://localhost:8080':  # Add frontend dev server
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
@@ -110,4 +116,14 @@ if __name__ == "__main__":
     else:
         ssl_ctx = None
         logging.info("Running without SSL")
-    app.run(host='0.0.0.0', port=5000, threaded=True, debug=debug, ssl_context=ssl_ctx)
+    
+    # Use socketio.run instead of app.run for Socket.IO support
+    socketio.run(
+        app, 
+        host='0.0.0.0', 
+        port=5000, 
+        debug=True,
+        ssl_context=ssl_ctx,
+        # Allow for Flask's threaded mode but through Socket.IO
+        use_reloader=debug
+    )

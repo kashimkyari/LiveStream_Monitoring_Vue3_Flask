@@ -9,7 +9,6 @@ import subprocess
 from datetime import datetime, timedelta
 import av  # PyAV for handling HLS streams
 from ultralytics import YOLO
-from flask import current_app
 import requests
 import whisper
 from whisper import load_model
@@ -21,14 +20,19 @@ from bs4 import BeautifulSoup
 from scipy import signal
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer  # Added for sentiment analysis
 
-from config import app
+from flask import current_app
+from config import create_app
 from models import FlaggedObject, Log, ChatKeyword, DetectionLog, Stream, ChaturbateStream, StripchatStream, TelegramRecipient
 from extensions import db
 from notifications import send_notifications, send_text_message
 
+
 # Global variables and locks
 _yolo_model = None
 _yolo_lock = threading.Lock()
+
+app_result = create_app()
+app = app_result[0] if isinstance(app_result, tuple) else app_result
 
 # Global dictionaries to store stream info and last alerted objects to avoid duplicate alerts.
 stream_info = {}

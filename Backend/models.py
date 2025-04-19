@@ -281,6 +281,41 @@ class DetectionLog(db.Model):
 
 
 # models.py
+# Add to models.py
+# Add to models.py
+
+class MessageAttachment(db.Model):
+    """
+    MessageAttachment model stores files attached to chat messages.
+    """
+    __tablename__ = "message_attachments"
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=False)
+    path = db.Column(db.String(500), nullable=False)
+    mime_type = db.Column(db.String(100), nullable=False)
+    size = db.Column(db.Integer, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    
+    # Relationship with User
+    user = db.relationship("User")
+    
+    def __repr__(self):
+        return f"<MessageAttachment {self.filename}>"
+    
+    def serialize(self):
+        return {
+            "id": self.id,
+            "filename": self.filename,
+            "path": self.path,
+            "mime_type": self.mime_type,
+            "size": self.size,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "user_id": self.user_id
+        }
+
+
+# Update the ChatMessage model to support attachments
 class ChatMessage(db.Model):
     __tablename__ = "chat_messages"
     id = db.Column(db.Integer, primary_key=True)
@@ -291,23 +326,40 @@ class ChatMessage(db.Model):
     read = db.Column(db.Boolean, default=False, index=True)
     is_system = db.Column(db.Boolean, default=False)
     details = db.Column(db.JSON)
+    # Add this new column to support attachments
+    attachment_id = db.Column(db.Integer, db.ForeignKey('message_attachments.id'), nullable=True)
 
+    # Relationships
     sender = db.relationship("User", foreign_keys=[sender_id])
     receiver = db.relationship("User", foreign_keys=[receiver_id])
+    # Add this new relationship
+    attachment = db.relationship("MessageAttachment", foreign_keys=[attachment_id])
 
     def serialize(self):
-        return {
+        result = {
             "id": self.id,
             "sender_id": self.sender_id,
             "receiver_id": self.receiver_id,
             "message": self.message,
-            "timestamp": self.timestamp.isoformat(),
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
             "read": self.read,
             "is_system": self.is_system,
             "details": self.details,
             "sender_username": self.sender.username if self.sender else None,
             "receiver_username": self.receiver.username if self.receiver else None
         }
+        
+        # Include attachment data if present
+        if self.attachment:
+            result["attachment"] = {
+                "id": self.attachment.id,
+                "url": self.attachment.path,
+                "name": self.attachment.filename,
+                "type": self.attachment.mime_type,
+                "size": self.attachment.size
+            }
+            
+        return result
 
 
 class PasswordReset(db.Model):
