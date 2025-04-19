@@ -31,16 +31,16 @@
 
       <template v-else>
         <DashboardTab
-          v-if="activeTab === 'dashboard'"
+          v-show="activeTab === 'dashboard'"
           :dashboard-stats="dashboardStats"
           :streams="streams"
           :detections="detections"
-          :stream-count="streams.length"  
+          :agents="agents"  
           @open-stream="openStreamDetails"
         />
 
         <StreamsTab
-          v-if="activeTab === 'streams'"
+          v-show="activeTab === 'streams'"
           :streams="allStreams"
           :agents="agents"
           @create="showCreateStreamModal = true"
@@ -49,19 +49,19 @@
         />
 
         <AgentsTab
-          v-if="activeTab === 'agents'"
+          v-show="activeTab === 'agents'"
           :agents="agents"
           @create="showCreateAgentModal = true"
           @edit="editAgent"
           @delete="confirmDeleteAgent"
         />
 
-        <MessageComponent
-          v-if="activeTab === 'messages'"
+        <AdminMessageComponent
+          v-show="activeTab === 'messages'"
           :user="user"
         />
         <AdminNotificationsPage
-          v-if="activeTab === 'notifications'"
+          v-show="activeTab === 'notifications'"
           :user="user"
         />
 
@@ -101,18 +101,18 @@
       @confirm="confirmAction"
     />
     <SettingsModals 
-  :darkMode="isDarkTheme"
-  @notification="handleNotification" 
-  @update:keywords="fetchKeywords"
-  @update:objects="fetchObjects"
-  @update:telegramRecipients="fetchTelegramRecipients"
-  @modal-closed="handleModalClosed"
-/>
+      :darkMode="isDarkTheme"
+      @notification="handleNotification" 
+      @update:keywords="fetchKeywords"
+      @update:objects="fetchObjects"
+      @update:telegramRecipients="fetchTelegramRecipients"
+      @modal-closed="handleModalClosed"
+    />
   </div>
 </template>
 
 <script>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import { useAdminDashboard } from '@/composables/useAdminDashboard'
@@ -121,13 +121,12 @@ import { useModalActions } from '@/composables/useModalActions'
 import { useMessageData } from '@/composables/useMessageData'
 import anime from 'animejs/lib/anime.es.js'
 
-
 // Components
 import AdminSidebar from './AdminSidebar.vue'
 import DashboardTab from './DashboardTab.vue'
 import StreamsTab from './StreamsTab.vue'
 import AgentsTab from './AgentsTab.vue'
-import MessageComponent from './MessageComponent.vue'
+import AdminMessageComponent from './AdminMessageComponent.vue'
 import StreamDetailsModal from './StreamDetailsModal.vue'
 import CreateStreamModal from './CreateStreamModal.vue'
 import CreateAgentModal from './CreateAgentModal.vue'
@@ -144,7 +143,7 @@ export default {
     DashboardTab,
     StreamsTab,
     AgentsTab,
-    MessageComponent,
+    AdminMessageComponent,
     StreamDetailsModal,
     CreateStreamModal,
     CreateAgentModal,
@@ -153,41 +152,78 @@ export default {
     FontAwesomeIcon,
     AdminNotificationsPage
   },
-  // In your main component that uses StreamsTab
-methods: {
-  async loadStreams() {
-    try {
-      const response = await axios.get('/api/streams');
-      this.streams = response.data;
-    } catch (error) {
-      console.error('Error loading streams:', error);
+  methods: {
+    async loadStreams() {
+      try {
+        const response = await axios.get('/api/streams');
+        this.streams = response.data;
+      } catch (error) {
+        console.error('Error loading streams:', error);
+      }
+    },
+    
+    handleStreamCreated() {
+      // Reload streams to get fresh data
+      this.loadStreams();
+    },
+    
+    handleStreamUpdated(updatedStream) {
+      if (!this.streams) return; // Guard against null streams
+      
+      // Find and update the stream in our list
+      const index = this.streams.findIndex(s => s.id === updatedStream.id);
+      if (index !== -1) {
+        // Create a new array to trigger reactivity
+        const newStreams = [...this.streams];
+        newStreams[index] = updatedStream;
+        this.streams = newStreams;
+      }
+    },
+    
+    handleStreamDeleted(streamId) {
+      if (!this.streams) return; // Guard against null streams
+      
+      // Remove the deleted stream from our list
+      this.streams = this.streams.filter(s => s.id !== streamId);
+    },
+
+    // Handle notification from settings modal
+    handleNotification(notification) {
+      // Implementation for handling notifications
+      console.log('Notification received:', notification);
+    },
+
+    // Handle modal closed event
+    handleModalClosed() {
+      // Implementation for when a modal is closed
+      console.log('Modal closed');
+    },
+
+    // Placeholder methods for API fetches
+    fetchKeywords() {
+      console.log('Fetching keywords');
+      // Implementation
+    },
+
+    fetchObjects() {
+      console.log('Fetching objects');
+      // Implementation
+    },
+
+    fetchTelegramRecipients() {
+      console.log('Fetching telegram recipients');
+      // Implementation
     }
+    
+    // Add the missing enhanceStreamWithUsername function
+    
   },
-  
-  handleStreamCreated() { // Parameter removed
-    // Reload streams to get fresh data
-    this.loadStreams();
-  },
-  
-  handleStreamUpdated(updatedStream) {
-    // Update the stream in our list
-    const index = this.streams.findIndex(s => s.id === updatedStream.id);
-    if (index !== -1) {
-      this.$set(this.streams, index, updatedStream);
-    }
-  },
-  
-  handleStreamDeleted(streamId) {
-    // Remove the deleted stream from our list
-    this.streams = this.streams.filter(s => s.id !== streamId);
-  }
-},
   setup() {
     const router = useRouter()
     const toast = useToast()
     const mainContent = ref(null)
+    const animeInstances = ref([]);  // Track animation instances
     
-
     // Composable integrations
     const {
       isDarkTheme,
@@ -240,58 +276,138 @@ methods: {
       messageUnreadCount
     } = useMessageData(user)
 
-    // Enhanced sidebar toggle handler with animations
-    // Enhanced sidebar toggle handler with animations
-const handleSidebarToggle = (isMinimized) => {
-  originalHandleSidebarToggle(isMinimized)
-  nextTick(() => {
-    if (mainContent.value) {
-      // Animate the main content margin directly with the appropriate values
-      anime({
-        targets: mainContent.value,
-        marginLeft: isMinimized 
-          ? (window.innerWidth <= 768 ? '0' : 'var(--sidebar-width-collapsed)')
-          : (window.innerWidth <= 768 ? '0' : 'var(--sidebar-width-expanded)'),
-        duration: 300,
-        easing: 'easeOutQuad'
-      })
+    // Add the enhanceStreamWithUsername function in setup
+    const enhanceStreamWithUsername = (stream) => {
+      if (!stream || !agents.value) return stream;
+      
+      // Find the agent assigned to this stream
+      const assignedAgent = agents.value.find(agent => agent.id === stream.assigned_agent_id);
+      
+      // Return enhanced stream with username info
+      return {
+        ...stream,
+        agent_username: assignedAgent ? assignedAgent.username : 'Unassigned',
+        agent_status: assignedAgent ? assignedAgent.status : 'inactive'
+      };
+    };
 
-      // Optionally animate other content properties
-      anime({
-        targets: mainContent.value.querySelector(':scope > div'),
-        opacity: [0.9, 1],
-        translateX: [isMinimized ? '-10px' : '10px', '0'],
-        duration: 350,
-        easing: 'spring(1, 80, 12, 0)'
+    // Computed property for enhanced streams
+    const enhancedStreams = computed(() => {
+      if (!streams.value) return [];
+      return streams.value.map(stream => enhanceStreamWithUsername(stream));
+    });
+
+    // Safely animate elements
+    const safeAnimate = (targets, animation) => {
+      if (!targets) return null;
+      
+      try {
+        const instance = anime({
+          targets,
+          ...animation
+        });
+        
+        // Store animation instance for cleanup
+        animeInstances.value.push(instance);
+        return instance;
+      } catch (error) {
+        console.error('Animation error:', error);
+        return null;
+      }
+    }
+
+    // Enhanced sidebar toggle handler with animations
+    const handleSidebarToggle = (isMinimized) => {
+      // First call the original handler from the composable
+      originalHandleSidebarToggle(isMinimized)
+      
+      // Wait for the DOM to update before animating
+      nextTick(() => {
+        // Make sure mainContent ref exists
+        if (mainContent.value) {
+          // Animate the main content margin
+          safeAnimate(mainContent.value, {
+            marginLeft: isMinimized 
+              ? (window.innerWidth <= 768 ? '0' : 'var(--sidebar-width-collapsed)')
+              : (window.innerWidth <= 768 ? '0' : 'var(--sidebar-width-expanded)'),
+            duration: 300,
+            easing: 'easeOutQuad'
+          });
+
+          // Find the content div with proper null check
+          const contentDiv = mainContent.value.querySelector(':scope > div');
+          if (contentDiv) {
+            safeAnimate(contentDiv, {
+              opacity: [0.9, 1],
+              translateX: [isMinimized ? '-10px' : '10px', '0'],
+              duration: 350,
+              easing: 'spring(1, 80, 12, 0)'
+            });
+          }
+        }
       })
     }
-  })
-}
+
+    // Watch for tab changes to ensure proper rendering
+    watch(activeTab, (newTab, oldTab) => {
+      if (newTab !== oldTab) {
+        // Allow the DOM to update before any animations
+        nextTick(() => {
+          // Any animations or DOM operations after tab change can go here
+        });
+      }
+    });
+
+    // Clean up function to prevent unmount errors
+    const cleanupAnimations = () => {
+      // Stop all animations
+      animeInstances.value.forEach(instance => {
+        if (instance && typeof instance.pause === 'function') {
+          instance.pause();
+        }
+      });
+      animeInstances.value = [];
+    };
 
     // Lifecycle hooks
     onMounted(() => {
-      fetchDashboardData()
-      fetchMessages()
-
+      // Set up online/offline event listeners
+      const onlineHandler = () => { isOnline.value = true };
+      const offlineHandler = () => { isOnline.value = false };
       
-
+      window.addEventListener('online', onlineHandler);
+      window.addEventListener('offline', offlineHandler);
       
-
-      // Initial animation for page load
-      if (mainContent.value) {
-        anime({
-          targets: mainContent.value,
-          opacity: [0, 1],
-          translateY: ['20px', '0'],
-          duration: 600,
-          easing: 'spring(1, 80, 10, 0)'
-        })
+      // Fetch initial data safely
+      try {
+        fetchDashboardData()
+          .then(() => {
+            // Only animate after data is loaded and if component is still mounted
+            nextTick(() => {
+              if (mainContent.value) {
+                safeAnimate(mainContent.value, {
+                  opacity: [0, 1],
+                  translateY: ['20px', '0'],
+                  duration: 600,
+                  easing: 'spring(1, 80, 10, 0)'
+                });
+              }
+            });
+          })
+          .catch(error => console.error('Error fetching dashboard data:', error));
+        
+        fetchMessages()
+          .catch(error => console.error('Error fetching messages:', error));
+      } catch (e) {
+        console.error('Error in onMounted:', e);
       }
 
-      return () => {
-        window.removeEventListener('online', () => isOnline.value = true)
-        window.removeEventListener('offline', () => isOnline.value = false)
-      }
+      // Clean up event listeners on component unmount
+      onBeforeUnmount(() => {
+        window.removeEventListener('online', onlineHandler);
+        window.removeEventListener('offline', offlineHandler);
+        cleanupAnimations();
+      });
     })
 
     return {
@@ -312,6 +428,7 @@ const handleSidebarToggle = (isMinimized) => {
       dashboardStats,
       streams,
       allStreams,
+      enhancedStreams, // Add the computed property
       agents,
       detections,
 
@@ -341,7 +458,8 @@ const handleSidebarToggle = (isMinimized) => {
       confirmDeleteAgent,
       deleteAgent,
       confirmAction,
-      handleSidebarToggle
+      handleSidebarToggle,
+      enhanceStreamWithUsername // Export the function so it's available in templates
     }
   }
 }
@@ -499,8 +617,6 @@ const handleSidebarToggle = (isMinimized) => {
 
   .main-content {
     margin-left: 0 !important;
-    margin-top: var(--sidebar-mobile-height);
-    padding-bottom: 80px;
     height: calc(100vh - var(--sidebar-mobile-height));
     transition: margin-top 0.3s ease; /* Transition for top margin on mobile */
   }
@@ -508,7 +624,7 @@ const handleSidebarToggle = (isMinimized) => {
 
 @media (min-width: 769px) and (max-width: 1023px) {
   .main-content {
-    padding: 1.5rem;
+    
   }
 
   .error-state {
@@ -518,7 +634,7 @@ const handleSidebarToggle = (isMinimized) => {
 
 @media (min-width: 1024px) {
   .main-content {
-    padding: 2rem 2.5rem;
+    
   }
 }
 

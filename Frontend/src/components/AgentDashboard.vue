@@ -1714,6 +1714,8 @@ export default {
   color: var(--text-color);
   overflow-x: hidden; /* Prevent horizontal scrollbar during animations */
   padding-left: 55px;
+  height: auto;
+  width: auto;
 }
 
 .main-content {
@@ -1721,6 +1723,7 @@ export default {
   flex: 1;
   padding: 1rem;
   height: 90%;
+
   
 }
 
@@ -1784,9 +1787,9 @@ export default {
 }
 
 .refresh-button {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  border-radius: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1825,7 +1828,7 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 50vh;
+  height: auto;
   transition: opacity 0.3s ease; /* Smooth transition for content */
 }
 
@@ -1864,8 +1867,8 @@ export default {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  padding: 0.5rem;
+  border-radius: 100%;
   background-color: var(--primary-color);
   color: white;
   font-weight: 500;
@@ -2213,14 +2216,18 @@ export default {
 @media (max-width: 768px) {
   .agent-container {
     flex-direction: column;
+    padding-left: 0;
+    height: auto;
+    width: auto;
   }
 
   .main-content {
-    padding: 0.75rem;
+    width: auto;
+    height: 90%;
   }
   
   .main-content.sidebar-minimized {
-    margin-left: 0;
+    
   }
 
   .dashboard-header {
@@ -2245,7 +2252,9 @@ export default {
   }
   
   .dashboard-content {
-    padding: 16px;
+    height: 100%;
+    width: auto;
+    
   }
   
   .theme-toggle {

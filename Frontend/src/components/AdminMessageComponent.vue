@@ -371,7 +371,7 @@ import { io } from 'socket.io-client';
 import anime from 'animejs/lib/anime.es.js';
 
 // Configure axios to use the backend URL
-axios.defaults.baseURL = 'http://localhost:5000';
+axios.defaults.baseURL = 'http://54.86.99.85:5000';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import { 
   faSearch, faArrowLeft, faPhone, faVideo, faInfoCircle, 
@@ -393,7 +393,7 @@ library.add(
 );
 
 export default {
-  name: 'MessageComponent',
+  name: 'AdminMessageComponent',
   components: {
     FontAwesomeIcon
   },
@@ -490,7 +490,7 @@ export default {
     // Methods
     const initSocket = () => {
       // Connect to the backend at localhost:5000
-      socket.value = io('http://localhost:5000', { 
+      socket.value = io('http://54.86.99.85:5000', { 
         path: '/ws',
         transports: ['websocket']
       });

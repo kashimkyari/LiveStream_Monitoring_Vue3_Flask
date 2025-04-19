@@ -25,15 +25,17 @@
       </div>
       
       <div class="stream-grid">
-        <StreamCard
-          v-for="(stream, index) in streams"
+        <StreamCard 
+          v-for="(stream, index) in streams" 
           :key="stream.id"
-          :stream="stream"
-          :detection-count="getDetectionCount(stream)"
+          :stream="enhanceStreamWithUsername(stream)" 
           :index="index"
-          @click="openStream(stream, index)"
+          :detectionCount="getDetectionCount(stream)"
+          :totalStreams="streams.length"
           class="stream-card"
-        />
+          @click="openStream(stream, index)"
+          @detection-toggled="handleDetectionToggled"
+        ></StreamCard>
       </div>
     </div>
   </section>
@@ -54,7 +56,11 @@ export default {
   props: {
     dashboardStats: Object,
     streams: Array,
-    detections: Object
+    detections: Object,
+    agents: {
+      type: Array,
+      default: () => []
+    }
   },
   emits: ['open-stream'],
   setup(props, { emit }) {
@@ -76,11 +82,33 @@ export default {
         label: 'Active Agents',
         icon: 'user-shield'
       }
-    ])
+    ]);
+
+    // Add the enhanceStreamWithUsername function
+    const enhanceStreamWithUsername = (stream) => {
+      if (!stream || !props.agents) return stream;
+      
+      // Find the agent assigned to this stream
+      const assignedAgent = props.agents.find(agent => agent.id === stream.assigned_agent_id);
+      
+      // Return enhanced stream with username info
+      return {
+        ...stream,
+        agent: {
+          username: assignedAgent ? assignedAgent.username : 'Unassigned',
+          status: assignedAgent ? assignedAgent.status : 'inactive'
+        }
+      };
+    };
+
+    const handleDetectionToggled = (data) => {
+      console.log(`Detection ${data.active ? 'started' : 'stopped'} for ${data.stream.streamer_username}`);
+      // You can add additional logic here, like showing a notification
+    };
     
     const getDetectionCount = (stream) => {
-      return props.detections[stream.room_url]?.length || 0
-    }
+      return props.detections[stream.room_url]?.length || 0;
+    };
     
     const openStream = (stream, index) => {
       // Animate the card click
@@ -91,14 +119,14 @@ export default {
           scale: [1, 1.05, 1],
           duration: 400,
           easing: 'easeInOutQuad'
-        })
+        });
       }
       
       // Emit the event after a short delay for better UX
       setTimeout(() => {
-        emit('open-stream', stream)
-      }, 150)
-    }
+        emit('open-stream', stream);
+      }, 150);
+    };
     
     onMounted(() => {
       // Animate the header with a fade-in and slide-up effect
@@ -108,7 +136,7 @@ export default {
         translateY: [20, 0],
         duration: 600,
         easing: 'easeOutExpo'
-      })
+      });
       
       // Animate stats cards with a staggered entrance
       anime({
@@ -119,7 +147,7 @@ export default {
         delay: anime.stagger(100, {start: 300}),
         duration: 800,
         easing: 'easeOutElastic(1, .5)'
-      })
+      });
       
       // Animate streams section header
       anime({
@@ -129,7 +157,7 @@ export default {
         duration: 600,
         delay: 400,
         easing: 'easeOutExpo'
-      })
+      });
       
       // Animate stream cards with a staggered entrance
       anime({
@@ -140,15 +168,17 @@ export default {
         delay: anime.stagger(80, {start: 700, from: 'center'}),
         duration: 700,
         easing: 'easeOutCubic'
-      })
-    })
+      });
+    });
     
     return {
       stats,
       statsSection,
       getDetectionCount,
-      openStream
-    }
+      openStream,
+      handleDetectionToggled,
+      enhanceStreamWithUsername // Make sure to expose this function
+    };
   }
 }
 </script>

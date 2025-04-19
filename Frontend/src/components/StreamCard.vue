@@ -16,12 +16,20 @@
           <span class="btn-text">View Details</span>
         </button>
       </div>
-      <div class="stream-controls">
-        <button class="control-btn mute-btn" @click.stop="toggleMute">
-          <font-awesome-icon :icon="isMuted ? 'volume-mute' : 'volume-up'" />
-        </button>
-        <button class="control-btn fullscreen-btn" @click.stop="toggleFullscreen">
-          <font-awesome-icon icon="expand" />
+      
+      <!-- Add detection toggle button -->
+      <div class="detection-controls">
+        <button 
+          class="detection-toggle" 
+          :class="{ 'active': isDetectionActive, 'loading': isDetectionLoading }"
+          @click.stop="toggleDetection"
+          :title="isDetectionActive ? 'Stop monitoring' : 'Start monitoring'"
+        >
+          <span class="detection-icon">
+            <font-awesome-icon v-if="isDetectionLoading" icon="spinner" spin />
+            <font-awesome-icon v-else :icon="isDetectionActive ? 'stop-circle' : 'play-circle'" />
+          </span>
+          <span class="detection-label">{{ getDetectionButtonText() }}</span>
         </button>
       </div>
     </div>
@@ -47,15 +55,18 @@
           <font-awesome-icon icon="bell" />
           <span>{{ detectionCount }} {{ detectionCount === 1 ? 'alert' : 'alerts' }}</span>
         </div>
+        <!-- Add detection status display -->
+        <div v-if="isDetectionActive" class="stat-item monitor-stat">
+          <font-awesome-icon icon="eye" />
+          <span>Monitoring</span>
+        </div>
       </div>
     </div>
     <div class="quick-actions">
       <button class="action-btn assign-btn" @click.stop="$emit('assign')" v-if="!stream.agent?.username">
         <font-awesome-icon icon="user-plus" />
       </button>
-      <button class="action-btn bookmark-btn" @click.stop="toggleBookmark">
-        <font-awesome-icon :icon="isBookmarked ? 'bookmark' : 'bookmark-o'" />
-      </button>
+      
     </div>
   </div>
 </template>
@@ -65,6 +76,7 @@ import Hls from 'hls.js'
 import anime from 'animejs/lib/anime.es.js'
 import DetectionBadge from './DetectionBadge.vue'
 import { ref, computed, onMounted, onBeforeUnmount, watch, inject } from 'vue'
+import axios from 'axios'
 
 export default {
   name: 'StreamCard',
@@ -83,7 +95,7 @@ export default {
       default: 1
     }
   },
-  emits: ['click', 'assign', 'bookmark', 'mute-change', 'fullscreen'],
+  emits: ['click', 'assign', 'bookmark', 'mute-change', 'fullscreen', 'detection-toggled'],
   setup(props, { emit }) {
     const streamCard = ref(null)
     const videoPlayer = ref(null)
@@ -94,6 +106,12 @@ export default {
     const isMuted = ref(true)
     const isBookmarked = ref(false)
     const isFullscreen = ref(false)
+    
+    // Detection state variables
+    const isDetectionActive = ref(false)
+    const isDetectionLoading = ref(false)
+    const detectionError = ref(null)
+    const checkStatusInterval = ref(null)
     
     // Get the global store or event bus if available
     const eventBus = inject('eventBus', null)
@@ -106,15 +124,24 @@ export default {
       return props.totalStreams > 8
     })
 
+    // Computed property to get the stream URL (m3u8)
+    const streamUrl = computed(() => {
+      if (!props.stream) return null
+      
+      // Get the m3u8 URL based on platform
+      if (props.stream.platform?.toLowerCase() === 'chaturbate' && props.stream.chaturbate_m3u8_url) {
+        return props.stream.chaturbate_m3u8_url
+      } else if (props.stream.platform?.toLowerCase() === 'stripchat' && props.stream.stripchat_m3u8_url) {
+        return props.stream.stripchat_m3u8_url
+      }
+      
+      // Fallback to room URL
+      return props.stream.room_url
+    })
+
     const initializeVideo = () => {
       // Get the correct m3u8 URL directly from the stream object
-      let m3u8Url = null
-      
-      if (props.stream.platform.toLowerCase() === 'chaturbate' && props.stream.chaturbate_m3u8_url) {
-        m3u8Url = props.stream.chaturbate_m3u8_url
-      } else if (props.stream.platform.toLowerCase() === 'stripchat' && props.stream.stripchat_m3u8_url) {
-        m3u8Url = props.stream.stripchat_m3u8_url
-      }
+      let m3u8Url = streamUrl.value
       
       if (!m3u8Url) {
         console.error('No HLS URL available for this stream')
@@ -175,6 +202,72 @@ export default {
         hls.destroy()
         hls = null
       }
+    }
+
+    // Detection toggle and status functions
+    const toggleDetection = async (event) => {
+      // Prevent click from propagating to parent
+      if (event) event.stopPropagation()
+      
+      if (!streamUrl.value) {
+        console.error('No stream URL available')
+        return
+      }
+      
+      isDetectionLoading.value = true
+      
+      try {
+        const response = await axios.post('/api/trigger-detection', {
+          stream_url: streamUrl.value,
+          stop: isDetectionActive.value
+        })
+        
+        // Use the response data to set the state
+        if (response.data.message.includes('started')) {
+          isDetectionActive.value = true
+        } else if (response.data.message.includes('stopped')) {
+          isDetectionActive.value = false
+        } else {
+          // Just toggle the state as a fallback
+          isDetectionActive.value = !isDetectionActive.value
+        }
+        
+        // Emit event to notify parent component
+        emit('detection-toggled', {
+          stream: props.stream,
+          active: isDetectionActive.value
+        })
+        
+        // Add animation for feedback
+        anime({
+          targets: '.detection-toggle',
+          scale: [1, 1.2, 1],
+          duration: 400,
+          easing: 'easeOutQuad'
+        })
+        
+      } catch (error) {
+        console.error('Error toggling detection:', error)
+        detectionError.value = error.response?.data?.error || 'Failed to toggle detection'
+      } finally {
+        isDetectionLoading.value = false
+      }
+    }
+    
+    const checkDetectionStatus = async () => {
+      if (!streamUrl.value) return
+      
+      try {
+        const response = await axios.get(`/api/detection-status?stream_url=${encodeURIComponent(streamUrl.value)}`)
+        isDetectionActive.value = response.data.active === true
+      } catch (error) {
+        console.error('Error checking detection status:', error)
+      }
+    }
+    
+    const getDetectionButtonText = () => {
+      if (isDetectionLoading.value) return 'Loading...'
+      return isDetectionActive.value ? 'Stop' : 'Monitor'
     }
 
     const addEntranceAnimation = () => {
@@ -301,9 +394,6 @@ export default {
     const toggleFullscreen = () => {
       emit('fullscreen', props.stream)
       isFullscreen.value = !isFullscreen.value
-      
-      // This would typically be handled by the parent component
-      // which would implement the actual fullscreen functionality
     }
 
     // Watch for changes in totalStreams to adjust the layout
@@ -332,6 +422,12 @@ export default {
       initializeVideo()
       addEntranceAnimation()
       
+      // Check detection status initially
+      checkDetectionStatus()
+      
+      // Set up interval to check detection status
+      checkStatusInterval.value = setInterval(checkDetectionStatus, 30000)
+      
       // Listen for global mute all event if event bus exists
       if (eventBus) {
         eventBus.$on('muteAllStreams', (exceptId) => {
@@ -345,6 +441,11 @@ export default {
 
     onBeforeUnmount(() => {
       destroyHls()
+      
+      // Clear detection status interval
+      if (checkStatusInterval.value) {
+        clearInterval(checkStatusInterval.value)
+      }
       
       // Clean up event listeners
       if (eventBus) {
@@ -361,18 +462,81 @@ export default {
       isBookmarked,
       isCompactView,
       isDarkTheme,
+      isDetectionActive,
+      isDetectionLoading,
       addHoverAnimation,
       removeHoverAnimation,
       getStreamTime,
       toggleMute,
       toggleBookmark,
-      toggleFullscreen
+      toggleFullscreen,
+      toggleDetection,
+      getDetectionButtonText
     }
   }
 }
 </script>
 
 <style scoped>
+/* Add this to your existing styles */
+
+/* Detection controls */
+.detection-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+}
+
+.detection-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.detection-toggle:hover {
+  background-color: rgba(0, 0, 0, 0.85);
+  transform: translateY(-2px);
+}
+
+.detection-toggle.active {
+  background-color: rgba(220, 53, 69, 0.85);
+}
+
+.detection-toggle.active:hover {
+  background-color: rgba(220, 53, 69, 1);
+}
+
+.detection-toggle.loading {
+  background-color: rgba(255, 193, 7, 0.85);
+  pointer-events: none;
+}
+
+/* Monitor stat for active detection */
+.monitor-stat {
+  color: #28a745;
+  font-weight: 500;
+}
+
+/* Compact view adjustments */
+.compact-view .detection-toggle {
+  padding: 4px 8px;
+  font-size: 0.7rem;
+}
+
+.compact-view .detection-label {
+  display: none;
+}
+
+/* Add these to your existing styles for the rest of the component */
 .stream-card {
   background-color: var(--input-bg);
   border-radius: 16px;
@@ -387,6 +551,7 @@ export default {
   will-change: transform, box-shadow;
   position: relative;
 }
+
 
 /* Compact view styling */
 .stream-card.compact-view {
@@ -508,7 +673,7 @@ export default {
 }
 
 .stream-info {
-  padding: 16px;
+  padding: 10px;
   flex-grow: 1;
   display: flex;
   flex-direction: column;
@@ -518,7 +683,7 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .stream-title {
@@ -534,11 +699,11 @@ export default {
 .stream-meta {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 6px;
 }
 
 .platform-tag {
-  padding: 3px 10px;
+  padding: 1px 7px;
   border-radius: 20px;
   font-size: 0.75rem;
   font-weight: 600;

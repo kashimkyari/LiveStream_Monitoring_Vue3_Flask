@@ -1,6 +1,6 @@
 <template>
   <div class="agent-streams" :class="{ 'dark-theme': isDarkTheme }">
-    <!-- Dashboard-style header with animated entrance -->
+    <!-- Simple header with stream count -->
     <div class="stream-dashboard-header" ref="streamHeader">
       <div class="stream-status-summary">
         <div class="status-pill" 
@@ -15,15 +15,26 @@
           <span class="status-indicator offline"></span>
           <span>{{ offlineStreams.length }} Offline</span>
         </div>
-        <div class="last-checked" v-if="lastRefreshed" ref="timestampEl">
-          Last checked: {{ formattedLastRefresh }}
-        </div>
       </div>
       <div class="header-actions" ref="headerActions">
-        <button class="view-toggle-btn" @click="toggleViewMode" ref="viewToggleBtn">
-          <font-awesome-icon :icon="['fas', viewMode === 'grid' ? 'list' : 'th']" />
-          <span>{{ viewMode === 'grid' ? 'List' : 'Grid' }}</span>
-        </button>
+        <div class="view-toggle-container">
+          <button 
+            class="view-mode-btn" 
+            :class="{ 'active': viewMode === 'grid' }" 
+            @click="setViewMode('grid')"
+            title="Grid View"
+          >
+            <font-awesome-icon :icon="['fas', 'th']" />
+          </button>
+          <button 
+            class="view-mode-btn" 
+            :class="{ 'active': viewMode === 'list' }" 
+            @click="setViewMode('list')"
+            title="List View"
+          >
+            <font-awesome-icon :icon="['fas', 'list']" />
+          </button>
+        </div>
       </div>
     </div>
 
@@ -35,37 +46,36 @@
         v-if="liveStreams.length > 0"
         ref="liveStreamSection"
       >
-        <div class="section-header">
-          <div class="status-indicator">
-            <span class="status-pulse"></span>
-            <h3>Live Streams</h3>
-          </div>
-          <div class="stream-counter">{{ liveStreams.length }} {{ liveStreams.length === 1 ? 'stream' : 'streams' }}</div>
-        </div>
+       
         
         <div 
           class="streams-grid" 
           ref="liveStreamsGrid"
-          :class="{'list-layout': viewMode === 'list'}"
+          :class="{
+            'list-layout': viewMode === 'list', 
+            'small': liveStreams.length > 6 && viewMode === 'grid', 
+            'medium': liveStreams.length > 3 && liveStreams.length <= 6 && viewMode === 'grid'
+          }"
         >
           <div 
             v-for="(stream, index) in liveStreams" 
             :key="stream.id || 'live-' + index"
             class="stream-card-wrapper"
-            @mouseenter="animateStreamHover($event, true)"
-            @mouseleave="animateStreamHover($event, false)"
             @click="openStreamDetails(stream)"
             :data-index="index"
+            :class="{ 'list-item': viewMode === 'list' }"
             ref="liveStreamCards"
           >
-            <StreamCard 
-              :stream="stream" 
-              :index="index"
-              :isLive="true"
-              :detectionCount="getDetectionCount(stream)"
-              :playVideo="true"
-              class="stream-card"
-            ></StreamCard>
+           <StreamCard 
+             :stream="enhanceStreamWithUsername(stream)" 
+             :index="index"
+             :isLive="true"
+             :detectionCount="getDetectionCount(stream)"
+             :playVideo="playVideo"
+             :totalStreams="totalStreams"
+             class="stream-card"
+             @detection-toggled="handleDetectionToggled"
+           ></StreamCard>
           </div>
         </div>
       </div>
@@ -81,31 +91,35 @@
             <span class="status-dot"></span>
             <h3>Offline Streams</h3>
           </div>
-          <div class="stream-counter">{{ offlineStreams.length }} {{ offlineStreams.length === 1 ? 'stream' : 'streams' }}</div>
         </div>
         
         <div 
           class="streams-grid" 
           ref="offlineStreamsGrid"
-          :class="{'list-layout': viewMode === 'list'}"
+          :class="{
+            'list-layout': viewMode === 'list', 
+            'small': offlineStreams.length > 6 && viewMode === 'grid', 
+            'medium': offlineStreams.length > 3 && offlineStreams.length <= 6 && viewMode === 'grid'
+          }"
         >
           <div 
             v-for="(stream, index) in offlineStreams" 
             :key="stream.id || 'offline-' + index"
             class="stream-card-wrapper"
-            @mouseenter="animateStreamHover($event, true)"
-            @mouseleave="animateStreamHover($event, false)"
             @click="openStreamDetails(stream)"
             :data-index="index"
+            :class="{ 'list-item': viewMode === 'list' }"
             ref="offlineStreamCards"
           >
             <StreamCard 
-              :stream="stream" 
+              :stream="enhanceStreamWithUsername(stream)" 
               :index="index"
               :isLive="false"
               :detectionCount="getDetectionCount(stream)"
-              :playVideo="false"
+              :playVideo="playVideo"
+              :totalStreams="totalStreams"
               class="stream-card"
+              @detection-toggled="handleDetectionToggled"
             ></StreamCard>
           </div>
         </div>
@@ -120,10 +134,6 @@
         <font-awesome-icon :icon="['fas', 'video-slash']" class="empty-icon" />
         <div class="empty-title">No streams assigned</div>
         <div class="empty-description">Streams assigned to you will appear here</div>
-        <button class="empty-action-btn" @click="fetchAssignedStreams">
-          <font-awesome-icon :icon="['fas', 'sync']" />
-          <span>Check for streams</span>
-        </button>
       </div>
     </div>
     
@@ -133,11 +143,6 @@
         <div class="loader-container" ref="loaderContainer">
           <div class="loader-circle"></div>
           <div class="loader-text">Checking stream status...</div>
-          <div class="loader-dots">
-            <span class="dot"></span>
-            <span class="dot"></span>
-            <span class="dot"></span>
-          </div>
         </div>
       </div>
     </transition>
@@ -153,67 +158,23 @@
         </button>
       </div>
     </transition>
-    
-    <!-- Refresh button with interactive animation -->
-    <div 
-      class="refresh-control" 
-      @click="handleRefreshClick"
-      v-if="!isLoading && streams.length > 0"
-      ref="refreshBtn"
-    >
-      <font-awesome-icon :icon="['fas', 'sync']" :class="{'spinning': isRefreshing}" />
-    </div>
-
-    <!-- Animated filter controls -->
-    <div class="filter-controls" v-if="streams.length > 0" ref="filterControls">
-      <div class="filter-toggle" @click="showFilters = !showFilters">
-        <font-awesome-icon :icon="['fas', 'filter']" />
-        <span>Filter</span>
-        <font-awesome-icon 
-          :icon="['fas', showFilters ? 'chevron-up' : 'chevron-down']" 
-          class="toggle-icon"
-        />
-      </div>
-      <transition name="slide-down">
-        <div class="filter-options" v-if="showFilters">
-          <div class="filter-option">
-            <input type="checkbox" id="showLive" v-model="filterOptions.showLive">
-            <label for="showLive">Show Live</label>
-          </div>
-          <div class="filter-option">
-            <input type="checkbox" id="showOffline" v-model="filterOptions.showOffline">
-            <label for="showOffline">Show Offline</label>
-          </div>
-          <div class="filter-option">
-            <input type="checkbox" id="showDetections" v-model="filterOptions.showDetections">
-            <label for="showDetections">Only With Detections</label>
-          </div>
-        </div>
-      </transition>
-    </div>
 
     <!-- Stream Details Modal with enhanced animations -->
     <transition name="modal">
       <StreamDetailsModal
         v-if="showModal && selectedStream"
-        :stream="selectedStream"
+        :stream="enhanceStreamWithUsername(selectedStream)"
         :detections="selectedStreamDetections"
         :isRefreshing="isRefreshingStream"
         @close="closeModal"
         @refresh="handleStreamRefresh"
       />
     </transition>
-    
-    <!-- Quick action tooltip -->
-    <transition name="fade">
-      <div class="action-tooltip" v-if="showTooltip" ref="tooltip" :style="tooltipStyle">
-        {{ tooltipText }}
-      </div>
-    </transition>
   </div>
 </template>
 
 <script>
+  /* eslint-disable */ 
 import { ref, computed, onMounted, nextTick, onBeforeUnmount, inject, watch } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
@@ -233,11 +194,7 @@ import {
   faList,
   faChevronRight,
   faClock,
-  faBell,
-  faArrowDown,
-  faFilter,
-  faChevronUp,
-  faChevronDown
+  faBell
 } from '@fortawesome/free-solid-svg-icons'
 
 library.add(
@@ -252,11 +209,7 @@ library.add(
   faList, 
   faChevronRight, 
   faClock, 
-  faBell,
-  faArrowDown,
-  faFilter,
-  faChevronUp,
-  faChevronDown
+  faBell
 )
 
 export default {
@@ -290,10 +243,10 @@ export default {
   },
   emits: ['refresh-streams', 'update-stream'],
   setup(props, { emit }) {
-    // Inject app theme from parent using the same pattern as App.vue
+    // Inject app theme from parent
     const appTheme = inject('theme', ref(true))
     
-    // Create a computed property for isDarkTheme to match App.vue's naming convention
+    // Create computed property for isDarkTheme
     const isDarkTheme = computed(() => appTheme.value === true)
     
     // Reactive state
@@ -303,25 +256,15 @@ export default {
     const isRefreshingStream = ref(false)
     const isMobile = ref(window.innerWidth <= 768)
     const viewMode = ref(isMobile.value ? 'list' : 'grid')
-    const isRefreshing = ref(false)
-    const showFilters = ref(false)
-    const filterOptions = ref({
-      showLive: true,
-      showOffline: true,
-      showDetections: false
-    })
     
     // API related states
     const localStreams = ref([])
     const localIsLoading = ref(false)
     const localError = ref(null)
     const localLastRefreshed = ref(new Date())
-    
-    // Tooltip state
-    const showTooltip = ref(false)
-    const tooltipText = ref('')
-    const tooltipStyle = ref({})
-    const tooltipTimeout = ref(null)
+    const currentAgentId = ref(null)
+    const agentData = ref(null)
+    const agents = ref([])
     
     // Animation refs
     const streamHeader = ref(null)
@@ -331,20 +274,49 @@ export default {
     const liveStreamsGrid = ref(null)
     const offlineStreamsGrid = ref(null)
     const emptyState = ref(null)
-    const refreshBtn = ref(null)
     const errorMessage = ref(null)
     const livePill = ref(null)
     const offlinePill = ref(null)
-    const timestampEl = ref(null)
     const headerActions = ref(null)
     const viewToggleBtn = ref(null)
-    const filterControls = ref(null)
-    const tooltip = ref(null)
     const loaderContainer = ref(null)
     const liveStreamCards = ref([])
     const offlineStreamCards = ref([])
+
+    const handleDetectionToggled = (data) => {
+  console.log(`Detection ${data.active ? 'started' : 'stopped'} for ${data.stream.streamer_username}`)
+  // You can add additional logic here, like showing a notification
+}
     
-    // API methods
+    // Get current session and agent data
+    const fetchCurrentAgent = async () => {
+      try {
+        const response = await axios.get('/api/session')
+        if (response.data && response.data.isLoggedIn) {
+          currentAgentId.value = response.data.user.id
+          agentData.value = response.data.user
+          return response.data.user
+        }
+        return null
+      } catch (error) {
+        console.error('Error fetching current agent:', error)
+        return null
+      }
+    }
+
+    // Fetch all agents for username lookup
+    const fetchAgents = async () => {
+      try {
+        const response = await axios.get('/api/agents')
+        if (response.data) {
+          agents.value = response.data
+        }
+      } catch (error) {
+        console.error('Error fetching agents:', error)
+      }
+    }
+    
+    // API methods - Fetch streams with assignments
     const fetchAssignedStreams = async () => {
       if (localIsLoading.value) return
       
@@ -352,723 +324,486 @@ export default {
       localError.value = null
       
       try {
-        // Build the query parameters
-        const params = {}
-        if (props.agentId) {
-          params.agent_id = props.agentId
-        }
-        
-        // Make the API call to get assignments
-        const assignmentsResponse = await axios.get('/api/assignments', { params })
-        
-        if (!assignmentsResponse.data || !assignmentsResponse.data.assignments) {
-          throw new Error('Invalid response format from server')
-        }
-        
-        // Extract stream IDs from assignments
-        const assignments = assignmentsResponse.data.assignments
-        
-        if (assignments.length === 0) {
-          localStreams.value = []
-          localIsLoading.value = false
-          localLastRefreshed.value = new Date()
-          return
-        }
-        
-        // Get details for each stream
-        const streamsData = []
-        for (const assignment of assignments) {
-          if (!assignment.stream_id) continue
-          
-          try {
-            // Fetch streams and any detection logs associated with them
-            const streamResponse = await axios.get(`/api/streams/${assignment.stream_id}`)
-            if (streamResponse.data) {
-              // Add the stream to our collection
-              streamsData.push(streamResponse.data)
-            }
-          } catch (streamError) {
-            console.error(`Error fetching stream ${assignment.stream_id}:`, streamError)
+        // First, get the current agent's ID if not already set
+        if (!currentAgentId.value) {
+          const agent = await fetchCurrentAgent()
+          if (!agent) {
+            localError.value = 'Unable to authenticate. Please log in again.'
+            localIsLoading.value = false
+            return
           }
         }
+
+        // Fetch agents for username mapping if not already loaded
+        if (agents.value.length === 0) {
+          await fetchAgents()
+        }
         
-        // Update local state
-        localStreams.value = streamsData
+        // Fetch all streams
+        const response = await axios.get('/api/streams')
+        const allStreams = response.data || []
+        
+        // Filter streams that are assigned to the current agent
+        const agentId = currentAgentId.value
+        const assignedStreams = allStreams.filter(stream => {
+          // Check if this stream has assignments for the current agent
+          return stream.assignments && stream.assignments.some(assignment => 
+            assignment.agent_id === agentId
+          )
+        })
+        
+        localStreams.value = assignedStreams
         localLastRefreshed.value = new Date()
+        localIsLoading.value = false
+        
+        // Animate elements after data is loaded
+        nextTick(() => {
+          animateStreamElements()
+        })
       } catch (error) {
-        console.error('Error fetching assigned streams:', error)
-        localError.value = error.response?.data?.message || 'Failed to fetch assigned streams'
-      } finally {
+        console.error('Error fetching streams:', error)
+        localError.value = 'Failed to load streams. Please try again.'
         localIsLoading.value = false
       }
     }
-    
-    // Get detailed stream info including m3u8 URLs
-    const fetchStreamDetails = async (streamId) => {
-      try {
-        const response = await axios.get(`/api/streams/${streamId}`)
-        if (response.data) {
-          // Find and update the stream in our local collection
-          const index = localStreams.value.findIndex(s => s.id === streamId)
-          if (index !== -1) {
-            localStreams.value[index] = response.data
+
+    // Helper function to enhance stream with agent username
+    const enhanceStreamWithUsername = (stream) => {
+      if (!stream) return stream
+      
+      // Create a deep copy to avoid modifying the original
+      const enhancedStream = JSON.parse(JSON.stringify(stream))
+
+      // Process assignments to add usernames
+      if (enhancedStream.assignments && enhancedStream.assignments.length > 0) {
+        enhancedStream.assignments = enhancedStream.assignments.map(assignment => {
+          let agentUsername = null
+          
+          // First check if we already have the username in the agent object
+          if (assignment.agent && assignment.agent.username) {
+            agentUsername = assignment.agent.username
+          } 
+          // Then look up the agent in our agents list
+          else if (agents.value.length > 0) {
+            const agentObj = agents.value.find(a => a.id === assignment.agent_id)
+            if (agentObj) {
+              agentUsername = agentObj.username
+            }
           }
-          return response.data
-        }
-      } catch (error) {
-        console.error(`Error fetching details for stream ${streamId}:`, error)
-        showTooltipMessage(`Failed to refresh stream details`)
-        return null
+          // If it's the current agent, use that username
+          else if (assignment.agent_id === currentAgentId.value && agentData.value) {
+            agentUsername = agentData.value.username
+          }
+          
+          return {
+            ...assignment,
+            agent_username: agentUsername || `Agent ${assignment.agent_id}`
+          }
+        })
       }
+
+      // Add agent reference to the stream for StreamCard to use
+      if (enhancedStream.assignments && enhancedStream.assignments.length > 0) {
+        // Find the assignment for the current agent
+        const currentAgentAssignment = enhancedStream.assignments.find(
+          a => a.agent_id === currentAgentId.value
+        )
+        
+        if (currentAgentAssignment) {
+          enhancedStream.agent = {
+            id: currentAgentId.value,
+            username: currentAgentAssignment.agent_username
+          }
+        }
+      }
+      
+      return enhancedStream
     }
     
-    // Method to refresh a specific stream
-    const refreshStreamData = async (streamId) => {
-      try {
-        const stream = localStreams.value.find(s => s.id === streamId)
-        if (!stream) return null
-        
-        let refreshEndpoint = null
-        
-        // Determine the correct refresh endpoint based on stream type
-        if (stream.type === 'chaturbate') {
-          refreshEndpoint = '/api/streams/refresh/chaturbate'
-          return await axios.post(refreshEndpoint, { room_slug: stream.streamer_username })
-        } else if (stream.type === 'stripchat') {
-          refreshEndpoint = '/api/streams/refresh/stripchat'
-          return await axios.post(refreshEndpoint, { room_url: stream.room_url })
-        }
-        
-        return null
-      } catch (error) {
-        console.error(`Error refreshing stream ${streamId}:`, error)
-        showTooltipMessage(`Failed to refresh stream`)
-        return null
+    // Helper to determine if a stream is live based on m3u8 URLs
+    const isStreamLive = (stream) => {
+      if (!stream) return false
+      
+      const platform = stream.platform?.toLowerCase()
+      if (platform === 'chaturbate') {
+        return !!stream.chaturbate_m3u8_url
+      } else if (platform === 'stripchat') {
+        return !!stream.stripchat_m3u8_url
       }
+      
+      return false
     }
     
-    // Computed properties
-    const streamsToDisplay = computed(() => {
-      // Use props.streams if provided, otherwise use local state
-      return props.streams.length > 0 ? props.streams : localStreams.value
-    })
-    
+    // Filtered streams
     const liveStreams = computed(() => {
-      const streams = streamsToDisplay.value
-      const filtered = streams.filter(stream => stream && stream.isLive === true)
-      
-      // Apply additional filters if needed
-      if (filterOptions.value.showDetections) {
-        return filtered.filter(stream => getDetectionCount(stream) > 0)
-      }
-      
-      return filtered
+      return localStreams.value.filter(stream => isStreamLive(stream))
     })
     
     const offlineStreams = computed(() => {
-      const streams = streamsToDisplay.value
-      const filtered = streams.filter(stream => stream && stream.isLive === false)
-      
-      // Apply additional filters if needed
-      if (filterOptions.value.showDetections) {
-        return filtered.filter(stream => getDetectionCount(stream) > 0)
-      }
-      
-      return filtered
+      return localStreams.value.filter(stream => !isStreamLive(stream))
     })
     
-    const currentLoading = computed(() => {
-      return props.isLoading || localIsLoading.value
-    })
-    
-    const currentError = computed(() => {
-      return props.error || localError.value
-    })
-    
-    const formattedLastRefresh = computed(() => {
-      const timestamp = props.lastRefreshed || localLastRefreshed.value
-      if (!timestamp) return ''
-      return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    })
-    
-    // Toggle view mode with enhanced animation
-    const toggleViewMode = () => {
-      const newMode = viewMode.value === 'grid' ? 'list' : 'grid'
-      
-      // Animate view toggle button
-      anime({
-        targets: viewToggleBtn.value,
-        scale: [1, 1.2, 1],
-        rotate: ['0deg', '5deg', '-5deg', '0deg'],
-        duration: 500,
-        easing: 'easeInOutBack'
-      })
-      
-      // First fade out all cards
-      const allCards = [...document.querySelectorAll('.stream-card-wrapper')]
-      anime({
-        targets: allCards,
-        opacity: [1, 0.3],
-        scale: [1, 0.95],
-        duration: 300,
-        easing: 'easeOutQuad',
-        complete: () => {
-          // Change the view mode
-          viewMode.value = newMode
-          
-          // Then animate them back in with delay
-          nextTick(() => {
-            anime({
-              targets: allCards,
-              opacity: [0.3, 1],
-              scale: [0.95, 1],
-              delay: anime.stagger(30),
-              duration: 400,
-              easing: 'easeOutQuad'
-            })
-          })
-        }
-      })
-      
-      // Show tooltip
-      showTooltipMessage(`Switched to ${newMode} view`)
+    // Get detection count (mock for now, would connect to real data)
+    const getDetectionCount = (stream) => {
+      // This would integrate with actual detection data
+      return 0
     }
     
-    // Show tooltip message
-    const showTooltipMessage = (message, duration = 2000) => {
-      // Clear any existing timeout
-      if (tooltipTimeout.value) clearTimeout(tooltipTimeout.value)
+    // Set view mode with animation
+    const setViewMode = (mode) => {
+      if (viewMode.value === mode) return
       
-      tooltipText.value = message
+      // Store the old mode for animation purposes
+      const oldMode = viewMode.value
+      viewMode.value = mode
       
-      // Position near the view toggle button if available, otherwise center
-      if (viewToggleBtn.value) {
-        const btnRect = viewToggleBtn.value.getBoundingClientRect()
-        tooltipStyle.value = {
-          top: `${btnRect.bottom + 10}px`,
-          left: `${btnRect.left + (btnRect.width / 2)}px`,
-          transform: 'translateX(-50%)'
-        }
-      } else {
-        tooltipStyle.value = {
-          top: '20%',
-          left: '50%',
-          transform: 'translateX(-50%)'
-        }
+      // Save preference in localStorage
+      try {
+        localStorage.setItem('streamViewMode', mode)
+      } catch (e) {
+        console.error('Could not save view mode preference')
       }
       
-      showTooltip.value = true
-      
-      // Animate tooltip
+      // Animate the transition
       nextTick(() => {
-        if (tooltip.value) {
-          anime({
-            targets: tooltip.value,
-            translateY: ['-10px', '0px'],
-            opacity: [0, 1],
-            duration: 300,
-            easing: 'easeOutQuad'
-          })
-        }
-      })
-      
-      // Hide after duration
-      tooltipTimeout.value = setTimeout(() => {
-        if (tooltip.value) {
-          anime({
-            targets: tooltip.value,
-            translateY: ['0px', '-10px'],
-            opacity: [1, 0],
-            duration: 300,
-            easing: 'easeInQuad',
-            complete: () => {
-              showTooltip.value = false
-            }
+        const cards = [...document.querySelectorAll('.stream-card-wrapper')]
+        
+        // Different animation depending on target mode
+        if (mode === 'list') {
+          // Grid to List animation
+          anime.timeline({
+            easing: 'easeOutQuad',
+            duration: 400
+          }).add({
+            targets: cards,
+            scale: [1, 0.95],
+            opacity: [1, 0.7],
+            duration: 200
+          }).add({
+            targets: cards,
+            height: '100px',
+            width: '100%',
+            scale: 1,
+            opacity: 1,
+            delay: anime.stagger(30),
+            duration: 300
           })
         } else {
-          showTooltip.value = false
+          // List to Grid animation
+          anime.timeline({
+            easing: 'easeOutQuad',
+            duration: 400
+          }).add({
+            targets: cards,
+            scale: [1, 0.95],
+            opacity: [1, 0.7],
+            duration: 200
+          }).add({
+            targets: cards,
+            height: '240px',
+            width: '100%',
+            scale: 1,
+            opacity: 1,
+            delay: anime.stagger(30),
+            duration: 300
+          })
         }
-      }, duration)
+      })
     }
     
-    // Handle refresh button click with animation
-    const handleRefreshClick = () => {
-      if (isRefreshing.value) return
+    // Open stream details modal
+    const openStreamDetails = (stream) => {
+      selectedStream.value = stream
       
-      isRefreshing.value = true
+      // Fetch detections for this stream
+      // This would be replaced with actual API call to get detections
+      selectedStreamDetections.value = []
       
-      // Animate the refresh button
-      anime({
-        targets: refreshBtn.value,
-        rotate: '360deg',
-        scale: [1, 1.2, 1],
-        duration: 800,
-        easing: 'easeInOutQuad'
+      showModal.value = true
+      
+      // Animate the modal entrance
+      nextTick(() => {
+        anime({
+          targets: '.modal-content',
+          translateY: [50, 0],
+          opacity: [0, 1],
+          duration: 500,
+          easing: 'easeOutQuad'
+        })
       })
+    }
+    
+    // Close modal with animation
+    const closeModal = () => {
+      anime({
+        targets: '.modal-content',
+        translateY: [0, 50],
+        opacity: [1, 0],
+        duration: 300,
+        easing: 'easeInQuad',
+        complete: () => {
+          showModal.value = false
+          selectedStream.value = null
+        }
+      })
+    }
+    
+    // Handle stream refresh
+    const handleStreamRefresh = async (streamId) => {
+      isRefreshingStream.value = true
       
-      // Either use the provided refresh method or our own
-      if (props.streams.length > 0) {
-        emit('refresh-streams')
-      } else {
-        fetchAssignedStreams()
+      try {
+        // API call to refresh specific stream
+        const response = await axios.put(`/api/streams/${streamId}`, { refresh: true })
+        
+        if (response.data && response.data.stream) {
+          // Update the stream in local state
+          const updatedStream = response.data.stream
+          
+          // Update in localStreams
+          const streamIndex = localStreams.value.findIndex(s => s.id === streamId)
+          if (streamIndex >= 0) {
+            localStreams.value[streamIndex] = updatedStream
+            
+            // If this is the selected stream, update it too
+            if (selectedStream.value && selectedStream.value.id === streamId) {
+              selectedStream.value = updatedStream
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error refreshing stream:', error)
+      } finally {
+        isRefreshingStream.value = false
+      }
+    }
+    
+    // Animation functions
+    const animateStreamElements = () => {
+      // Skip animations if no data
+      if (localStreams.value.length === 0) {
+        animateEmptyState()
+        return
       }
       
-      // Show tooltip
-      showTooltipMessage('Refreshing streams...')
-      
-      // Reset after animation completes
-      setTimeout(() => {
-        isRefreshing.value = false
-      }, 1000)
-    }
-    
-    // Animate stream sections and cards with enhanced effects
-    const animateStreamSections = () => {
-      console.log('Animating stream sections');
-      
-      // Animate header with staggered children
+      // Animate header elements
       if (streamHeader.value) {
         anime({
           targets: streamHeader.value,
-          translateY: ['-20px', 0],
+          translateY: [-30, 0],
           opacity: [0, 1],
-          easing: 'easeOutQuad',
-          duration: 600
-        })
-        
-        if (livePill.value && offlinePill.value) {
-          anime({
-            targets: [livePill.value, offlinePill.value, timestampEl.value].filter(Boolean),
-            translateY: ['-10px', 0],
-            opacity: [0, 1],
-            delay: anime.stagger(100, {start: 200}),
-            easing: 'easeOutQuad',
-            duration: 500
-          })
-        }
-        
-        if (headerActions.value) {
-          anime({
-            targets: headerActions.value,
-            translateX: ['20px', 0],
-            opacity: [0, 1],
-            easing: 'easeOutQuad',
-            duration: 600,
-            delay: 300
-          })
-        }
-      }
-      
-      // Animate live streams section
-      if (liveStreams.value.length > 0 && liveStreamSection.value) {
-        anime({
-          targets: liveStreamSection.value,
-          translateY: [20, 0],
-          opacity: [0, 1],
-          easing: 'easeOutQuad',
-          duration: 600
-        })
-        
-        // Animate the section header
-        const sectionHeader = liveStreamSection.value.querySelector('.section-header')
-        if (sectionHeader) {
-          anime({
-            targets: sectionHeader,
-            translateX: ['-20px', 0],
-            opacity: [0, 1],
-            easing: 'easeOutQuad',
-            duration: 600,
-            delay: 200
-          })
-        }
-        
-        // Safely animate stream cards with more dynamic effects
-        const liveCards = document.querySelectorAll('.live-streams .stream-card-wrapper')
-        if (liveCards && liveCards.length > 0) {
-          anime({
-            targets: liveCards,
-            scale: [0.85, 1],
-            translateY: [20, 0],
-            opacity: [0, 1],
-            delay: anime.stagger(80, {grid: [Math.min(3, liveCards.length), Math.ceil(liveCards.length/3)], from: 'center'}),
-            easing: 'easeOutQuad',
-            duration: 600
-          })
-        }
-      }
-      
-      // Animate offline streams section with delay
-      if (offlineStreams.value.length > 0 && offlineStreamSection.value) {
-        anime({
-          targets: offlineStreamSection.value,
-          translateY: [20, 0],
-          opacity: [0, 1],
-          easing: 'easeOutQuad',
           duration: 600,
-          delay: 400
+          easing: 'easeOutQuad'
         })
-        
-        // Animate the section header
-        const sectionHeader = offlineStreamSection.value.querySelector('.section-header')
-        if (sectionHeader) {
-          anime({
-            targets: sectionHeader,
-            translateX: ['-20px', 0],
-            opacity: [0, 1],
-            easing: 'easeOutQuad',
-            duration: 600,
-            delay: 500
-          })
-        }
-        
-        // Safely animate stream cards with more dynamic effects
-        const offlineCards = document.querySelectorAll('.offline-streams .stream-card-wrapper')
-        if (offlineCards && offlineCards.length > 0) {
-          anime({
-            targets: offlineCards,
-            scale: [0.85, 1],
-            translateY: [20, 0],
-            opacity: [0, 1],
-            delay: anime.stagger(60, {grid: [Math.min(3, offlineCards.length), Math.ceil(offlineCards.length/3)], from: 'center'}),
-            easing: 'easeOutQuad',
-            duration: 600
-          })
-        }
       }
       
-      // Animate empty state if no streams with bouncy effect
-      if (streamsToDisplay.value.length === 0 && emptyState.value && !currentLoading.value) {
+      // Animate status pills
+      if (livePill.value) {
+        anime({
+          targets: livePill.value,
+          translateX: [-20, 0],
+          opacity: [0, 1],
+          delay: 200,
+          duration: 500,
+          easing: 'easeOutQuad'
+        })
+      }
+      
+      if (offlinePill.value) {
+        anime({
+          targets: offlinePill.value,
+          translateX: [-20, 0],
+          opacity: [0, 1],
+          delay: 300,
+          duration: 500,
+          easing: 'easeOutQuad'
+        })
+      }
+      
+      // Animate section headers
+      if (liveStreamSection.value) {
+        anime({
+          targets: liveStreamSection.value.querySelector('.section-header'),
+          translateY: [-20, 0],
+          opacity: [0, 1],
+          duration: 500,
+          easing: 'easeOutQuad'
+        })
+      }
+      
+      if (offlineStreamSection.value) {
+        anime({
+          targets: offlineStreamSection.value.querySelector('.section-header'),
+          translateY: [-20, 0],
+          opacity: [0, 1],
+          delay: 100,
+          duration: 500,
+          easing: 'easeOutQuad'
+        })
+      }
+      
+      // Animate stream cards with staggered effect
+      if (liveStreamCards.value.length > 0) {
+        anime({
+          targets: liveStreamCards.value,
+          translateY: [40, 0],
+          opacity: [0, 1],
+          delay: anime.stagger(100),
+          duration: 600,
+          easing: 'easeOutQuad'
+        })
+      }
+      
+      if (offlineStreamCards.value.length > 0) {
+        anime({
+          targets: offlineStreamCards.value,
+          translateY: [40, 0],
+          opacity: [0, 1],
+          delay: anime.stagger(100),
+          duration: 600,
+          easing: 'easeOutQuad'
+        })
+      }
+    }
+    
+    const animateEmptyState = () => {
+      if (emptyState.value) {
         anime({
           targets: emptyState.value,
-          scale: [0.8, 1],
+          translateY: [30, 0],
           opacity: [0, 1],
-          easing: 'easeOutElastic(1, 0.5)',
-          duration: 1200
+          duration: 800,
+          easing: 'easeOutQuad'
         })
         
-        const emptyIcon = emptyState.value.querySelector('.empty-icon')
-        if (emptyIcon) {
-          anime({
-            targets: emptyIcon,
-            rotate: ['-20deg', '0deg'],
-            scale: [0.7, 1.2, 1],
-            duration: 1500,
-            easing: 'easeOutElastic(1, 0.5)',
-            delay: 300
-          })
-        }
+        anime({
+          targets: emptyState.value.querySelector('.empty-icon'),
+          scale: [0.5, 1],
+          opacity: [0, 1],
+          duration: 1000,
+          delay: 300,
+          easing: 'easeOutElastic(1, 0.5)'
+        })
         
-        const actionBtn = emptyState.value.querySelector('.empty-action-btn')
-        if (actionBtn) {
-          anime({
-            targets: actionBtn,
-            translateY: [20, 0],
-            opacity: [0, 1],
-            scale: [0.9, 1],
-            duration: 800,
-            easing: 'easeOutQuad',
-            delay: 800
-          })
-        }
+        anime({
+          targets: [
+            emptyState.value.querySelector('.empty-title'),
+            emptyState.value.querySelector('.empty-description')
+          ],
+          translateY: [20, 0],
+          opacity: [0, 1],
+          delay: anime.stagger(150, {start: 400}),
+          duration: 800,
+          easing: 'easeOutQuad'
+        })
       }
-      
-      // Animate error message if there's an error
-      if (currentError.value && errorMessage.value) {
+    }
+    
+    // Animate error message
+    const animateErrorMessage = () => {
+      if (errorMessage.value) {
         anime({
           targets: errorMessage.value,
           translateY: [20, 0],
           opacity: [0, 1],
-          duration: 600,
+          duration: 500,
           easing: 'easeOutQuad'
         })
         
-        const errorIcon = errorMessage.value.querySelector('.error-icon')
-        if (errorIcon) {
-          anime({
-            targets: errorIcon,
-            rotate: ['0deg', '20deg', '-15deg', '10deg', '-5deg', '0deg'],
-            duration: 1200,
-            easing: 'easeOutElastic(1, 0.5)',
-            delay: 300
-          })
-        }
-      }
-      
-      // Animate refresh button with a spring effect
-      if (refreshBtn.value && streamsToDisplay.value.length > 0) {
         anime({
-          targets: refreshBtn.value,
-          scale: [0, 1.2, 1],
-          rotate: ['0deg', '360deg'],
-          easing: 'easeOutElastic(1, 0.5)',
-          duration: 1200,
-          delay: 800
+          targets: errorMessage.value.querySelector('.error-icon'),
+          rotate: ['15deg', '-15deg', '0deg'],
+          duration: 800,
+          delay: 200,
+          easing: 'easeOutElastic(1, 0.5)'
         })
       }
-      
-      // Animate filter controls entrance
-      if (filterControls.value && streamsToDisplay.value.length > 0) {
-        anime({
-          targets: filterControls.value,
-          translateY: [20, 0],
-          opacity: [0, 1],
-          easing: 'easeOutQuad',
-          duration: 600,
-          delay: 1000
-        })
-      }
-      
-      // Animate loader if loading
-      if (currentLoading.value && loaderContainer.value) {
-        anime({
-          targets: loaderContainer.value.querySelectorAll('.dot'),
-          translateY: [0, -10, 0],
-          delay: anime.stagger(150),
-          loop: true,
-          easing: 'easeInOutQuad',
-          duration: 600
-        })
-      }
-    }
-    
-    // Animate hover on stream cards with enhanced effects
-    const animateStreamHover = (event, isEnter) => {
-      const card = event.currentTarget
-      
-      if (isEnter) {
-        // Mouse enter animation - more dynamic
-        anime({
-          targets: card,
-          translateY: -8,
-          boxShadow: '0 14px 28px rgba(0, 0, 0, 0.2)',
-          scale: 1.03,
-          duration: 400,
-          easing: 'easeOutQuad'
-        })
-        
-        // Animate the inner card elements
-        const streamTitle = card.querySelector('.stream-title')
-        if (streamTitle) {
-          anime({
-            targets: streamTitle,
-            translateX: [0, 5],
-            duration: 300,
-            easing: 'easeOutQuad'
-          })
-        }
-         
-        const actionBtn = emptyState.value.querySelector('.empty-action-btn')
-        if (actionBtn) {
-          anime({
-            targets: actionBtn,
-            translateY: [20, 0],
-            opacity: [0, 1],
-            scale: [0.9, 1],
-            duration: 800,
-            easing: 'easeOutQuad',
-            delay: 800
-          })
-        }
-      }
-      
-      // Animate error message if there's an error
-      if (props.error && errorMessage.value) {
-        anime({
-          targets: errorMessage.value,
-          translateY: [20, 0],
-          opacity: [0, 1],
-          duration: 600,
-          easing: 'easeOutQuad'
-        })
-        
-        const errorIcon = errorMessage.value.querySelector('.error-icon')
-        if (errorIcon) {
-          anime({
-            targets: errorIcon,
-            rotate: ['0deg', '20deg', '-15deg', '10deg', '-5deg', '0deg'],
-            duration: 1200,
-            easing: 'easeOutElastic(1, 0.5)',
-            delay: 300
-          })
-        }
-      }
-      
-      // Animate refresh button with a spring effect
-      if (refreshBtn.value && props.streams.length > 0) {
-        anime({
-          targets: refreshBtn.value,
-          scale: [0, 1.2, 1],
-          rotate: ['0deg', '360deg'],
-          easing: 'easeOutElastic(1, 0.5)',
-          duration: 1200,
-          delay: 800
-        })
-      }
-      
-      // Animate filter controls entrance
-      if (filterControls.value && props.streams.length > 0) {
-        anime({
-          targets: filterControls.value,
-          translateY: [20, 0],
-          opacity: [0, 1],
-          easing: 'easeOutQuad',
-          duration: 600,
-          delay: 1000
-        })
-      }
-      
-      // Animate loader if loading
-      if (props.isLoading && loaderContainer.value) {
-        anime({
-          targets: loaderContainer.value.querySelectorAll('.dot'),
-          translateY: [0, -10, 0],
-          delay: anime.stagger(150),
-          loop: true,
-          easing: 'easeInOutQuad',
-          duration: 600
-        })
-      }
-    }
-    
-    // Animate hover on stream cards with enhanced effects
-    
-    
-    // Get detection count for a stream
-    const getDetectionCount = (stream) => {
-      if (!stream || !stream.detections) return 0
-      return stream.detections.length
-    }
-    
-    // Open stream details modal with enhanced animation
-    const openStreamDetails = (stream) => {
-      selectedStream.value = stream
-      selectedStreamDetections.value = stream.detections || []
-      
-      // Pre-animation setup
-      nextTick(() => {
-        showModal.value = true
-      })
-    }
-    
-    // Close stream details modal with enhanced animation
-    const closeModal = () => {
-      showModal.value = false
-      
-      // Clear selected stream after animation completes
-      setTimeout(() => {
-        selectedStream.value = null
-        selectedStreamDetections.value = []
-      }, 300)
-    }
-    
-    // Handle stream refresh from details modal
-    const handleStreamRefresh = () => {
-      if (!selectedStream.value || isRefreshingStream.value) return
-      
-      isRefreshingStream.value = true
-      
-      // Emit event to parent component to update the stream
-      emit('update-stream', selectedStream.value.id)
-      
-      // Show tooltip
-      showTooltipMessage('Refreshing stream details...')
-      
-      // Wait a bit for the update to happen
-      setTimeout(() => {
-        isRefreshingStream.value = false
-      }, 1000)
     }
     
     // Handle window resize
     const handleResize = () => {
       isMobile.value = window.innerWidth <= 768
       
-      // If mobile and in grid view, switch to list
+      // Switch to list view automatically on small screens
       if (isMobile.value && viewMode.value === 'grid') {
-        viewMode.value = 'list'
+        setViewMode('list')
       }
     }
     
-    // Watch for changes in stream data to trigger animations
-    watch(() => props.streams, (newStreams) => {
-      console.log(`Stream data changed, count: ${newStreams?.length || 0}`);
-      nextTick(() => {
-        animateStreamSections()
+    // Lifecycle hooks
+    onMounted(async () => {
+      // Add resize listener
+      window.addEventListener('resize', handleResize)
+      
+      // Check for saved view mode preference
+      try {
+        const savedViewMode = localStorage.getItem('streamViewMode')
+        if (savedViewMode && ['grid', 'list'].includes(savedViewMode)) {
+          viewMode.value = savedViewMode
+        }
+      } catch (e) {
+        console.error('Could not retrieve view mode preference')
+      }
+      
+      // Initial fetch of assigned streams
+      await fetchAssignedStreams()
+      
+      // Set up watch for error to animate
+      watch(() => localError.value, (newError) => {
+        if (newError) {
+          nextTick(() => {
+            animateErrorMessage()
+          })
+        }
       })
-    }, { immediate: false, deep: true })
-    
-    // Watch for loading state to trigger animation
-    watch(() => props.isLoading, (newValue) => {
-      console.log(`Loading state changed: ${newValue}`);
-      if (newValue) {
-        // Animate loader when loading starts
-        nextTick(() => {
-          if (loaderContainer.value) {
+      
+      // Watch for changes in stream counts to adjust grid layout
+      watch(
+        [() => liveStreams.value.length, () => offlineStreams.value.length],
+        () => {
+          nextTick(() => {
+            // Animate grid layout adjustments
             anime({
-              targets: loaderContainer.value,
-              opacity: [0, 1],
-              scale: [0.9, 1],
-              duration: 400,
+              targets: '.streams-grid',
+              scale: [0.95, 1],
+              duration: 300,
               easing: 'easeOutQuad'
             })
-            
-            anime({
-              targets: loaderContainer.value.querySelectorAll('.dot'),
-              translateY: [0, -10, 0],
-              delay: anime.stagger(150),
-              loop: true,
-              easing: 'easeInOutQuad',
-              duration: 600
-            })
-          }
-        })
-      }
-    })
-    
-    // Setup and cleanup
-    onMounted(() => {
-      console.log('AgentStreamsComponent mounted');
-      
-      // Initial animations
-      nextTick(() => {
-        animateStreamSections()
-      })
-      
-      // Set up event listeners
-      window.addEventListener('resize', handleResize)
+          })
+        }
+      )
     })
     
     onBeforeUnmount(() => {
-      // Cleanup event listeners
+      // Remove resize listener
       window.removeEventListener('resize', handleResize)
-      
-      // Clear any timeouts
-      if (tooltipTimeout.value) {
-        clearTimeout(tooltipTimeout.value)
-      }
     })
     
+    // Return all the reactive variables and methods
     return {
-      // State
-      appTheme,
+      // Reactive state
       isDarkTheme,
-      liveStreams,
-      offlineStreams,
-      formattedLastRefresh,
+      isMobile,
+      viewMode,
       showModal,
       selectedStream,
       selectedStreamDetections,
       isRefreshingStream,
-      isMobile,
-      viewMode,
-      showFilters,
-      filterOptions,
-      isRefreshing,
-      showTooltip,
-      tooltipText,
-      tooltipStyle,
       
-      // Refs
+      // Computed properties
+      liveStreams,
+      offlineStreams,
+      
+      // Methods
+      fetchAssignedStreams,
+      getDetectionCount,
+      setViewMode,
+      openStreamDetails,
+      closeModal,
+      handleStreamRefresh,
+      enhanceStreamWithUsername,
+      
+      // Refs for animations
       streamHeader,
       streamsContent,
       liveStreamSection,
@@ -1076,109 +811,65 @@ export default {
       liveStreamsGrid,
       offlineStreamsGrid,
       emptyState,
-      refreshBtn,
       errorMessage,
       livePill,
       offlinePill,
-      timestampEl,
       headerActions,
       viewToggleBtn,
-      filterControls,
-      tooltip,
       loaderContainer,
       liveStreamCards,
       offlineStreamCards,
+      handleDetectionToggled,
       
-      // Methods
-      getDetectionCount,
-      openStreamDetails,
-      closeModal,
-      handleStreamRefresh,
-      toggleViewMode,
-      animateStreamHover,
-      showTooltipMessage,
-      handleRefreshClick,
-      animateStreamSections,
-      fetchStreamDetails,
-      refreshStreamData
+      // Use local props for data that needs to be reactive
+      streams: localStreams,
+      isLoading: localIsLoading,
+      error: localError,
+      lastRefreshed: localLastRefreshed
     }
   }
 }
 </script>
 
 <style scoped>
-/* Base container */
 .agent-streams {
   position: relative;
   width: 100%;
   height: 100%;
-  display: flex;
-  flex-direction: column;
+  min-height: 300px;
+  padding: 20px;
+  background-color: var(--bg-color, #f8f9fa);
+  color: var(--text-color, #212529);
+  border-radius: 8px;
   overflow: hidden;
-  background-color: var(--background-color, #f7f9fc);
-  color: var(--text-color, #333);
-  transition: all 0.3s ease;
+  transition: all 0.3s ease-in-out;
 }
 
-.agent-streams.dark-theme {
-  --background-color: #1f2937;
-  --card-bg: #111827;
-  --text-color: #e5e7eb;
-  --text-muted: #9ca3af;
-  --heading-color: #f3f4f6;
-  --border-color: rgba(255, 255, 255, 0.1);
-  --pill-bg: rgba(156, 163, 175, 0.2);
-  --button-bg: #374151;
-  --button-hover: #4b5563;
-  --button-text: #e5e7eb;
-  --active-bg: #2563eb;
-  --success-color: #10b981;
-  --counter-bg: rgba(255, 255, 255, 0.1);
-  --empty-icon: #4b5563;
-  --hover-bg: rgba(255, 255, 255, 0.05);
+.dark-theme {
+  --bg-color: #18181B;
+  --text-color: #EFEFF1;
+  --border-color: #3a3a3d;
+  --accent-color: #9147FF;
+  --active-color: #1F9D55;
+  --hover-color: #2c2c35;
 }
 
-/* Dashboard-style header */
+/* Dashboard Header */
 .stream-dashboard-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
-  background-color: var(--card-bg, #ffffff);
-  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.05));
-  z-index: 10;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border-color, #dee2e6);
+  transition: all 0.3s ease-in-out;
 }
 
 .stream-status-summary {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 15px;
   flex-wrap: wrap;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.view-toggle-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 6px;
-  background-color: var(--button-bg, #f0f4f8);
-  color: var(--button-text, #3182ce);
-  border: none;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.view-toggle-btn:hover {
-  background-color: var(--button-hover, #e2e8f0);
 }
 
 .status-pill {
@@ -1187,205 +878,202 @@ export default {
   gap: 8px;
   padding: 6px 12px;
   border-radius: 20px;
-  background-color: var(--pill-bg, rgba(0, 0, 0, 0.05));
-  color: var(--text-muted, #6B7280);
+  background-color: rgba(0, 0, 0, 0.05);
   font-size: 0.9rem;
-  transition: all 0.3s ease;
+  font-weight: 500;
+  transition: all 0.3s ease-in-out;
+}
+
+.dark-theme .status-pill {
+  background-color: rgba(255, 255, 255, 0.07);
 }
 
 .status-pill.active {
-  background-color: var(--active-bg, #3B82F6);
-  color: white;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-  transform: translateY(-1px);
+  background-color: rgba(31, 157, 85, 0.15);
 }
 
-.status-pill .status-indicator {
-  width: 8px;
-  height: 8px;
+.dark-theme .status-pill.active {
+  background-color: rgba(31, 157, 85, 0.25);
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background-color: var(--success-color, #10B981);
-}
-
-.status-pill .status-indicator.offline {
-  background-color: var(--text-muted, #6B7280);
-}
-
-.last-checked {
-  font-size: 0.85rem;
-  color: var(--text-muted, #6B7280);
-  margin-left: auto;
-}
-
-/* Streams content area */
-.streams-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  transition: all 0.3s ease;
-}
-
-.streams-content.list-view {
-  padding: 16px 20px;
-  gap: 16px;
-}
-
-/* Stream sections */
-.stream-section {
-  background-color: var(--card-bg, #ffffff);
-  border-radius: 12px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
-  padding: 20px;
-  transition: all 0.3s ease;
+  background-color: #1F9D55;
   position: relative;
+}
+
+.status-indicator.offline {
+  background-color: #718096;
+}
+
+.status-indicator .status-pulse {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: rgba(31, 157, 85, 0.3);
+  animation: pulse 2s infinite;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Updated view mode toggle */
+.view-toggle-container {
+  display: flex;
+  background-color: var(--hover-color, rgba(0, 0, 0, 0.05));
+  border-radius: 6px;
+  padding: 2px;
   overflow: hidden;
 }
 
-.stream-section:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+.view-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  color: var(--text-color, rgba(33, 37, 41, 0.7));
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  border-radius: 4px;
+}
+
+.view-mode-btn.active {
+  background-color: var(--accent-color, #9147FF);
+  color: white;
+}
+
+.view-mode-btn:hover:not(.active) {
+  background-color: var(--hover-color, rgba(0, 0, 0, 0.1));
+}
+
+/* Streams Content Container */
+.streams-content {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  transition: all 0.3s ease-in-out;
+}
+
+/* Stream Sections */
+.stream-section {
+  width: 100%;
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  position: relative;
+  margin-bottom: 15px;
 }
 
-.status-indicator {
+.section-header .status-indicator {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.status-indicator h3 {
-  font-size: 1.2rem;
-  font-weight: 600;
+.section-header h3 {
   margin: 0;
-  color: var(--heading-color, #111827);
+  font-size: 1.3rem;
+  font-weight: 600;
 }
 
-.status-pulse {
-  width: 10px;
-  height: 10px;
-  background-color: var(--success-color, #10B981);
-  border-radius: 50%;
-  position: relative;
-  animation: pulse 2s infinite;
-}
-
-.status-dot {
-  width: 10px;
-  height: 10px;
-  background-color: var(--text-muted, #9CA3AF);
-  border-radius: 50%;
-}
-
-.stream-counter {
-  font-size: 0.85rem;
-  color: var(--text-muted, #6B7280);
-  padding: 4px 10px;
-  background-color: var(--counter-bg, rgba(0, 0, 0, 0.05));
-  border-radius: 16px;
-  transition: all 0.3s ease;
-}
-
-/* Streams grid layout */
+/* Streams Grid Layout */
 .streams-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
-  transition: all 0.3s ease;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  transition: all 0.3s ease-in-out;
 }
 
-.streams-grid.list-layout {
-  grid-template-columns: 1fr;
-  gap: 12px;
+/* Responsive grid adjustments based on stream count */
+.streams-grid.medium {
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
 }
 
-/* Stream card wrapper */
+.streams-grid.small {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+/* List View */
+.list-layout {
+  grid-template-columns: 1fr !important;
+  gap: 10px !important;
+}
+
 .stream-card-wrapper {
   border-radius: 8px;
   overflow: hidden;
+  transition: all 0.3s ease-in-out;
   cursor: pointer;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
 }
 
-/* Empty state */
+.stream-card-wrapper:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.stream-card-wrapper.list-item {
+  height: 100px;
+}
+
+.stream-card-wrapper:not(.list-item) {
+  height: 240px;
+}
+
+/* Empty State */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: 40px 20px;
   text-align: center;
-  padding: 48px 24px;
-  height: 240px;
-  background-color: var(--card-bg, #ffffff);
-  border-radius: 12px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+  background-color: var(--hover-color, rgba(0, 0, 0, 0.02));
+  border-radius: 8px;
+  margin: 30px 0;
 }
 
 .empty-icon {
-  font-size: 3.5rem;
-  margin-bottom: 20px;
-  color: var(--empty-icon, #9CA3AF);
-  opacity: 0.8;
+  font-size: 2.5rem;
+  color: var(--border-color, #dee2e6);
+  margin-bottom: 15px;
 }
 
 .empty-title {
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   font-weight: 600;
-  margin-bottom: 8px;
-  color: var(--heading-color, #111827);
+  margin-bottom: 10px;
 }
 
 .empty-description {
-  font-size: 1rem;
-  color: var(--text-muted, #6B7280);
-  max-width: 360px;
+  color: var(--text-color, rgba(33, 37, 41, 0.7));
   margin-bottom: 20px;
 }
 
-.empty-action-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background-color: var(--active-bg, #3B82F6);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.empty-action-btn:hover {
-  background-color: var(--primary-dark, #2563EB);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
-}
-
-/* Loading overlay */
+/* Loading Overlay */
 .loading-overlay {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: var(--overlay-bg, rgba(255, 255, 255, 0.8));
-  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   z-index: 100;
 }
 
@@ -1393,253 +1081,131 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  background-color: var(--bg-color, white);
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.19);
 }
 
 .loader-circle {
-  width: 50px;
-  height: 50px;
-  border: 3px solid var(--loader-bg, rgba(59, 130, 246, 0.2));
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-top-color: var(--accent-color, #9147FF);
   border-radius: 50%;
-  border-top-color: var(--active-bg, #3B82F6);
   animation: spin 1s linear infinite;
+  margin-bottom: 15px;
 }
 
 .loader-text {
   font-size: 1rem;
   font-weight: 500;
-  color: var(--text-color, #333);
 }
 
-.loader-dots {
-  display: flex;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.loader-dots .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--active-bg, #3B82F6);
-  opacity: 0.7;
-}
-
-/* Error message */
+/* Error Message */
 .error-message {
-  background-color: var(--error-bg, rgba(239, 68, 68, 0.1));
-  border-left: 4px solid var(--danger-color, #EF4444);
-  padding: 16px;
-  margin: 16px 0;
-  border-radius: 8px;
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 12px;
-  text-align: center;
+  padding: 15px;
+  margin: 20px 0;
+  background-color: rgba(220, 53, 69, 0.1);
+  border-left: 4px solid #dc3545;
+  border-radius: 6px;
 }
 
 .error-icon {
-  font-size: 1.8rem;
-  color: var(--danger-color, #EF4444);
+  color: #dc3545;
+  font-size: 1.2rem;
 }
 
 .error-text {
-  font-size: 1rem;
-  color: var(--text-color, #333);
+  flex: 1;
 }
 
 .retry-button {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 6px;
-  background-color: var(--active-bg, #3B82F6);
-  color: white;
+  gap: 6px;
+  padding: 6px 12px;
   border: none;
-  font-weight: 500;
+  border-radius: 4px;
+  background-color: var(--accent-color, #9147FF);
+  color: white;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .retry-button:hover {
-  background-color: var(--primary-dark, #2563EB);
-  transform: translateY(-2px);
-}
-
-.retry-button:active {
-  transform: translateY(0);
-}
-
-/* Filter controls */
-.filter-controls {
-  position: fixed;
-  left: 20px;
-  bottom: 24px;
-  z-index: 50;
-  background-color: var(--card-bg, #ffffff);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-.filter-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: var(--text-color, #333);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.filter-toggle:hover {
-  background-color: var(--hover-bg, rgba(0, 0, 0, 0.05));
-}
-
-.toggle-icon {
-  font-size: 0.8rem;
-  transition: transform 0.3s ease;
-}
-
-.filter-options {
-  padding: 10px 16px;
-  border-top: 1px solid var(--border-color, rgba(0, 0, 0, 0.05));
-}
-
-.filter-option {
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-option label {
-  font-size: 0.9rem;
-  color: var(--text-color, #333);
-  cursor: pointer;
-}
-
-/* Refresh button */
-.refresh-control {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background-color: var(--active-bg, #3B82F6);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.1rem;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-  cursor: pointer;
-  z-index: 50;
-  transform-origin: center;
-  transition: all 0.3s ease;
-}
-
-.refresh-control:hover {
-  transform: scale(1.1);
-  background-color: var(--primary-dark, #2563EB);
-}
-
-.refresh-control:active {
-  transform: scale(0.95);
-}
-
-.refresh-control .spinning {
-  animation: spin 1s linear infinite;
-}
-
-/* Action tooltip */
-.action-tooltip {
-  position: fixed;
-  padding: 8px 12px;
-  background-color: rgba(0, 0, 0, 0.8);
-  color: white;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  z-index: 200;
-  pointer-events: none;
+  background-color: var(--accent-color, #7e32e6);
 }
 
 /* Animations */
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    transform: scale(0.9);
+    opacity: 0.7;
   }
-  70% {
-    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+  50% {
+    transform: scale(1.2);
+    opacity: 0.3;
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    transform: scale(0.9);
+    opacity: 0.7;
   }
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
-/* Vue transitions */
-.fade-enter-active,
-.fade-leave-active {
+/* Transitions */
+.fade-enter-active, .fade-leave-active {
   transition: opacity 0.3s ease;
 }
 
-.fade-enter-from,
-.fade-leave-to {
+.fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
 
-.slide-up-enter-active,
-.slide-up-leave-active {
-  transition: all 0.3s ease;
+.slide-up-enter-active, .slide-up-leave-active {
+  transition: all 0.3s ease-out;
 }
 
-.slide-up-enter-from,
-.slide-up-leave-to {
+.slide-up-enter-from, .slide-up-leave-to {
   transform: translateY(20px);
   opacity: 0;
 }
 
-.slide-down-enter-active,
-.slide-down-leave-active {
+.modal-enter-active, .modal-leave-active {
   transition: all 0.3s ease;
 }
 
-.slide-down-enter-from,
-.slide-down-leave-to {
-  transform: translateY(-10px);
+.modal-enter-from, .modal-leave-to {
   opacity: 0;
 }
 
-.modal-enter-active,
-.modal-leave-active {
-  transition: all 0.3s ease;
-}
-
-.modal-enter-from,
-.modal-leave-to {
-  transform: scale(0.9);
-  opacity: 0;
-}
-
-/* Responsive styles */
+/* Mobile Optimizations */
 @media (max-width: 768px) {
-  .streams-content {
-    padding: 12px;
-    gap: 16px;
+  .agent-streams {
+    padding: 15px 10px;
   }
   
-  .stream-section {
-    padding: 16px;
+  .stream-dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+  
+  .header-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
   
   .section-header {
@@ -1649,74 +1215,12 @@ export default {
   }
   
   .streams-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  
-  .status-indicator h3 {
-    font-size: 1.1rem;
-  }
-  
-  .empty-title {
-    font-size: 1.3rem;
-  }
-  
-  .empty-icon {
-    font-size: 3rem;
-  }
-  
-  .stream-dashboard-header {
-    padding: 12px 16px;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    grid-template-columns: 1fr !important;
   }
   
   .stream-status-summary {
     width: 100%;
     justify-content: space-between;
-  }
-  
-  .header-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-  
-  .status-pill {
-    padding: 4px 10px;
-    font-size: 0.85rem;
-  }
-  
-  .last-checked {
-    width: 100%;
-    margin-top: 6px;
-    text-align: right;
-  }
-  
-  .refresh-control {
-    bottom: 16px;
-    right: 16px;
-    width: 42px;
-    height: 42px;
-  }
-  
-  .filter-controls {
-    left: 16px;
-    bottom: 16px;
-  }
-}
-
-/* Tablet styles */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .streams-grid {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  }
-}
-
-/* Adjust for sidebar */
-@media (min-width: 992px) {
-  .agent-streams {
-    padding-left: 0;
   }
 }
 </style>

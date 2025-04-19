@@ -842,7 +842,7 @@ html, body {
   }
   
   .content-area {
-    padding-left: 1rem;
+    
   }
   
   .header-controls {
@@ -851,8 +851,8 @@ html, body {
   }
   
   .theme-toggle {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 1.5rem;
+    height: 1.5rem;
     padding: 0.6rem;
   }
   
