@@ -18,30 +18,38 @@ from models import User, Stream
 from routes import *
 from cleanup import start_chat_cleanup_thread, start_detection_cleanup_thread
 from monitoring import start_notification_monitor
+from flask_socketio import SocketIO, emit
+
 
 load_dotenv()
 
 # Create the Flask app and initialize Socket.IO with threading mode
 app, socketio = create_app()
 
-# Configure Socket.IO with specific path for WebSockets
-socketio.init_app(app, cors_allowed_origins="*", path="/ws")
+# Configure Socket.IO with better compatibility settings
+socketio.init_app(
+    app, 
+    cors_allowed_origins="*",  # Allow all origins for WebSocket
+    path="/ws",
+    async_mode='threading',    # Use threading mode for better compatibility
+    logger=True,               # Enable Socket.IO logging
+    engineio_logger=True       # Enable Engine.IO logging for debugging
+)
 
 # Allowed frontends (comma‑separated in .env)
 ALLOWED_ORIGINS = os.getenv(
     'ALLOWED_ORIGINS',
-    'http://localhost:8080,http://localhost:5173,http://127.0.0.1:8080,http://127.0.0.1:5173'
+    'https://live-stream-monitoring-vue3-flask.vercel.app, http://localhost:8080,,http://127.0.0.1:8080,http://127.0.0.1:5173'
 ).split(',')
 
 # === Dynamic CORS Handler ===
 @app.after_request
 def apply_cors(response):
-    origin = request.headers.get('Origin')
-    if origin in ALLOWED_ORIGINS or origin == 'http://localhost:8080':  # Add frontend dev server
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
+    # Allow requests from all origins
+    response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*') 
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
     return response
 
 # Logging setup
@@ -50,6 +58,28 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[logging.FileHandler('app.log'), logging.StreamHandler()]
 )
+
+@app.route('/socket-info')
+def socket_info():
+    """Return Socket.IO connection information for clients"""
+    return jsonify({
+        'socket_url': request.host_url.rstrip('/'),
+        'path': '/ws',
+        'namespaces': {
+            'notifications': '/notifications'
+        }
+    })
+
+
+# Socket.IO error handler
+@socketio.on_error_default
+def default_error_handler(e):
+    logging.error(f"Socket.IO error: {str(e)}")
+
+# Socket.IO WebSocket specific error handler
+@socketio.on_error('/ws')
+def ws_error_handler(e):
+    logging.error(f"WebSocket error: {str(e)}")
 
 with app.app_context():
     try:
@@ -97,6 +127,10 @@ with app.app_context():
         raise
 
 try:
+    # Import socket_events here (after socketio init) to register the events
+    from socket_events import register_socket_events
+    register_socket_events(socketio)
+    
     start_notification_monitor()
     start_detection_cleanup_thread()
     logging.info("Background services started")
@@ -105,7 +139,7 @@ except Exception as e:
 
 if __name__ == "__main__":
     debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
-    if os.getenv('ENABLE_SSL', 'false').lower() == 'true':
+    if os.getenv('ENABLE_SSL', 'true').lower() == 'true':
         cert_dir = os.path.expanduser(os.getenv('CERT_DIR', '~/certs'))
         ssl_cert = os.path.join(cert_dir, 'fullchain.pem')
         ssl_key = os.path.join(cert_dir, 'privkey.pem')
@@ -122,8 +156,10 @@ if __name__ == "__main__":
         app, 
         host='0.0.0.0', 
         port=5000, 
-        debug=True,
+        debug=debug,
         ssl_context=ssl_ctx,
-        # Allow for Flask's threaded mode but through Socket.IO
-        use_reloader=debug
+        # For compatibility with Flask-SocketIO
+        use_reloader=debug,
+        # Allow unsafe werkzeug in development mode
+        allow_unsafe_werkzeug=debug
     )

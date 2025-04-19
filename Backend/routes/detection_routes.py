@@ -65,244 +65,102 @@ def get_livestream():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# Add or modify these routes in detection_routes.py
+
+# Fix for detection_routes.py
+
 @detection_bp.route("/api/trigger-detection", methods=["POST"])
-@login_required()  # Ensure that a user is logged in.
+@login_required()
 def trigger_detection():
     data = request.get_json()
     stream_url = data.get("stream_url")
+    stop = data.get("stop", False)
+    
     if not stream_url:
         return jsonify({"error": "Missing stream_url"}), 400
 
     if "user_id" not in session:
         return jsonify({"error": "Unauthorized"}), 401
 
+    # Check if we need to stop detection
+    if stop:
+        if stream_url in detection_threads:
+            # Fix: The stored object is a tuple containing threads and the cancel_event
+            # We need to unpack it correctly
+            detection_thread, chat_thread, cancel_event = detection_threads[stream_url]
+            
+            # Set the cancel event to stop the threads
+            cancel_event.set()
+            
+            # Wait for threads to finish (with timeout)
+            detection_thread.join(timeout=2)
+            chat_thread.join(timeout=2)
+            
+            # Remove from detection_threads
+            del detection_threads[stream_url]
+            return jsonify({"message": "Detection stopped successfully"}), 200
+        else:
+            return jsonify({"message": "No detection running for this stream"}), 404
+
+    # Check if detection is already running
+    if stream_url in detection_threads:
+        return jsonify({"message": "Detection already running for this stream"}), 200
+
+    # Verify the stream is accessible
     try:
         response = requests.get(stream_url, timeout=10)
         if response.status_code != 200:
             return jsonify({"error": "Stream appears offline"}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Error accessing stream: {str(e)}"}), 500
 
     try:
+        # Import detection modules
         from detection import process_combined_detection, chat_detection_loop
-    except ImportError as e:
-        return jsonify({"error": f"Detection module not available: {str(e)}"}), 500
-
-    if stream_url in detection_threads:
-        return jsonify({"message": "Detection already running for this stream"}), 200
-
-    cancel_event = threading.Event()
-    unified_thread = threading.Thread(
-        target=process_combined_detection,
-        args=(stream_url, cancel_event),
-        daemon=True
-    )
-    unified_thread.start()
-    chat_thread = threading.Thread(
-        target=chat_detection_loop,
-        args=(stream_url, cancel_event, 60),
-        daemon=True
-    )
-    chat_thread.start()
-    detection_threads[stream_url] = (unified_thread, chat_thread, cancel_event)
-
-    return jsonify({"message": "Detection started"}), 200
-
-@detection_bp.route("/api/detect-advanced", methods=["POST"])
-def advanced_detect():
-    try:
-        data = request.get_json(silent=True)
         
-        # Handle form data with chat image
-        if 'chat_image' in request.files:
-            room_url = request.form.get("stream_url")
-            if "chaturbate.com" in room_url:
-                room_slug = room_url.rstrip("/").split("/")[-1]
-                # This function needs to be imported or defined elsewhere
-                from scraping import fetch_chaturbate_chat_history
-                chat_messages = fetch_chaturbate_chat_history(room_slug)
-                flagged_keywords = [kw.keyword for kw in ChatKeyword.query.all()]
-                
-                detected = []
-                for msg in chat_messages:
-                    msg_data = msg.get("RoomMessageTopic#RoomMessageTopic:0YJW2WC", {})
-                    message = msg_data.get("message", "")
-                    sender = msg_data.get("from_user", {}).get("username", "unknown")
-                    
-                    detected_keywords = [
-                        kw for kw in flagged_keywords 
-                        if kw.lower() in message.lower()
-                    ]
-                    
-                    if detected_keywords:
-                        detected.append({
-                            "message": message,
-                            "sender": sender,
-                            "keywords": detected_keywords
-                        })
-
-                if detected:
-                    stream = Stream.query.filter_by(room_url=room_url).first()
-                    log_entry = DetectionLog(
-                        room_url=room_url,
-                        event_type="chat_detection",
-                        details={
-                            "detections": detected,
-                            "platform": "Chaturbate",
-                            "streamer_name": stream.streamer_username if stream else "Unknown"
-                        }
-
-                    )
-                    db.session.add(log_entry)
-                    db.session.commit()
-                    notification_data = {
-                        "id": log_entry.id,
-                        "event_type": log_entry.event_type,
-                        "timestamp": log_entry.timestamp.isoformat(),
-                        "details": log_entry.details,
-                        "read": log_entry.read,
-                        "room_url": log_entry.room_url
-                    }
-
-                    # Emit notification
-                    emit_notification(notification_data)
-                    return jsonify({"detections": detected}), 200
+        # Create cancel event
+        cancel_event = threading.Event()
         
-        # Handle JSON data
-        if data is None:
-            return jsonify({"message": "No valid JSON or files provided"}), 400
+        # Start detection threads
+        detection_thread = threading.Thread(
+            target=process_combined_detection,
+            args=(stream_url, cancel_event),
+            daemon=True
+        )
+        detection_thread.start()
         
-        # Process by event type
-        if "type" in data:
-            event_type = data.get('type')
-            stream_url = data.get('stream_url')
-            timestamp_str = data.get('timestamp')
-            timestamp_obj = datetime.fromisoformat(timestamp_str) if timestamp_str else datetime.utcnow()
-            log_entry = Log(
-                room_url=stream_url,
-                timestamp=timestamp_obj,
-                read=False
-            )
-            if event_type == 'visual':
-                log_entry.event_type = 'object_detection'
-                log_entry.details = {
-                    'detections': data.get('detections'),
-                    'annotated_image': data.get('annotated_image'),
-                    'confidence': data.get('confidence'),
-                    'streamer_name': data.get('streamer_name'),
-                    'platform': data.get('platform')
-                }
-            elif event_type == 'audio':
-                log_entry.event_type = 'audio_detection'
-                log_entry.details = {
-                    'keyword': data.get('keyword'),
-                    'confidence': data.get('confidence'),
-                    'streamer_name': data.get('streamer_name'),
-                    'platform': data.get('platform')
-                }
-            else:
-                return jsonify({"error": "Invalid event type"}), 400
-            
-            db.session.add(log_entry)
-            db.session.commit()
-            
-            # Function needs to be imported or defined elsewhere
-            from notifications import send_notifications
-            send_notifications(log_entry)
-            
-            return jsonify({"message": "JSON-based detection logged"}), 201
+        chat_thread = threading.Thread(
+            target=chat_detection_loop,
+            args=(stream_url, cancel_event, 60),
+            daemon=True
+        )
+        chat_thread.start()
         
-        # Process keyword detection
-        if "keyword" in data:
-            keyword = data.get("keyword")
-            timestamp = data.get("timestamp")
-            stream_url = data.get("stream_url")
-            if not keyword or not timestamp or not stream_url:
-                return jsonify({"message": "Missing required fields"}), 400
-            log_entry = Log(
-                room_url=stream_url,
-                event_type="audio_detection",
-                details={
-                    "keyword": keyword,
-                    "timestamp": timestamp,
-                }
-            )
-            db.session.add(log_entry)
-            db.session.commit()
-            
-            # Function needs to be imported or defined elsewhere
-            from notifications import send_notifications
-            send_notifications(log_entry, {"keyword": keyword})
-            
-            return jsonify({"message": "Keyword detection logged successfully"}), 201
+        # Fix: Store threads and cancel event in the correct order
+        detection_threads[stream_url] = (detection_thread, chat_thread, cancel_event)
         
-        # Process detection with detections
-        if "detections" in data:
-            stream_url = data.get("stream_url")
-            detections = data.get("detections", [])
-            annotated_image = data.get("annotated_image")
-            captured_image = data.get("captured_image")
-            timestamp = data.get("timestamp")
-            
-            if not stream_url or not detections:
-                return jsonify({"message": "Missing required fields"}), 400
-            
-            # Updated stream query with eager loading
-            stream = Stream.query.options(
-                joinedload(Stream.assignments).joinedload(Assignment.agent)
-            ).filter_by(room_url=stream_url).first()
-            
-            platform = stream.type if stream else "unknown"
-            streamer_name = stream.streamer_username if stream else "unknown"
-            
-            # Get first valid assigned agent
-            assigned_agent = "Unassigned"
-            if stream and stream.assignments:
-                for assignment in stream.assignments:
-                    if assignment.agent:
-                        assigned_agent = assignment.agent.username
-                        break  # Use first valid assignment
-            
-            log_entry = Log(
-                room_url=stream_url,
-                event_type="object_detection",
-                details={
-                    "detections": detections,
-                    "annotated_image": annotated_image,
-                    "captured_image": captured_image,
-                    "timestamp": timestamp,
-                    "streamer_name": streamer_name,
-                    "platform": platform,
-                    "assigned_agent": assigned_agent
-                }
-            )
-            db.session.add(log_entry)
-            db.session.commit()
-            
-            # Function needs to be imported or defined elsewhere
-            from notifications import send_notifications
-            send_notifications(log_entry)
-            
-            return jsonify({
-                "message": "Object detection logged",
-                "detections": detections
-            }), 200
-        
-        return jsonify({"message": "No valid detection type provided"}), 400
-        
+        return jsonify({"message": "Detection started successfully"}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Error starting detection: {str(e)}"}), 500
 
-@detection_bp.route("/api/stop-detection", methods=["POST"])
-def stop_detection_route():
-    data = request.get_json()
-    stream_url = data.get("stream_url")
+# Add a route to check detection status
+@detection_bp.route("/api/detection-status", methods=["GET"])
+@login_required()
+def detection_status():
+    stream_url = request.args.get("stream_url")
+    
     if not stream_url:
-        return jsonify({"error": "Missing stream_url"}), 400
-    if stream_url not in detection_threads:
-        return jsonify({"message": "No detection running for this stream"}), 404
-    threads, chat_thread, cancel_event = detection_threads.pop(stream_url)
-    cancel_event.set()
-    threads.join(timeout=5)
-    chat_thread.join(timeout=5)
-    return jsonify({"message": "Detection stopped"}), 200
+        # Return status for all streams
+        active_streams = list(detection_threads.keys())
+        return jsonify({
+            "active_streams": active_streams,
+            "count": len(active_streams)
+        })
+    
+    # Check status for specific stream
+    is_active = stream_url in detection_threads
+    return jsonify({
+        "stream_url": stream_url,
+        "active": is_active
+    })
+
