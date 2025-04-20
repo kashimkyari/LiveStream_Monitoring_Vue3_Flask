@@ -1,4 +1,4 @@
-# monitoring.py
+# monitoring.py - Complete Upgraded Version
 import os
 import time
 import threading
@@ -16,6 +16,10 @@ from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import torch
 import av
 import re
+import tempfile
+import subprocess
+import queue
+import ffmpeg
 
 from flask import current_app
 from models import (
@@ -33,44 +37,55 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global variables and locks
+# =============== ENVIRONMENT VARIABLE CONFIGURATION ===============
+WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL_SIZE", "base")
+AUDIO_SAMPLE_DURATION = int(os.environ.get("AUDIO_SAMPLE_DURATION", "10"))
+AUDIO_BUFFER_SIZE = int(os.environ.get("AUDIO_BUFFER_SIZE", "3"))
+AUDIO_SEGMENT_LENGTH = int(os.environ.get("AUDIO_SEGMENT_LENGTH", "5"))
+AUDIO_ALERT_COOLDOWN = int(os.environ.get("AUDIO_ALERT_COOLDOWN", "60"))
+VISUAL_ALERT_COOLDOWN = int(os.environ.get("VISUAL_ALERT_COOLDOWN", "30"))
+CHAT_ALERT_COOLDOWN = int(os.environ.get("CHAT_ALERT_COOLDOWN", "45"))
+NEGATIVE_SENTIMENT_THRESHOLD = float(os.environ.get("NEGATIVE_SENTIMENT_THRESHOLD", "-0.5"))
+
+# =============== GLOBAL VARIABLES ===============
 _whisper_model = None
 _whisper_lock = threading.Lock()
 _yolo_model = None
 _yolo_lock = threading.Lock()
 _sentiment_analyzer = SentimentIntensityAnalyzer()
 
-# Cooldown periods to prevent duplicate alerts
-AUDIO_ALERT_COOLDOWN = 60  # seconds
-VISUAL_ALERT_COOLDOWN = 30  # seconds
-CHAT_ALERT_COOLDOWN = 45    # seconds
+# Tracking variables
+last_audio_alerts = {}
+last_visual_alerts = {}
+last_chat_alerts = {}
 
-# Tracking variables for alert cooldowns
-last_audio_alerts = {}  # {stream_url: {keyword: timestamp}}
-last_visual_alerts = {}  # {stream_url: {object_class: timestamp}}
-last_chat_alerts = {}    # {stream_url: {keyword: timestamp}}
+# Stream processing buffers
+stream_audio_buffers = {}
+stream_processors = {}
 
-# Sentiment threshold for negative content
-NEGATIVE_SENTIMENT_THRESHOLD = -0.5
-
-# =============== MODEL LOADING FUNCTIONS ===============
-
+# =============== MODEL LOADING ===============
 def load_whisper_model():
-    """Load the OpenAI Whisper model for speech recognition"""
+    """Load the OpenAI Whisper model with configurable size and fallback"""
     global _whisper_model
     with _whisper_lock:
         if _whisper_model is None:
             try:
-                # Use the "base" model for faster processing
-                _whisper_model = whisper.load_model("base")
-                logger.info("Whisper model loaded successfully")
+                logger.info(f"Loading Whisper model: {WHISPER_MODEL_SIZE}")
+                _whisper_model = whisper.load_model(WHISPER_MODEL_SIZE)
+                logger.info(f"Whisper model '{WHISPER_MODEL_SIZE}' loaded successfully")
             except Exception as e:
                 logger.error(f"Error loading Whisper model: {e}")
-                _whisper_model = None
+                try:
+                    logger.info("Attempting to load fallback 'base' model")
+                    _whisper_model = whisper.load_model("base")
+                    logger.info("Fallback Whisper model loaded")
+                except Exception as e2:
+                    logger.error(f"Error loading fallback model: {e2}")
+                    _whisper_model = None
     return _whisper_model
 
 def load_yolo_model():
-    """Load the YOLO model for object detection"""
+    """Load the YOLO object detection model"""
     global _yolo_model
     with _yolo_lock:
         if _yolo_model is None:
@@ -84,82 +99,36 @@ def load_yolo_model():
                 _yolo_model = None
     return _yolo_model
 
-
-# Add this function to your monitoring.py file
-def start_notification_monitor():
-    """
-    Start the notification monitoring system
-    
-    This function initializes the background processes needed for monitoring notifications
-    """
-    logger.info("Starting notification monitoring system")
-    
-    try:
-        # Set up any global notification monitoring services
-        # This could include:
-        # - Connecting to message queues
-        # - Setting up webhook listeners
-        # - Initializing background tasks
-        
-        # Just as a placeholder for now, we'll create a basic background thread
-        notification_thread = threading.Thread(
-            target=notification_monitor_loop,
-            daemon=True
-        )
-        notification_thread.start()
-        
-        logger.info("Notification monitoring system started successfully")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to start notification monitoring system: {e}")
-        return False
-
-def notification_monitor_loop():
-    """Background loop for the notification monitor"""
-    logger.info("Notification monitor loop started")
-    
-    while True:
-        try:
-            # Periodic check for pending notifications
-            # This would typically check a queue, database, or external service
-            
-            # Sleep to avoid high CPU usage
-            time.sleep(60)  # Check every minute
-        except Exception as e:
-            logger.error(f"Error in notification monitor loop: {e}")
-            time.sleep(60)  # Wait a bit after errors
-
 # =============== DATA RETRIEVAL FUNCTIONS ===============
-
 def refresh_flagged_keywords():
-    """Retrieve and return a list of chat keywords from the database"""
+    """Retrieve current flagged keywords from database"""
     with current_app.app_context():
         keywords = [kw.keyword.lower() for kw in ChatKeyword.query.all()]
-    logger.info(f"Retrieved {len(keywords)} flagged keywords")
+    logger.debug(f"Retrieved {len(keywords)} flagged keywords")
     return keywords
 
 def refresh_flagged_objects():
-    """Retrieve and return a dictionary of flagged objects and their confidence thresholds"""
+    """Retrieve flagged objects and confidence thresholds"""
     with current_app.app_context():
         objects = FlaggedObject.query.all()
         flagged = {obj.object_name.lower(): float(obj.confidence_threshold) for obj in objects}
-    logger.info(f"Retrieved {len(flagged)} flagged objects")
+    logger.debug(f"Retrieved {len(flagged)} flagged objects")
     return flagged
 
 def get_stream_info(stream_url):
-    """Get platform and streamer info for a stream URL"""
+    """Identify platform and streamer from URL"""
     with current_app.app_context():
-        # Try to find in Chaturbate streams
+        # Check Chaturbate first
         cb_stream = ChaturbateStream.query.filter_by(chaturbate_m3u8_url=stream_url).first()
         if cb_stream:
             return 'chaturbate', cb_stream.streamer_username
             
-        # Try to find in Stripchat streams
+        # Check Stripchat next
         sc_stream = StripchatStream.query.filter_by(stripchat_m3u8_url=stream_url).first()
         if sc_stream:
             return 'stripchat', sc_stream.streamer_username
             
-        # Try generic stream
+        # Fallback to generic stream
         stream = Stream.query.filter_by(room_url=stream_url).first()
         if stream:
             return stream.type.lower(), stream.streamer_username
@@ -167,7 +136,7 @@ def get_stream_info(stream_url):
     return 'unknown', 'unknown'
 
 def get_stream_assignment(stream_url):
-    """Get assignment information for a stream URL"""
+    """Get assignment info for a stream"""
     with current_app.app_context():
         stream = Stream.query.filter_by(room_url=stream_url).first()
         if not stream:
@@ -179,104 +148,510 @@ def get_stream_assignment(stream_url):
         
     return None, None
 
-# =============== AUDIO MONITORING FUNCTIONS ===============
+# =============== ENHANCED AUDIO PROCESSING ===============
+def extract_audio_from_stream_ffmpeg(stream_url, output_file=None, duration=10):
+    """Extract audio using FFmpeg with robust error handling"""
+    try:
+        if output_file is None:
+            temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+            output_file = temp_file.name
+            temp_file.close()
+        
+        cmd = [
+            'ffmpeg', '-y',
+            '-i', stream_url,
+            '-t', str(duration),
+            '-vn',
+            '-ar', '16000',
+            '-ac', '1',
+            '-acodec', 'pcm_s16le',
+            output_file
+        ]
+        
+        process = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=duration + 10
+        )
+        
+        if process.returncode != 0:
+            logger.error(f"FFmpeg failed: {process.stderr.decode('utf-8')}")
+            return None
+            
+        return output_file
+    
+    except subprocess.TimeoutExpired:
+        logger.error(f"FFmpeg timeout processing {stream_url}")
+        return None
+    except Exception as e:
+        logger.error(f"Audio extraction error: {e}")
+        return None
 
-def setup_audio_monitoring(stream_url):
-    """Initialize audio monitoring for a stream"""
-    model = load_whisper_model()
-    if not model:
-        logger.error("Failed to load Whisper model for audio monitoring")
-        return False
-        
-    # Initialize cooldown tracking for this stream
-    if stream_url not in last_audio_alerts:
-        last_audio_alerts[stream_url] = {}
-        
-    return True
+def chunked_audio_processor(stream_url, cancel_event, audio_queue):
+    """Background process for continuous audio chunking"""
+    logger.info(f"Starting audio chunker for {stream_url}")
+    
+    while not cancel_event.is_set():
+        try:
+            audio_file = extract_audio_from_stream_ffmpeg(stream_url, duration=AUDIO_SEGMENT_LENGTH)
+            
+            if audio_file and os.path.exists(audio_file):
+                try:
+                    with open(audio_file, 'rb') as f:
+                        f.seek(44)
+                        audio_data = np.frombuffer(f.read(), np.int16).astype(np.float32) / 32768.0
+                        
+                    if audio_queue.full():
+                        try:
+                            audio_queue.get_nowait()
+                        except queue.Empty:
+                            pass
+                    audio_queue.put(audio_data)
+                    
+                except Exception as e:
+                    logger.error(f"Audio load error: {e}")
+                
+                try:
+                    os.unlink(audio_file)
+                except Exception as e:
+                    logger.error(f"Temp file cleanup error: {e}")
+            
+            for _ in range(AUDIO_SEGMENT_LENGTH // 2):
+                if cancel_event.is_set():
+                    break
+                time.sleep(1)
+                
+        except Exception as e:
+            logger.error(f"Chunker error: {e}")
+            time.sleep(5)
+            
+    logger.info(f"Stopped audio chunker for {stream_url}")
+
+def process_audio_realtime(stream_url, cancel_event):
+    """Real-time audio processing with buffering"""
+    logger.info(f"Starting real-time audio for {stream_url}")
+    
+    if stream_url not in stream_audio_buffers:
+        stream_audio_buffers[stream_url] = queue.Queue(maxsize=AUDIO_BUFFER_SIZE)
+    
+    audio_queue = stream_audio_buffers[stream_url]
+    chunker_cancel = threading.Event()
+    chunker_thread = threading.Thread(
+        target=chunked_audio_processor,
+        args=(stream_url, chunker_cancel, audio_queue),
+        daemon=True
+    )
+    chunker_thread.start()
+    stream_processors[stream_url] = (chunker_thread, chunker_cancel)
+    
+    while not cancel_event.is_set():
+        try:
+            audio_chunks = []
+            while not audio_queue.empty() and len(audio_chunks) < AUDIO_BUFFER_SIZE:
+                try:
+                    chunk = audio_queue.get_nowait()
+                    audio_chunks.append(chunk)
+                except queue.Empty:
+                    break
+            
+            if audio_chunks:
+                audio_data = np.concatenate(audio_chunks)
+                for detection in process_audio_segment(audio_data, stream_url):
+                    log_audio_detection(detection, stream_url)
+            
+            time.sleep(1)
+            
+        except Exception as e:
+            logger.error(f"Audio processing error: {e}")
+            time.sleep(5)
+    
+    chunker_cancel.set()
+    logger.info(f"Stopped real-time audio for {stream_url}")
 
 def process_audio_segment(audio_data, stream_url):
-    """
-    Process an audio segment using OpenAI Whisper
-    
-    Args:
-        audio_data: Raw audio data bytes or numpy array
-        stream_url: URL of the stream being monitored
-        
-    Returns:
-        List of detected flagged keywords
-    """
+    """Process audio with Whisper and sentiment analysis"""
     model = load_whisper_model()
     if not model:
         return []
     
-    # Get flagged keywords
     keywords = refresh_flagged_keywords()
     if not keywords:
         return []
     
     try:
-        # Convert audio to format expected by Whisper
-        # This assumes audio_data is in the format expected by Whisper
+        options = whisper.DecodingOptions(
+            language="en",
+            without_timestamps=True,
+            fp16=torch.cuda.is_available()
+        )
         result = model.transcribe(audio_data, language="en")
         transcript = result["text"]
+        detected = []
+        now = datetime.now()
         
-        # Skip empty transcripts
-        if not transcript.strip():
-            return []
-            
-        # Check for flagged keywords in transcript
-        detected_keywords = []
         for keyword in keywords:
             if keyword.lower() in transcript.lower():
-                # Check if we're in cooldown period for this keyword
-                now = datetime.now()
                 if keyword in last_audio_alerts.get(stream_url, {}):
                     last_alert = last_audio_alerts[stream_url][keyword]
                     if (now - last_alert).total_seconds() < AUDIO_ALERT_COOLDOWN:
-                        continue  # Skip, in cooldown
+                        continue
                 
-                # Update last alert time
-                if stream_url not in last_audio_alerts:
-                    last_audio_alerts[stream_url] = {}
-                last_audio_alerts[stream_url][keyword] = now
-                
-                detected_keywords.append({
+                last_audio_alerts.setdefault(stream_url, {})[keyword] = now
+                detected.append({
                     "keyword": keyword,
                     "transcript": transcript,
                     "timestamp": now.isoformat()
                 })
-                
-        # Perform sentiment analysis
-        sentiment = _sentiment_analyzer.polarity_scores(transcript)
-        compound_score = sentiment['compound']
         
-        # Check for negative sentiment
-        if compound_score <= NEGATIVE_SENTIMENT_THRESHOLD:
-            # Ensure we're not in cooldown for negative sentiment
-            now = datetime.now()
+        sentiment = _sentiment_analyzer.polarity_scores(transcript)
+        if sentiment['compound'] <= NEGATIVE_SENTIMENT_THRESHOLD:
             sentiment_key = "_negative_sentiment_"
             if sentiment_key in last_audio_alerts.get(stream_url, {}):
                 last_alert = last_audio_alerts[stream_url][sentiment_key]
                 if (now - last_alert).total_seconds() < AUDIO_ALERT_COOLDOWN:
-                    return detected_keywords  # Skip sentiment alert, in cooldown
+                    return detected
                     
-            # Update last alert time for sentiment
-            if stream_url not in last_audio_alerts:
-                last_audio_alerts[stream_url] = {}
-            last_audio_alerts[stream_url][sentiment_key] = now
-            
-            detected_keywords.append({
+            last_audio_alerts.setdefault(stream_url, {})[sentiment_key] = now
+            detected.append({
                 "keyword": "negative_sentiment",
                 "transcript": transcript,
-                "sentiment_score": compound_score,
+                "sentiment_score": sentiment['compound'],
                 "timestamp": now.isoformat()
             })
             
-        return detected_keywords
+        return detected
             
     except Exception as e:
-        logger.error(f"Error in audio processing: {e}")
+        logger.error(f"Audio processing failed: {e}")
         return []
+
+def log_audio_detection(detection, stream_url):
+    """Log audio detections to database"""
+    platform, streamer = get_stream_info(stream_url)
+    assignment_id, agent = get_stream_assignment(stream_url)
+    
+    details = {
+        "keyword": detection.get("keyword"),
+        "transcript": detection.get("transcript"),
+        "timestamp": detection.get("timestamp"),
+        "streamer_name": streamer,
+        "platform": platform,
+        "assigned_agent": agent or "Unassigned"
+    }
+    
+    if "sentiment_score" in detection:
+        details["sentiment_score"] = detection["sentiment_score"]
+    
+    with current_app.app_context():
+        log_entry = DetectionLog(
+            room_url=stream_url,
+            event_type="audio_detection",
+            details=details,
+            timestamp=datetime.now(),
+            assigned_agent=agent,
+            assignment_id=assignment_id,
+            read=False
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        
+        notification_data = {
+            "id": log_entry.id,
+            "event_type": log_entry.event_type,
+            "timestamp": log_entry.timestamp.isoformat(),
+            "details": log_entry.details,
+            "read": log_entry.read,
+            "room_url": log_entry.room_url,
+            "streamer": streamer,
+            "platform": platform,
+            "assigned_agent": agent or "Unassigned"
+        }
+        emit_notification(notification_data)
+
+# =============== VIDEO PROCESSING ===============
+def extract_video_frame(stream_url):
+    """Extract single frame from video stream"""
+    try:
+        container = av.open(stream_url, timeout=30)
+        video_stream = next((s for s in container.streams if s.type == 'video'), None)
+        
+        if not video_stream:
+            logger.error(f"No video stream in {stream_url}")
+            return None
+            
+        container.seek(1000000, any_frame=False, backward=True, stream=video_stream)
+        
+        for frame in container.decode(video_stream):
+            img = frame.to_ndarray(format='rgb24')
+            return cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            
+        logger.error(f"No frames in {stream_url}")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Video frame error: {e}")
+        return None
+
+def process_video_frame(frame, stream_url):
+    """Detect objects in video frame"""
+    model = load_yolo_model()
+    if not model:
+        return []
+    
+    flagged = refresh_flagged_objects()
+    if not flagged:
+        return []
+    
+    try:
+        results = model(frame)
+        detections = []
+        now = datetime.now()
+        
+        for result in results:
+            for box in result.boxes:
+                bbox = box.xyxy[0].cpu().numpy()
+                conf = float(box.conf[0].cpu().numpy())
+                cls_id = int(box.cls[0].cpu().numpy())
+                cls_name = model.names.get(cls_id, str(cls_id)).lower()
+                
+                if cls_name not in flagged or conf < flagged[cls_name]:
+                    continue
+                
+                if cls_name in last_visual_alerts.get(stream_url, {}):
+                    last_alert = last_visual_alerts[stream_url][cls_name]
+                    if (now - last_alert).total_seconds() < VISUAL_ALERT_COOLDOWN:
+                        continue
+                
+                last_visual_alerts.setdefault(stream_url, {})[cls_name] = now
+                detections.append({
+                    "class": cls_name,
+                    "confidence": conf,
+                    "bbox": bbox.tolist(),
+                    "timestamp": now.isoformat()
+                })
+        
+        return detections
+    
+    except Exception as e:
+        logger.error(f"Video processing error: {e}")
+        return []
+
+def annotate_frame(frame, detections):
+    """Draw detection boxes on frame"""
+    annotated = frame.copy()
+    for det in detections:
+        x1, y1, x2, y2 = map(int, det["bbox"])
+        label = f'{det["class"]} {det["confidence"]*100:.1f}%'
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 0, 255), 2)
+        cv2.putText(annotated, label, (x1, y1-10),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+    return annotated
+
+def log_video_detection(detections, frame, stream_url):
+    """Log video detections with annotated frame"""
+    if not detections:
+        return
+        
+    platform, streamer = get_stream_info(stream_url)
+    assignment_id, agent = get_stream_assignment(stream_url)
+    
+    annotated = annotate_frame(frame, detections)
+    success, buffer = cv2.imencode('.jpg', annotated)
+    if not success:
+        logger.error("Frame encoding failed")
+        return
+        
+    image_b64 = base64.b64encode(buffer).decode('utf-8')
+    
+    details = {
+        "detections": detections,
+        "timestamp": datetime.now().isoformat(),
+        "streamer_name": streamer,
+        "platform": platform,
+        "annotated_image": image_b64,
+        "assigned_agent": agent or "Unassigned"
+    }
+    
+    with current_app.app_context():
+        log_entry = DetectionLog(
+            room_url=stream_url,
+            event_type="object_detection",
+            details=details,
+            detection_image=buffer.tobytes(),
+            timestamp=datetime.now(),
+            assigned_agent=agent,
+            assignment_id=assignment_id,
+            read=False
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        
+        notification_data = {
+            "id": log_entry.id,
+            "event_type": log_entry.event_type,
+            "timestamp": log_entry.timestamp.isoformat(),
+            "details": log_entry.details,
+            "read": log_entry.read,
+            "room_url": log_entry.room_url,
+            "streamer": streamer,
+            "platform": platform,
+            "assigned_agent": agent or "Unassigned"
+        }
+        emit_notification(notification_data)
+
+# =============== CHAT PROCESSING ===============
+def fetch_chat_messages(stream_url):
+    """Fetch chat messages based on platform"""
+    platform, streamer = get_stream_info(stream_url)
+    
+    try:
+        if platform == "chaturbate":
+            return fetch_chaturbate_chat(stream_url, streamer)
+        elif platform == "stripchat":
+            return fetch_stripchat_chat(stream_url, streamer)
+        else:
+            logger.warning(f"Unsupported platform {platform}")
+            return []
+    except Exception as e:
+        logger.error(f"Chat fetch error: {e}")
+        return []
+
+def fetch_chaturbate_chat(stream_url, streamer):
+    """Fetch Chaturbate chat messages"""
+    try:
+        from scraping import fetch_chaturbate_chat_history
+        room_slug = re.search(r'chaturbate\.com/([^/]+)', stream_url).group(1)
+        chat_data = fetch_chaturbate_chat_history(room_slug)
+        
+        messages = []
+        for msg in chat_data:
+            msg_data = msg.get("RoomMessageTopic#RoomMessageTopic:0YJW2WC", {})
+            if msg_data:
+                messages.append({
+                    "username": msg_data.get("from_user", {}).get("username", "unknown"),
+                    "message": msg_data.get("message", ""),
+                    "timestamp": datetime.now().isoformat()
+                })
+        return messages
+        
+    except Exception as e:
+        logger.error(f"Chaturbate chat error: {e}")
+        return []
+
+def fetch_stripchat_chat(stream_url, streamer):
+    """Fetch Stripchat chat messages"""
+    try:
+        from scraping import fetch_stripchat_chat_history
+        chat_data = fetch_stripchat_chat_history(stream_url)
+        return [{
+            "username": msg.get("username", "unknown"),
+            "message": msg.get("text", ""),
+            "timestamp": msg.get("timestamp", datetime.now().isoformat())
+        } for msg in chat_data]
+        
+    except Exception as e:
+        logger.error(f"Stripchat chat error: {e}")
+        return []
+
+def process_chat_messages(messages, stream_url):
+    """Analyze chat messages for keywords and sentiment"""
+    keywords = refresh_flagged_keywords()
+    if not keywords:
+        return []
+    
+    detected = []
+    now = datetime.now()
+    
+    for msg in messages:
+        text = msg.get("message", "").lower()
+        user = msg.get("username", "unknown")
+        timestamp = msg.get("timestamp", now.isoformat())
+        
+        for keyword in keywords:
+            if keyword in text:
+                if keyword in last_chat_alerts.get(stream_url, {}):
+                    last_alert = last_chat_alerts[stream_url][keyword]
+                    if (now - last_alert).total_seconds() < CHAT_ALERT_COOLDOWN:
+                        continue
+                
+                last_chat_alerts.setdefault(stream_url, {})[keyword] = now
+                detected.append({
+                    "type": "keyword",
+                    "keyword": keyword,
+                    "message": text,
+                    "username": user,
+                    "timestamp": timestamp
+                })
+        
+        sentiment = _sentiment_analyzer.polarity_scores(text)
+        if sentiment['compound'] <= NEGATIVE_SENTIMENT_THRESHOLD:
+            sentiment_key = f"_negative_sentiment_{user}"
+            if sentiment_key in last_chat_alerts.get(stream_url, {}):
+                last_alert = last_chat_alerts[stream_url][sentiment_key]
+                if (now - last_alert).total_seconds() < CHAT_ALERT_COOLDOWN:
+                    continue
+                    
+            last_chat_alerts.setdefault(stream_url, {})[sentiment_key] = now
+            detected.append({
+                "type": "sentiment",
+                "message": text,
+                "username": user,
+                "sentiment_score": sentiment['compound'],
+                "timestamp": timestamp
+            })
+    
+    return detected
+
+def log_chat_detection(detections, stream_url):
+    """Log chat detections grouped by type"""
+    if not detections:
+        return
+        
+    platform, streamer = get_stream_info(stream_url)
+    assignment_id, agent = get_stream_assignment(stream_url)
+    
+    grouped = {}
+    for det in detections:
+        type_key = det.get("type", "unknown")
+        grouped.setdefault(type_key, []).append(det)
+    
+    for type_key, group in grouped.items():
+        details = {
+            "detections": group,
+            "timestamp": datetime.now().isoformat(),
+            "streamer_name": streamer,
+            "platform": platform,
+            "assigned_agent": agent or "Unassigned"
+        }
+        
+        event_type = "chat_sentiment_detection" if type_key == "sentiment" else "chat_detection"
+        
+        with current_app.app_context():
+            log_entry = DetectionLog(
+                room_url=stream_url,
+                event_type=event_type,
+                details=details,
+                timestamp=datetime.now(),
+                assigned_agent=agent,
+                assignment_id=assignment_id,
+                read=False
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+            
+            notification_data = {
+                "id": log_entry.id,
+                "event_type": log_entry.event_type,
+                "timestamp": log_entry.timestamp.isoformat(),
+                "details": log_entry.details,
+                "read": log_entry.read,
+                "room_url": log_entry.room_url,
+                "streamer": streamer,
+                "platform": platform,
+                "assigned_agent": agent or "Unassigned"
+            }
+            emit_notification(notification_data)
 
 def log_audio_detection(detection, stream_url):
     """Log audio detection events to the database"""
@@ -368,163 +743,6 @@ def handle_audio_detection(stream_url, transcript, keyword, sentiment_score, pla
     except Exception as e:
         current_app.logger.error(f"Error handling audio detection: {str(e)}")
         return False
-
-# =============== VIDEO MONITORING FUNCTIONS ===============
-
-def setup_video_monitoring(stream_url):
-    """Initialize video monitoring for a stream"""
-    model = load_yolo_model()
-    if not model:
-        logger.error("Failed to load YOLO model for video monitoring")
-        return False
-    
-    # Initialize cooldown tracking for this stream
-    if stream_url not in last_visual_alerts:
-        last_visual_alerts[stream_url] = {}
-        
-    return True
-
-def process_video_frame(frame, stream_url):
-    """
-    Process a video frame using YOLO for object detection
-    
-    Args:
-        frame: OpenCV image (numpy array)
-        stream_url: URL of the stream being monitored
-        
-    Returns:
-        List of detected objects with confidence scores
-    """
-    model = load_yolo_model()
-    if model is None:
-        return []
-    
-    # Get flagged objects with confidence thresholds
-    flagged_objects = refresh_flagged_objects()
-    if not flagged_objects:
-        return []
-    
-    try:
-        # Run detection on frame
-        results = model(frame)
-        
-        # Extract detections 
-        detections = []
-        for result in results:
-            for box in result.boxes:
-                bbox = box.xyxy.cpu().numpy()[0]
-                confidence = float(box.conf.cpu().numpy()[0])
-                class_id = int(box.cls.cpu().numpy()[0])
-                object_class = model.names.get(class_id, str(class_id)).lower()
-                
-                # Skip if not in flagged objects or below threshold
-                if object_class not in flagged_objects:
-                    continue
-                
-                threshold = flagged_objects[object_class]
-                if confidence < threshold:
-                    continue
-                
-                # Check if we're in cooldown period for this object class
-                now = datetime.now()
-                if object_class in last_visual_alerts.get(stream_url, {}):
-                    last_alert = last_visual_alerts[stream_url][object_class]
-                    if (now - last_alert).total_seconds() < VISUAL_ALERT_COOLDOWN:
-                        continue  # Skip, in cooldown
-                
-                # Update last alert time
-                if stream_url not in last_visual_alerts:
-                    last_visual_alerts[stream_url] = {}
-                last_visual_alerts[stream_url][object_class] = now
-                
-                # Add to detections
-                x1, y1, x2, y2 = bbox
-                detections.append({
-                    "class": object_class,
-                    "confidence": confidence,
-                    "bbox": [int(x1), int(y1), int(x2 - x1), int(y2 - y1)],
-                    "timestamp": now.isoformat()
-                })
-        
-        return detections
-    
-    except Exception as e:
-        logger.error(f"Error in video processing: {e}")
-        return []
-
-def annotate_frame(frame, detections):
-    """Annotate frame with bounding boxes for detected objects"""
-    annotated_frame = frame.copy()
-    for det in detections:
-        x, y, w, h = det["bbox"]
-        label = f'{det["class"]} ({det["confidence"]*100:.1f}%)'
-        # Draw red rectangle
-        cv2.rectangle(annotated_frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
-        # Add label with white text on red background
-        cv2.putText(annotated_frame, label, (x, y-10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-    return annotated_frame
-
-def log_video_detection(detections, frame, stream_url):
-    """Log video detection events to the database"""
-    if not detections:
-        return
-        
-    platform, streamer_name = get_stream_info(stream_url)
-    assignment_id, assigned_agent = get_stream_assignment(stream_url)
-    
-    # Annotate frame with detections
-    annotated_frame = annotate_frame(frame, detections)
-    
-    # Convert frame to JPEG
-    success, buffer = cv2.imencode('.jpg', annotated_frame)
-    if not success:
-        logger.error("Failed to encode annotated frame")
-        return
-        
-    image_data = buffer.tobytes()
-    image_b64 = base64.b64encode(image_data).decode('utf-8') if image_data else None
-    
-    # Format the detection details
-    details = {
-        "detections": detections,
-        "timestamp": datetime.now().isoformat(),
-        "streamer_name": streamer_name,
-        "platform": platform,
-        "annotated_image": image_b64,
-        "assigned_agent": assigned_agent or "Unassigned"
-    }
-    
-    with current_app.app_context():
-        log_entry = DetectionLog(
-            room_url=stream_url,
-            event_type="object_detection",
-            details=details,
-            detection_image=image_data,
-            timestamp=datetime.now(),
-            assigned_agent=assigned_agent,
-            assignment_id=assignment_id,
-            read=False
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-        
-        # Create notification data
-        notification_data = {
-            "id": log_entry.id,
-            "event_type": log_entry.event_type,
-            "timestamp": log_entry.timestamp.isoformat(),
-            "details": log_entry.details,
-            "read": log_entry.read,
-            "room_url": log_entry.room_url,
-            "streamer": streamer_name,
-            "platform": platform,
-            "assigned_agent": assigned_agent or "Unassigned"
-        }
-        
-        # Emit notification
-        emit_notification(notification_data)
-
 def handle_visual_detection(stream_url, detections, annotated_image, platform, streamer_name):
     try:
         # Create detection log in database
@@ -563,185 +781,6 @@ def handle_visual_detection(stream_url, detections, annotated_image, platform, s
     except Exception as e:
         current_app.logger.error(f"Error handling visual detection: {str(e)}")
         return False
-
-# =============== CHAT MONITORING FUNCTIONS ===============
-
-def setup_chat_monitoring(stream_url):
-    """Initialize chat monitoring for a stream"""
-    # Initialize cooldown tracking for this stream
-    if stream_url not in last_chat_alerts:
-        last_chat_alerts[stream_url] = {}
-        
-    return True
-
-def fetch_chat_messages(stream_url):
-    """
-    Fetch chat messages from Chaturbate or Stripchat
-    
-    Args:
-        stream_url: URL of the stream to monitor
-        
-    Returns:
-        List of chat messages in the format:
-        [{"username": "user", "message": "text", "timestamp": "iso_time"}]
-    """
-    platform, streamer = get_stream_info(stream_url)
-    
-    try:
-        # Determine which platform to scrape
-        if platform == "chaturbate":
-            return fetch_chaturbate_chat(stream_url, streamer)
-        elif platform == "stripchat":
-            return fetch_stripchat_chat(stream_url, streamer)
-        else:
-            logger.warning(f"Unsupported platform {platform} for chat monitoring")
-            return []
-    except Exception as e:
-        logger.error(f"Error fetching chat messages: {e}")
-        return []
-
-def fetch_chaturbate_chat(stream_url, streamer):
-    """Fetch chat messages from Chaturbate"""
-    # Extract room slug from URL
-    match = re.search(r'chaturbate\.com/([^/]+)', stream_url)
-    if not match:
-        logger.error(f"Could not extract room slug from {stream_url}")
-        return []
-        
-    room_slug = match.group(1)
-    
-    try:
-        # Import scraping module at the time of use
-        from scraping import fetch_chaturbate_chat_history
-        
-        # Fetch chat history
-        chat_data = fetch_chaturbate_chat_history(room_slug)
-        
-        # Process the chat data into a standard format
-        messages = []
-        for msg in chat_data:
-            msg_data = msg.get("RoomMessageTopic#RoomMessageTopic:0YJW2WC", {})
-            if not msg_data:
-                continue
-                
-            message = msg_data.get("message", "")
-            sender = msg_data.get("from_user", {}).get("username", "unknown")
-            timestamp = datetime.now().isoformat()  # Chaturbate doesn't provide timestamps
-            
-            messages.append({
-                "username": sender,
-                "message": message,
-                "timestamp": timestamp
-            })
-            
-        return messages
-        
-    except Exception as e:
-        logger.error(f"Error fetching Chaturbate chat: {e}")
-        return []
-
-def fetch_stripchat_chat(stream_url, streamer):
-    """Fetch chat messages from Stripchat"""
-    try:
-        # Import scraping module at the time of use
-        from scraping import fetch_stripchat_chat_history
-        
-        # Fetch chat history
-        chat_data = fetch_stripchat_chat_history(stream_url)
-        
-        # Process the chat data into a standard format
-        messages = []
-        for msg in chat_data:
-            sender = msg.get("username", "unknown")
-            message = msg.get("text", "")
-            timestamp = msg.get("timestamp", datetime.now().isoformat())
-            
-            messages.append({
-                "username": sender,
-                "message": message,
-                "timestamp": timestamp
-            })
-            
-        return messages
-        
-    except Exception as e:
-        logger.error(f"Error fetching Stripchat chat: {e}")
-        return []
-
-def process_chat_messages(messages, stream_url):
-    """
-    Process chat messages to detect flagged keywords and negative sentiment
-    
-    Args:
-        messages: List of chat messages
-        stream_url: URL of the stream
-        
-    Returns:
-        List of detected issues in chat
-    """
-    # Get flagged keywords
-    keywords = refresh_flagged_keywords()
-    if not keywords:
-        return []
-    
-    detected_issues = []
-    now = datetime.now()
-    
-    for message in messages:
-        text = message.get("message", "").lower()
-        username = message.get("username", "unknown")
-        timestamp = message.get("timestamp", now.isoformat())
-        
-        # Check for flagged keywords
-        for keyword in keywords:
-            if keyword.lower() in text:
-                # Check if we're in cooldown period for this keyword
-                if keyword in last_chat_alerts.get(stream_url, {}):
-                    last_alert = last_chat_alerts[stream_url][keyword]
-                    if (now - last_alert).total_seconds() < CHAT_ALERT_COOLDOWN:
-                        continue  # Skip, in cooldown
-                
-                # Update last alert time
-                if stream_url not in last_chat_alerts:
-                    last_chat_alerts[stream_url] = {}
-                last_chat_alerts[stream_url][keyword] = now
-                
-                # Add to detected issues
-                detected_issues.append({
-                    "type": "keyword",
-                    "keyword": keyword,
-                    "message": text,
-                    "username": username,
-                    "timestamp": timestamp
-                })
-        
-        # Perform sentiment analysis
-        sentiment = _sentiment_analyzer.polarity_scores(text)
-        compound_score = sentiment['compound']
-        
-        # Check for negative sentiment
-        if compound_score <= NEGATIVE_SENTIMENT_THRESHOLD:
-            # Ensure we're not in cooldown for negative sentiment
-            sentiment_key = f"_negative_sentiment_{username}"
-            if sentiment_key in last_chat_alerts.get(stream_url, {}):
-                last_alert = last_chat_alerts[stream_url][sentiment_key]
-                if (now - last_alert).total_seconds() < CHAT_ALERT_COOLDOWN:
-                    continue  # Skip sentiment alert, in cooldown
-                    
-            # Update last alert time for sentiment
-            if stream_url not in last_chat_alerts:
-                last_chat_alerts[stream_url] = {}
-            last_chat_alerts[stream_url][sentiment_key] = now
-            
-            detected_issues.append({
-                "type": "sentiment",
-                "message": text,
-                "username": username,
-                "sentiment_score": compound_score,
-                "timestamp": timestamp
-            })
-    
-    return detected_issues
 
 def log_chat_detection(detections, stream_url):
     """Log chat detection events to the database"""
@@ -842,186 +881,110 @@ def handle_chat_detection(stream_url, message, keywords, sender, platform, strea
     except Exception as e:
         current_app.logger.error(f"Error handling chat detection: {str(e)}")
         return False
-
-# =============== MAIN MONITORING FUNCTIONS ===============
-
-def extract_audio_from_stream(stream_url, duration=10):
-    """
-    Extract audio segments from an HLS stream
-    
-    Args:
-        stream_url: URL of the HLS stream
-        duration: Number of seconds of audio to extract
-        
-    Returns:
-        Audio data in format compatible with Whisper
-    """
-    try:
-        # Use PyAV to extract audio from HLS
-        container = av.open(stream_url, timeout=30)
-        audio_stream = next((s for s in container.streams if s.type == 'audio'), None)
-        
-        if not audio_stream:
-            logger.error(f"No audio stream found in {stream_url}")
-            return None
-            
-        # Set up resampler for whisper compatible format (16kHz mono)
-        resampler = av.AudioResampler(
-            format='s16', 
-            layout='mono', 
-            rate=16000
-        )
-        
-        # Calculate how many audio frames to process
-        audio_frames = []
-        start_time = time.time()
-        
-        # Read audio frames for the specified duration
-        for frame in container.decode(audio_stream):
-            # Resample frame
-            frames = resampler.resample(frame)
-            for frame in frames:
-                audio_frames.append(frame)
-            
-            # Check if we've collected enough audio
-            if time.time() - start_time >= duration:
-                break
-        
-        if not audio_frames:
-            logger.error(f"No audio frames extracted from {stream_url}")
-            return None
-            
-        # Convert frames to numpy array for Whisper
-        audio_data = np.concatenate([frame.to_ndarray() for frame in audio_frames])
-        audio_data = audio_data.astype(np.float32) / 32768.0  # Convert to float [-1.0, 1.0]
-        
-        return audio_data
-        
-    except Exception as e:
-        logger.error(f"Error extracting audio from stream: {e}")
-        return None
-
-def extract_video_frame(stream_url):
-    """
-    Extract a video frame from an HLS stream
-    
-    Args:
-        stream_url: URL of the HLS stream
-        
-    Returns:
-        OpenCV image (numpy array)
-    """
-    try:
-        # Use PyAV to extract video frame from HLS
-        container = av.open(stream_url, timeout=30)
-        video_stream = next((s for s in container.streams if s.type == 'video'), None)
-        
-        if not video_stream:
-            logger.error(f"No video stream found in {stream_url}")
-            return None
-            
-        # Seek to a point with a keyframe
-        container.seek(1000000, any_frame=False, backward=True, stream=video_stream)
-        
-        # Read frames until we get one
-        for frame in container.decode(video_stream):
-            # Convert PyAV frame to numpy array for OpenCV
-            img = frame.to_ndarray(format='rgb24')
-            # Convert RGB to BGR for OpenCV
-            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            return img
-            
-        logger.error(f"No video frames extracted from {stream_url}")
-        return None
-        
-    except Exception as e:
-        logger.error(f"Error extracting video frame from stream: {e}")
-        return None
-
-# In monitoring.py or appropriate file
+# =============== MAIN MONITORING CONTROL ===============
 def process_combined_detection(stream_url, cancel_event, poll_interval=60):
-    """
-    Process audio, video, and chat detection for a stream
+    """Main monitoring loop combining all detection types"""
+    logger.info(f"Starting monitoring for {stream_url}")
     
-    Args:
-        stream_url: URL of the HLS stream
-        cancel_event: Threading event to signal cancellation
-        poll_interval: How often to poll the stream (seconds)
-    """
-    logger.info(f"Starting combined detection for {stream_url}")
-    
-    # Setup each monitoring component
-    audio_setup = setup_audio_monitoring(stream_url)
-    video_setup = setup_video_monitoring(stream_url)
-    chat_setup = setup_chat_monitoring(stream_url)
-    
-    if not (audio_setup and video_setup and chat_setup):
-        logger.error(f"Failed to set up monitoring for {stream_url}")
-        return
+    # Start real-time audio processing
+    audio_cancel = threading.Event()
+    audio_thread = threading.Thread(
+        target=process_audio_realtime,
+        args=(stream_url, audio_cancel),
+        daemon=True
+    )
+    audio_thread.start()
     
     while not cancel_event.is_set():
         try:
-            # Process video frame for object detection
+            # Video processing
             frame = extract_video_frame(stream_url)
-            if frame is not None:
-                video_detections = process_video_frame(frame, stream_url)
-                if video_detections:
-                    log_video_detection(video_detections, frame, stream_url)
-                    logger.info(f"Detected {len(video_detections)} objects in {stream_url}")
+            if frame:
+                detections = process_video_frame(frame, stream_url)
+                if detections:
+                    log_video_detection(detections, frame, stream_url)
             
-            # Process audio for speech recognition
-            audio_data = extract_audio_from_stream(stream_url)
-            if audio_data is not None:
-                audio_detections = process_audio_segment(audio_data, stream_url)
-                for detection in audio_detections:
-                    log_audio_detection(detection, stream_url)
-                if audio_detections:
-                    logger.info(f"Detected {len(audio_detections)} audio issues in {stream_url}")
-            
-            # Process chat messages
+            # Chat processing
             messages = fetch_chat_messages(stream_url)
             if messages:
-                chat_detections = process_chat_messages(messages, stream_url)
-                if chat_detections:
-                    log_chat_detection(chat_detections, stream_url)
-                    logger.info(f"Detected {len(chat_detections)} chat issues in {stream_url}")
+                detections = process_chat_messages(messages, stream_url)
+                if detections:
+                    log_chat_detection(detections, stream_url)
             
-            # Wait for the next polling interval
+            # Sleep for polling interval
             for _ in range(poll_interval):
                 if cancel_event.is_set():
                     break
                 time.sleep(1)
                 
         except Exception as e:
-            logger.error(f"Error in combined detection loop: {e}")
-            # Wait a bit and continue
+            logger.error(f"Monitoring error: {e}")
             time.sleep(10)
     
-    logger.info(f"Stopped combined detection for {stream_url}")        
-def start_monitoring(stream_url):
-    """
-    Start monitoring a stream for audio, video, and chat content
-    
-    Args:
-        stream_url: URL of the HLS stream
+    # Cleanup
+    audio_cancel.set()
+    if stream_url in stream_processors:
+        _, chunker_cancel = stream_processors[stream_url]
+        chunker_cancel.set()
         
-    Returns:
-        Tuple of (cancel_event, threads)
+    logger.info(f"Stopped monitoring {stream_url}")
+
+def start_notification_monitor():
     """
+    Start the notification monitoring system
+    
+    This function initializes the background processes needed for monitoring notifications
+    """
+    logger.info("Starting notification monitoring system")
+    
+    try:
+        # Set up any global notification monitoring services
+        # This could include:
+        # - Connecting to message queues
+        # - Setting up webhook listeners
+        # - Initializing background tasks
+        
+        # Just as a placeholder for now, we'll create a basic background thread
+        notification_thread = threading.Thread(
+            target=notification_monitor_loop,
+            daemon=True
+        )
+        notification_thread.start()
+        
+        logger.info("Notification monitoring system started successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to start notification monitoring system: {e}")
+        return False
+
+def notification_monitor_loop():
+    """Background loop for the notification monitor"""
+    logger.info("Notification monitor loop started")
+    
+    while True:
+        try:
+            # Periodic check for pending notifications
+            # This would typically check a queue, database, or external service
+            
+            # Sleep to avoid high CPU usage
+            time.sleep(60)  # Check every minute
+        except Exception as e:
+            logger.error(f"Error in notification monitor loop: {e}")
+            time.sleep(60)  # Wait a bit after errors
+
+def start_monitoring(stream_url):
+    """Start monitoring a stream with all detectors"""
     logger.info(f"Starting monitoring for {stream_url}")
     
-    # Create cancel event
     cancel_event = threading.Event()
-    
-    # Create and start the detection thread
-    detection_thread = threading.Thread(
+    monitor_thread = threading.Thread(
         target=process_combined_detection,
         args=(stream_url, cancel_event),
         daemon=True
     )
-    detection_thread.start()
+    monitor_thread.start()
     
-    return cancel_event, detection_thread
+    return cancel_event, monitor_thread
 
 def stop_monitoring(stream_url, cancel_event=None, thread=None):
     """Stop monitoring a stream"""
@@ -1030,12 +993,16 @@ def stop_monitoring(stream_url, cancel_event=None, thread=None):
     
     if thread and thread.is_alive():
         thread.join(timeout=5)
+    
+    # Cleanup audio processing
+    if stream_url in stream_processors:
+        _, chunker_cancel = stream_processors[stream_url]
+        chunker_cancel.set()
+        del stream_processors[stream_url]
         
-    logger.info(f"Stopped monitoring for {stream_url}")
+    logger.info(f"Stopped monitoring {stream_url}")
 
 # =============== EXPORTS ===============
-
-# Export for route usage
 __all__ = [
     'start_monitoring',
     'stop_monitoring',
@@ -1045,5 +1012,4 @@ __all__ = [
 ]
 
 if __name__ == "__main__":
-    # Example usage
     print("Livestream monitoring system - import this module to use")

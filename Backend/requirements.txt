@@ -15,3 +15,5 @@ vaderSentiment
 free-proxy
 flask-socketio>=5.3.0
 eventlet
+ffmpeg
+vaderSentiment

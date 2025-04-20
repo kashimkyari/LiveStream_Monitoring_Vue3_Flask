@@ -2,6 +2,8 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import { io } from 'socket.io-client'
 import { library } from '@fortawesome/fontawesome-svg-core'
+import { mobileDetector } from './services/mobileDetector'
+import './assets/styles/common.css'
 import { 
   faUserLock, 
   faUser, 
@@ -22,6 +24,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import Toast from "vue-toastification"
 import "vue-toastification/dist/index.css"
+import { inject } from "@vercel/analytics"
 
 // Add all icons to the library
 library.add(
@@ -70,6 +73,14 @@ app.use(Toast, {
 app.config.globalProperties.$socket = io(window.location.origin, {
   withCredentials: true
 })
+
+app.use(inject())
+
+// Initialize mobile detector
+mobileDetector.initialize(768)
+
+// Make mobile detector available globally
+app.config.globalProperties.$mobileDetector = mobileDetector
 
 // Mount the app
 app.mount('#app')

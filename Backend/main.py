@@ -39,7 +39,7 @@ socketio.init_app(
 # Allowed frontends (comma‑separated in .env)
 ALLOWED_ORIGINS = os.getenv(
     'ALLOWED_ORIGINS',
-    'https://live-stream-monitoring-vue3-flask.vercel.app, http://localhost:8080,,http://127.0.0.1:8080,http://127.0.0.1:5173'
+    'https://live-stream-monitoring-vue3-flask.vercel.app,http://localhost:8080,102.90.45.224,http://127.0.0.1:5173'
 ).split(',')
 
 # === Dynamic CORS Handler ===
@@ -138,8 +138,8 @@ except Exception as e:
     logging.error("Background services failed: %s", e)
 
 if __name__ == "__main__":
-    debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
-    if os.getenv('ENABLE_SSL', 'true').lower() == 'true':
+    debug = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
+    if os.getenv('ENABLE_SSL', 'false').lower() == 'true':
         cert_dir = os.path.expanduser(os.getenv('CERT_DIR', '~/certs'))
         ssl_cert = os.path.join(cert_dir, 'fullchain.pem')
         ssl_key = os.path.join(cert_dir, 'privkey.pem')

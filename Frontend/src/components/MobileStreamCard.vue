@@ -1,0 +1,316 @@
+<template>
+  <div class="mobile-stream-card" :class="platformClass">
+    <div class="stream-card-content" @click="$emit('click')">
+      <div class="stream-header">
+        <h3 class="stream-title">{{ stream.streamer_username }}</h3>
+        <div class="stream-badge">{{ streamType }}</div>
+      </div>
+      
+      <div class="stream-details">
+        <!-- Stream URL -->
+        <div class="detail-item">
+          <font-awesome-icon icon="link" class="detail-icon" />
+          <div class="detail-text url-text" @click.stop="openStreamUrl">
+            {{ formatRoomUrl(stream.room_url) }}
+          </div>
+        </div>
+        
+        <!-- Assignments -->
+        <div class="detail-item">
+          <font-awesome-icon icon="users" class="detail-icon" />
+          <div class="detail-text">
+            {{ assignmentsText }}
+          </div>
+        </div>
+        
+        <!-- Stream Status -->
+        <div class="detail-item">
+          <font-awesome-icon :icon="statusIcon" class="detail-icon" :class="statusClass" />
+          <div class="detail-text" :class="statusClass">
+            {{ statusText }}
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="stream-actions">
+      <button 
+        class="refresh-button" 
+        @click.stop="$emit('refresh')"
+        :disabled="isRefreshing"
+        :class="{ 'refreshing': isRefreshing }"
+      >
+        <font-awesome-icon icon="sync" :class="{ 'fa-spin': isRefreshing }" />
+      </button>
+    </div>
+  </div>
+</template>
+
+<script>
+import { computed } from 'vue'
+
+export default {
+  name: 'MobileStreamCard',
+  
+  props: {
+    stream: {
+      type: Object,
+      required: true
+    },
+    isRefreshing: {
+      type: Boolean,
+      default: false
+    }
+  },
+  
+  emits: ['click', 'refresh'],
+  
+  setup(props) {
+    // Determine platform/type for styling
+    const streamType = computed(() => {
+      const type = (props.stream.type || props.stream.platform || '').toLowerCase()
+      return type.charAt(0).toUpperCase() + type.slice(1)
+    })
+    
+    const platformClass = computed(() => {
+      const type = (props.stream.type || props.stream.platform || '').toLowerCase()
+      return `platform-${type}`
+    })
+    
+    // Truncate and format room URL for display
+    const formatRoomUrl = (url) => {
+      if (!url) return 'No URL'
+      
+      try {
+        const urlObj = new URL(url)
+        // Return just the domain and pathname, truncated if needed
+        const display = `${urlObj.hostname}${urlObj.pathname}`
+        return display.length > 30 ? display.substring(0, 30) + '...' : display
+      } catch (e) {
+        // If not a valid URL, just return truncated
+        return url.length > 30 ? url.substring(0, 30) + '...' : url
+      }
+    }
+    
+    // Open stream URL in new tab
+    const openStreamUrl = (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (props.stream.room_url) {
+        window.open(props.stream.room_url, '_blank')
+      }
+    }
+    
+    // Format assignments text
+    const assignmentsText = computed(() => {
+      const count = (props.stream.assignments || []).length
+      return count === 1 ? '1 agent assigned' : `${count} agents assigned`
+    })
+    
+    // Stream status
+    const isStreamActive = computed(() => {
+      return props.stream.m3u8_url ? true : false
+    })
+    
+    const statusText = computed(() => {
+      return isStreamActive.value ? 'Online' : 'Offline'
+    })
+    
+    const statusIcon = computed(() => {
+      return isStreamActive.value ? 'circle' : 'times-circle'
+    })
+    
+    const statusClass = computed(() => {
+      return isStreamActive.value ? 'status-online' : 'status-offline'
+    })
+    
+    return {
+      streamType,
+      platformClass,
+      formatRoomUrl,
+      openStreamUrl,
+      assignmentsText,
+      statusText,
+      statusIcon,
+      statusClass
+    }
+  }
+}
+</script>
+
+<style scoped>
+.mobile-stream-card {
+  display: flex;
+  background-color: var(--light-card-bg);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+[data-theme='dark'] .mobile-stream-card {
+  background-color: var(--dark-card-bg);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.mobile-stream-card:active {
+  transform: scale(0.98);
+}
+
+.stream-card-content {
+  flex: 1;
+  padding: 15px;
+}
+
+.stream-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.stream-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--light-text);
+}
+
+[data-theme='dark'] .stream-title {
+  color: var(--dark-text);
+}
+
+.stream-badge {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background-color: var(--light-secondary);
+  color: white;
+}
+
+[data-theme='dark'] .stream-badge {
+  background-color: var(--dark-secondary);
+}
+
+/* Platform-specific styling */
+.platform-chaturbate .stream-badge {
+  background-color: #f90;
+}
+
+.platform-stripchat .stream-badge {
+  background-color: #ff0066;
+}
+
+.stream-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.detail-icon {
+  width: 16px;
+  margin-right: 10px;
+  color: var(--light-text-secondary);
+}
+
+[data-theme='dark'] .detail-icon {
+  color: var(--dark-text-secondary);
+}
+
+.detail-text {
+  color: var(--light-text-secondary);
+}
+
+[data-theme='dark'] .detail-text {
+  color: var(--dark-text-secondary);
+}
+
+.url-text {
+  color: var(--light-primary);
+  cursor: pointer;
+}
+
+[data-theme='dark'] .url-text {
+  color: var(--dark-primary);
+}
+
+.url-text:active {
+  opacity: 0.7;
+}
+
+/* Status styles */
+.status-online {
+  color: var(--light-success) !important;
+}
+
+[data-theme='dark'] .status-online {
+  color: var(--dark-success) !important;
+}
+
+.status-offline {
+  color: var(--light-danger) !important;
+}
+
+[data-theme='dark'] .status-offline {
+  color: var(--dark-danger) !important;
+}
+
+/* Stream actions */
+.stream-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 15px;
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme='dark'] .stream-actions {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.refresh-button {
+  background: none;
+  border: none;
+  height: 40px;
+  width: 40px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--light-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+[data-theme='dark'] .refresh-button {
+  color: var(--dark-text-secondary);
+}
+
+.refresh-button:active {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .refresh-button:active {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.refresh-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refresh-button.refreshing {
+  color: var(--light-primary);
+}
+
+[data-theme='dark'] .refresh-button.refreshing {
+  color: var(--dark-primary);
+}
+</style>

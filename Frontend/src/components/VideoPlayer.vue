@@ -31,10 +31,7 @@
         class="thumbnail-image"
         @error="handleThumbnailError"
       />
-      <div class="thumbnail-live-indicator">
-        <div class="red-dot"></div>
-        <span>LIVE</span>
-      </div>
+     
     </div>
     
     <!-- Inline Player -->

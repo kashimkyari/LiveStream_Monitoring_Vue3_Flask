@@ -10,6 +10,15 @@
     <div class="video-container">
       <video ref="videoPlayer" class="video-player"></video>
       <DetectionBadge v-if="detectionCount > 0" :count="detectionCount" />
+      
+      <!-- Add viewer count overlay for Stripchat -->
+      <div v-if="stream.platform?.toLowerCase() === 'stripchat'" class="viewer-count-overlay">
+        <span class="viewer-count">
+          <font-awesome-icon icon="eye" />
+          {{ viewers }}
+        </span>
+      </div>
+      
       <div class="stream-overlay" ref="streamOverlay">
         <button class="view-details-btn">
           <font-awesome-icon icon="eye" />
@@ -66,7 +75,6 @@
       <button class="action-btn assign-btn" @click.stop="$emit('assign')" v-if="!stream.agent?.username">
         <font-awesome-icon icon="user-plus" />
       </button>
-      
     </div>
   </div>
 </template>
@@ -113,6 +121,10 @@ export default {
     const detectionError = ref(null)
     const checkStatusInterval = ref(null)
     
+    // Viewer count for Stripchat streams
+    const viewers = ref(0)
+    const viewersRefreshInterval = ref(null)
+    
     // Get the global store or event bus if available
     const eventBus = inject('eventBus', null)
     
@@ -138,6 +150,45 @@ export default {
       // Fallback to room URL
       return props.stream.room_url
     })
+
+    // Get username from stream data
+    const getStreamerUsername = () => {
+      if (!props.stream || !props.stream.streamer_username) return null
+      return props.stream.streamer_username
+    }
+
+    // Fetch viewer count for Stripchat streams
+    const fetchViewerCount = async () => {
+      const username = getStreamerUsername()
+      if (!username || props.stream.platform?.toLowerCase() !== 'stripchat') return
+      
+      try {
+        const response = await axios.get(`https://stripchat.com/api/front/v2/models/username/${username}/members`)
+        
+        // Extract viewer count from response
+        if (response.data && response.data.guests !== undefined) {
+          viewers.value = response.data.guests
+          
+          // If we also want to include other viewer types
+          const totalViewers = (response.data.guests || 0) + 
+                              (response.data.members?.length || 0) + 
+                              (response.data.spies || 0)
+          
+          // Choose which viewer count to display
+          viewers.value = totalViewers
+          
+          // Add animation for viewer count update
+          anime({
+            targets: '.viewer-count',
+            scale: [1, 1.1, 1],
+            duration: 300,
+            easing: 'easeOutQuad'
+          })
+        }
+      } catch (error) {
+        console.error('Error fetching viewer count:', error)
+      }
+    }
 
     const initializeVideo = () => {
       // Get the correct m3u8 URL directly from the stream object
@@ -417,6 +468,25 @@ export default {
       }
     })
 
+    // Set up viewer count refresh for Stripchat streams
+    const setupViewerCountRefresh = () => {
+      if (props.stream.platform?.toLowerCase() === 'stripchat') {
+        // Initial fetch
+        fetchViewerCount()
+        
+        // Set up interval for periodic refresh (every 30 seconds)
+        viewersRefreshInterval.value = setInterval(fetchViewerCount, 30000)
+      }
+    }
+
+    // Clean up viewer count refresh interval
+    const cleanupViewerCountRefresh = () => {
+      if (viewersRefreshInterval.value) {
+        clearInterval(viewersRefreshInterval.value)
+        viewersRefreshInterval.value = null
+      }
+    }
+
     // Listen for global events
     onMounted(() => {
       initializeVideo()
@@ -427,6 +497,9 @@ export default {
       
       // Set up interval to check detection status
       checkStatusInterval.value = setInterval(checkDetectionStatus, 30000)
+      
+      // Set up viewer count refresh for Stripchat
+      setupViewerCountRefresh()
       
       // Listen for global mute all event if event bus exists
       if (eventBus) {
@@ -447,9 +520,22 @@ export default {
         clearInterval(checkStatusInterval.value)
       }
       
+      // Clear viewer count refresh interval
+      cleanupViewerCountRefresh()
+      
       // Clean up event listeners
       if (eventBus) {
         eventBus.$off('muteAllStreams')
+      }
+    })
+
+    // Watch for platform changes and set up viewer count refresh accordingly
+    watch(() => props.stream.platform, (newPlatform) => {
+      // Clean up existing interval if any
+      cleanupViewerCountRefresh()
+      
+      if (newPlatform?.toLowerCase() === 'stripchat') {
+        setupViewerCountRefresh()
       }
     })
 
@@ -464,6 +550,7 @@ export default {
       isDarkTheme,
       isDetectionActive,
       isDetectionLoading,
+      viewers,  // Export viewers count
       addHoverAnimation,
       removeHoverAnimation,
       getStreamTime,
@@ -478,7 +565,36 @@ export default {
 </script>
 
 <style scoped>
-/* Add this to your existing styles */
+/* Add viewer count overlay styles */
+.viewer-count-overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+}
+
+.viewer-count {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(2px);
+  transition: all 0.2s ease;
+}
+
+.viewer-count:hover {
+  background-color: rgba(0, 0, 0, 0.85);
+}
+
+.compact-view .viewer-count {
+  padding: 3px 8px;
+  font-size: 0.75rem;
+}
 
 /* Detection controls */
 .detection-controls {
@@ -492,7 +608,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: rgba(5, 0, 0, 0.7);
   color: white;
   border: none;
   border-radius: 20px;
@@ -843,6 +959,7 @@ export default {
   .stream-stats {
     padding-top: 12px;
   }
+  
   
   .stat-item {
     font-size: 0.75rem;
