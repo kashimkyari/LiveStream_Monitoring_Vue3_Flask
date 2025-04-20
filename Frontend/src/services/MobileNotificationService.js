@@ -44,7 +44,7 @@ class MobileNotificationService {
       this._loading.value = true;
       
       // Fetch mobile-optimized notification data
-      const response = await axios.get('/api/notifications/mobile/latest');
+      const response = await axios.get('/api/notifications');
       
       if (response.data.success) {
         // Update cache
