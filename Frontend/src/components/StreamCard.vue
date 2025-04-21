@@ -11,8 +11,8 @@
       <video ref="videoPlayer" class="video-player"></video>
       <DetectionBadge v-if="detectionCount > 0" :count="detectionCount" />
       
-      <!-- Add viewer count overlay for Stripchat -->
-      <div v-if="stream.platform?.toLowerCase() === 'stripchat'" class="viewer-count-overlay">
+      <!-- Viewer count overlay for Stripchat streams only -->
+      <div v-if="isStripchatStream" class="viewer-count-overlay">
         <span class="viewer-count">
           <font-awesome-icon icon="eye" />
           {{ viewers }}
@@ -63,6 +63,11 @@
         <div class="stat-item alert-stat" :class="{'has-alerts': detectionCount > 0}">
           <font-awesome-icon icon="bell" />
           <span>{{ detectionCount }} {{ detectionCount === 1 ? 'alert' : 'alerts' }}</span>
+        </div>
+        <!-- Add viewer count stat item for Stripchat streams -->
+        <div v-if="isStripchatStream" class="stat-item viewer-stat">
+          <font-awesome-icon icon="eye" />
+          <span>{{ viewers }} viewers</span>
         </div>
         <!-- Add detection status display -->
         <div v-if="isDetectionActive" class="stat-item monitor-stat">
@@ -151,6 +156,11 @@ export default {
       return props.stream.room_url
     })
 
+    // Computed property to check if stream is from Stripchat
+    const isStripchatStream = computed(() => {
+      return props.stream?.platform?.toLowerCase() === 'stripchat'
+    })
+
     // Get username from stream data
     const getStreamerUsername = () => {
       if (!props.stream || !props.stream.streamer_username) return null
@@ -159,23 +169,19 @@ export default {
 
     // Fetch viewer count for Stripchat streams
     const fetchViewerCount = async () => {
+      // Only proceed if this is a Stripchat stream
+      if (!isStripchatStream.value) return
+      
       const username = getStreamerUsername()
-      if (!username || props.stream.platform?.toLowerCase() !== 'stripchat') return
+      if (!username) return
       
       try {
         const response = await axios.get(`https://stripchat.com/api/front/v2/models/username/${username}/members`)
         
-        // Extract viewer count from response
+        // Extract guest count from response
         if (response.data && response.data.guests !== undefined) {
+          // Update viewers with just the guests count for Stripchat
           viewers.value = response.data.guests
-          
-          // If we also want to include other viewer types
-          const totalViewers = (response.data.guests || 0) + 
-                              (response.data.members?.length || 0) + 
-                              (response.data.spies || 0)
-          
-          // Choose which viewer count to display
-          viewers.value = totalViewers
           
           // Add animation for viewer count update
           anime({
@@ -470,7 +476,7 @@ export default {
 
     // Set up viewer count refresh for Stripchat streams
     const setupViewerCountRefresh = () => {
-      if (props.stream.platform?.toLowerCase() === 'stripchat') {
+      if (isStripchatStream.value) {
         // Initial fetch
         fetchViewerCount()
         
@@ -530,9 +536,12 @@ export default {
     })
 
     // Watch for platform changes and set up viewer count refresh accordingly
-    watch(() => props.stream.platform, (newPlatform) => {
+    watch(() => props.stream.platform, (newPlatform, oldPlatform) => {
       // Clean up existing interval if any
       cleanupViewerCountRefresh()
+      
+      // Reset viewers count when platform changes
+      viewers.value = 0
       
       if (newPlatform?.toLowerCase() === 'stripchat') {
         setupViewerCountRefresh()
@@ -550,7 +559,8 @@ export default {
       isDarkTheme,
       isDetectionActive,
       isDetectionLoading,
-      viewers,  // Export viewers count
+      viewers,
+      isStripchatStream, // Export computed property
       addHoverAnimation,
       removeHoverAnimation,
       getStreamTime,
