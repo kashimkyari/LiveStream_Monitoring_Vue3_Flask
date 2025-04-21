@@ -140,8 +140,7 @@ export default {
         
         // Mobile optimization: Add mobile parameter to reduce data usage
         const response = await axios.post('/api/streams', {
-          ...formData.value,
-          mobile: true
+          ...formData.value
         })
         
         if (response.data.job_id) {
