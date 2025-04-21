@@ -509,18 +509,16 @@ export default {
   overflow-x: hidden; /* Prevent horizontal scrollbar during animations */
 }
 
-.main-content.sidebar-minimized {
-  margin-left: var(--sidebar-width-collapsed);
-}
+
 
 .main-content {
   /* Default state is expanded */
-  margin-left: var(--sidebar-width-expanded);
   flex: 1;
   padding: 1rem;
   transition: margin-left 0.3s ease;
   height: 90%;
   will-change: margin-left, transform;
+  margin-left: 55px;
 }
 
 .loading-state {

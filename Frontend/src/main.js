@@ -70,8 +70,10 @@ app.use(Toast, {
   rtl: false
 })
 
-app.config.globalProperties.$socket = io(window.location.origin, {
-  withCredentials: true
+app.config.globalProperties.$socket = io('http://localhost:5000', {
+  path: '/ws',
+  withCredentials: true,
+  transports: ['websocket', 'polling'] // Recommended for fallback
 })
 
 app.use(inject())

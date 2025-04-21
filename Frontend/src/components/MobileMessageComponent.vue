@@ -415,10 +415,11 @@ export default {
     
     // Methods
     const initSocket = () => {
-      if (socket.value && socket.value.connected) {
-        console.log('Socket already connected');
-        return;
-      }
+      // Connect to the backend at 54.86.99.85:5000
+      socket.value = io('http://localhost:5000', { 
+        path: '/ws',
+        transports: ['websocket']
+      });
       
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const socketUrl = `${protocol}//${window.location.host}`;

@@ -624,9 +624,10 @@ export default {
       if (socket) return // Already connected
       
       // Connect to Socket.IO server (same domain as REST API)
-      socket = io('/', {
-        transports: ['websocket'],
-        upgrade: false,
+      socket = io('http://localhost:5000', {  // Explicit server URL
+        path: '/ws',                         // Matches server path
+        transports: ['websocket'],           // Keep if you want WS-only
+        upgrade: false,                      // Keep if you want to disable upgrade
         query: {
           userId: currentUserId
         }

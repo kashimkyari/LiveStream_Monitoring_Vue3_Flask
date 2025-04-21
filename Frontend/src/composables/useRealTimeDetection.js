@@ -28,7 +28,7 @@ export function useRealTimeDetection() {
    * @param {Object} options.preferences - Notification preferences
    */
   const initialize = ({ 
-    serverUrl = '', 
+    serverUrl = 'http://localhost:5000', 
     autoConnect = true,
     preferences = {}
   } = {}) => {
@@ -54,7 +54,7 @@ export function useRealTimeDetection() {
     const url = serverUrl || window.location.origin;
     socket.value = io(url, {
       autoConnect,
-      path: '/socket.io',
+      path: '/ws',
       transports: ['websocket', 'polling']
     });
     

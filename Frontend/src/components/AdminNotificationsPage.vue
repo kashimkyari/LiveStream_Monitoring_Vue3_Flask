@@ -490,6 +490,7 @@ export default {
     const agents = ref([])
     const user = ref(null)
     const socket = ref(null)
+    const socketInitialized = ref(false)
     const soundEnabled = ref(localStorage.getItem('notificationSound') !== 'false')
     const isDarkMode = ref(localStorage.getItem('darkMode') === 'true')
     const isMobile = ref(window.innerWidth < 768)
@@ -498,257 +499,256 @@ export default {
     const newNotificationIds = ref([])
     const toasts = ref([])
     let toastCounter = 0
-    
-    // Computed properties
+
+    // Computed
     const filteredNotifications = computed(() => {
       let filtered = [...notifications.value]
-      
-      // Apply main filter
       if (mainFilter.value === 'Unread') {
         filtered = filtered.filter(n => !n.read)
       } else if (mainFilter.value === 'Detections') {
         filtered = filtered.filter(n => {
-          // Apply detection sub-filter
-          if (detectionSubFilter.value === 'Visual') {
-            return n.event_type === 'object_detection'
-          } else if (detectionSubFilter.value === 'Audio') {
-            return n.event_type === 'audio_detection'
-          } else if (detectionSubFilter.value === 'Chat') {
-            return n.event_type === 'chat_detection'
-          }
+          if (detectionSubFilter.value === 'Visual') return n.event_type === 'object_detection'
+          if (detectionSubFilter.value === 'Audio') return n.event_type === 'audio_detection'
+          if (detectionSubFilter.value === 'Chat') return n.event_type === 'chat_detection'
           return false
         })
       }
-      
       return filtered
     })
-    
-    const unreadCount = computed(() => {
-      return notifications.value.filter(n => !n.read).length
-    })
-    
-    // Methods
+
+    const unreadCount = computed(() => notifications.value.filter(n => !n.read).length)
+
+    // Socket setup and handlers
+    const setupSocketConnection = () => {
+      try {
+        socket.value = io('http://localhost:5000/notifications', {
+          path: '/ws',
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          withCredentials: true,
+          autoConnect: true
+        })
+
+        socket.value.on('connect', () => {
+          socketInitialized.value = true
+          console.log('Socket connected')
+          showToast('Connected to notification server', 'success')
+        })
+
+        socket.value.on('connect_error', (err) => {
+          console.error('Connection error:', err)
+          setTimeout(setupSocketConnection, 5000)
+        })
+
+        socket.value.on('disconnect', () => {
+          console.log('Socket disconnected')
+        })
+
+        socket.value.on('notification', handleNewNotification)
+        socket.value.on('notification_update', handleNotificationUpdate)
+      } catch (err) {
+        console.error('Socket initialization failed:', err)
+        setTimeout(setupSocketConnection, 5000)
+      }
+    }
+
+    const handleNewNotification = (data) => {
+      if (!notifications.value.some(n => n.id === data.id)) {
+        notifications.value.unshift(data)
+        newNotificationIds.value.push(data.id)
+        setTimeout(() => {
+          newNotificationIds.value = newNotificationIds.value.filter(id => id !== data.id)
+        }, 5000)
+        if (soundEnabled.value) playNotificationSound()
+        showToast('New notification received', 'info')
+      }
+    }
+
+    const handleNotificationUpdate = ({ id, type }) => {
+      if (type === 'read') {
+        const n = notifications.value.find(x => x.id === id)
+        if (n) n.read = true
+      } else if (type === 'deleted') {
+        notifications.value = notifications.value.filter(x => x.id !== id)
+        if (selectedNotification.value?.id === id) selectedNotification.value = null
+      }
+    }
+
+    const safeSocketEmit = (event, data) => {
+      if (socket.value?.connected) {
+        socket.value.emit(event, data)
+      } else {
+        console.warn('Socket not connected, event queued:', event)
+        // Optionally implement queue logic here
+      }
+    }
+
+    // Core methods
     const fetchNotifications = async () => {
       loading.value = true
       error.value = null
-      
       try {
-        const response = await axios.get('/api/notifications')
-        notifications.value = response.data
-        loading.value = false
+        const res = await axios.get('/api/notifications')
+        notifications.value = res.data
       } catch (err) {
         console.error('Error fetching notifications:', err)
         error.value = 'Failed to load notifications. Please try again.'
+      } finally {
         loading.value = false
       }
     }
-    
-    const handleMainFilterChange = (filter) => {
-      mainFilter.value = filter
-      
-      // Deselect notification when changing filters
-      if (selectedNotification.value) {
-        selectedNotification.value = null
-      }
-    }
-    
-    const getNotificationColor = (notification) => {
-      if (notification.event_type === 'object_detection') {
-        return '#e74c3c' // Red
-      } else if (notification.event_type === 'audio_detection') {
-        return '#3498db' // Blue
-      } else if (notification.event_type === 'chat_detection') {
-        return '#f39c12' // Orange
-      }
-      return '#2ecc71' // Green for others
-    }
-    
-    const getNotificationType = (notification) => {
-      if (notification.event_type === 'object_detection') {
-        return 'Visual'
-      } else if (notification.event_type === 'audio_detection') {
-        return 'Audio'
-      } else if (notification.event_type === 'chat_detection') {
-        return 'Chat'
-      }
-      return 'General'
-    }
-    
-    const getNotificationMessage = (notification) => {
-      if (notification.event_type === 'object_detection') {
-        const detections = notification.details?.detections || []
-        if (detections.length > 0) {
-          return `Detected: ${detections.map(d => d.class).join(', ')}`
-        }
-        return 'Object detected'
-      } else if (notification.event_type === 'audio_detection') {
-        return notification.details?.transcript?.substring(0, 100) || 'Audio detected'
-      } else if (notification.event_type === 'chat_detection') {
-        return notification.details?.message?.substring(0, 100) || 'Chat message detected'
-      }
-      return notification.details?.message || 'Notification received'
-    }
-    
-    const getNotificationDetailTitle = () => {
-      if (!selectedNotification.value) return ''
-      
-      if (selectedNotification.value.event_type === 'object_detection') {
-        return 'Visual Detection'
-      } else if (selectedNotification.value.event_type === 'audio_detection') {
-        return 'Audio Detection'
-      } else if (selectedNotification.value.event_type === 'chat_detection') {
-        return 'Chat Detection'
-      }
-      return 'Notification Details'
-    }
-    
-    const formatTimestamp = (timestamp, detailed = false) => {
-      if (!timestamp) return 'Unknown'
-      
-      try {
-        const date = parseISO(timestamp)
-        
-        if (detailed) {
-          return new Intl.DateTimeFormat('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-          }).format(date)
-        }
-        
-        return formatDistanceToNow(date, { addSuffix: true })
-      } catch (err) {
-        console.error('Error formatting timestamp:', err)
-        return 'Invalid date'
-      }
-    }
-    
-    const formatConfidence = (confidence) => {
-      if (typeof confidence !== 'number') return 'N/A'
-      return `${Math.round(confidence * 100)}%`
-    }
-    
-    const truncateUrl = (url) => {
-      if (!url) return ''
-      return url.length > 40 ? url.substring(0, 37) + '...' : url
-    }
-    
-    const handleNotificationClick = (notification) => {
-      selectedNotification.value = notification
-      
-      // On mobile, scroll to details
-      if (isMobile.value) {
-        nextTick(() => {
-          const detailsPanel = document.querySelector('.details-panel')
-          if (detailsPanel) {
-            detailsPanel.scrollIntoView({ behavior: 'smooth' })
-          }
-        })
-      }
-    }
-    
-    const markAsRead = async (id) => {
-      try {
-        await axios.put(`/api/notifications/${id}/read`)
-        
-        // Update local state
-        const notification = notifications.value.find(n => n.id === id)
-        if (notification) {
-          notification.read = true
-        }
-        
-        showToast('Notification marked as read', 'success')
-      } catch (err) {
-        console.error('Error marking notification as read:', err)
-        showToast('Failed to mark notification as read', 'error')
-      }
-    }
-    
-    const markAllAsRead = async () => {
-      try {
-        await axios.put('/api/notifications/read-all')
-        
-        // Update local state
-        notifications.value.forEach(notification => {
-          notification.read = true
-        })
-        
-        showToast('All notifications marked as read', 'success')
-      } catch (err) {
-        console.error('Error marking all notifications as read:', err)
-        showToast('Failed to mark all notifications as read', 'error')
-      }
-    }
-    
-    const deleteNotification = async (id) => {
-      try {
-        await axios.delete(`/api/notifications/${id}`)
-        
-        // Update local state
-        notifications.value = notifications.value.filter(n => n.id !== id)
-        
-        // Reset selected notification if it's the one being deleted
-        if (selectedNotification.value && selectedNotification.value.id === id) {
-          selectedNotification.value = null
-        }
-        
-        isDeleteModalOpen.value = false
-        showToast('Notification deleted', 'success')
-      } catch (err) {
-        console.error('Error deleting notification:', err)
-        showToast('Failed to delete notification', 'error')
-        isDeleteModalOpen.value = false
-      }
-    }
-    
-    const deleteAllNotifications = async () => {
-      try {
-        await axios.delete('/api/notifications')
-        
-        // Update local state
-        notifications.value = []
-        selectedNotification.value = null
-        
-        isDeleteModalOpen.value = false
-        showToast('All notifications deleted', 'success')
-      } catch (err) {
-        console.error('Error deleting all notifications:', err)
-        showToast('Failed to delete notifications', 'error')
-        isDeleteModalOpen.value = false
-      }
-    }
-    
+
     const fetchAgents = async () => {
       try {
-        const response = await axios.get('/api/agents')
-        agents.value = response.data
-      } catch (err) {
-        console.error('Error fetching agents:', err)
+        const res = await axios.get('/api/agents')
+        agents.value = res.data
+      } catch {
         showToast('Failed to load agents', 'error')
       }
     }
-    
+
+    const fetchCurrentUser = async () => {
+      try {
+        const res = await axios.get('/api/session')
+        user.value = res.data
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const handleMainFilterChange = (filter) => {
+      mainFilter.value = filter
+      if (selectedNotification.value) selectedNotification.value = null
+    }
+
+    const getNotificationColor = (n) => {
+      if (n.event_type === 'object_detection') return '#e74c3c'
+      if (n.event_type === 'audio_detection') return '#3498db'
+      if (n.event_type === 'chat_detection') return '#f39c12'
+      return '#2ecc71'
+    }
+
+    const getNotificationType = (n) => {
+      if (n.event_type === 'object_detection') return 'Visual'
+      if (n.event_type === 'audio_detection') return 'Audio'
+      if (n.event_type === 'chat_detection') return 'Chat'
+      return 'General'
+    }
+
+    const getNotificationMessage = (n) => {
+      if (n.event_type === 'object_detection') {
+        const det = n.details?.detections || []
+        return det.length ? `Detected: ${det.map(d => d.class).join(', ')}` : 'Object detected'
+      }
+      if (n.event_type === 'audio_detection') {
+        return n.details?.transcript?.substring(0,100) || 'Audio detected'
+      }
+      if (n.event_type === 'chat_detection') {
+        return n.details?.message?.substring(0,100) || 'Chat message detected'
+      }
+      return n.details?.message || 'Notification received'
+    }
+
+    const getNotificationDetailTitle = () => {
+      const n = selectedNotification.value
+      if (!n) return ''
+      if (n.event_type === 'object_detection') return 'Visual Detection'
+      if (n.event_type === 'audio_detection') return 'Audio Detection'
+      if (n.event_type === 'chat_detection') return 'Chat Detection'
+      return 'Notification Details'
+    }
+
+    const formatTimestamp = (ts, detailed = false) => {
+      if (!ts) return 'Unknown'
+      try {
+        const date = parseISO(ts)
+        if (detailed) {
+          return new Intl.DateTimeFormat('en-US', {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          }).format(date)
+        }
+        return formatDistanceToNow(date, { addSuffix: true })
+      } catch {
+        return 'Invalid date'
+      }
+    }
+
+    const formatConfidence = (c) => typeof c === 'number' ? `${Math.round(c * 100)}%` : 'N/A'
+    const truncateUrl = (u) => u?.length > 40 ? u.slice(0,37) + '...' : u || ''
+
+    const handleNotificationClick = (n) => {
+      selectedNotification.value = n
+      if (isMobile.value) {
+        nextTick(() => {
+          const el = document.querySelector('.details-panel')
+          if (el) el.scrollIntoView({ behavior: 'smooth' })
+        })
+      }
+    }
+
+    const markAsRead = async (id) => {
+      try {
+        await axios.put(`/api/notifications/${id}/read`)
+        const n = notifications.value.find(x => x.id === id)
+        if (n) n.read = true
+        showToast('Notification marked as read', 'success')
+      } catch {
+        showToast('Failed to mark as read', 'error')
+      }
+    }
+
+    const markAllAsRead = async () => {
+      try {
+        await axios.put('/api/notifications/read-all')
+        notifications.value.forEach(x => x.read = true)
+        showToast('All notifications marked as read', 'success')
+      } catch {
+        showToast('Failed to mark all as read', 'error')
+      }
+    }
+
+    const deleteNotification = async (id) => {
+      try {
+        await axios.delete(`/api/notifications/${id}`)
+        notifications.value = notifications.value.filter(x => x.id !== id)
+        if (selectedNotification.value?.id === id) selectedNotification.value = null
+        isDeleteModalOpen.value = false
+        showToast('Notification deleted', 'success')
+      } catch {
+        isDeleteModalOpen.value = false
+        showToast('Failed to delete notification', 'error')
+      }
+    }
+
+    const deleteAllNotifications = async () => {
+      try {
+        await axios.delete('/api/notifications')
+        notifications.value = []
+        selectedNotification.value = null
+        isDeleteModalOpen.value = false
+        showToast('All notifications deleted', 'success')
+      } catch {
+        isDeleteModalOpen.value = false
+        showToast('Failed to delete all notifications', 'error')
+      }
+    }
+
     const prepareCreateForm = () => {
       isEditMode.value = false
       notificationForm.value = {
         event_type: 'general',
         room_url: '',
-        details: {
-          streamer_name: '',
-          platform: '',
-          message: ''
-        }
+        details: { streamer_name: '', platform: '', message: '' }
       }
       isFormModalOpen.value = true
       isMenuOpen.value = false
     }
-    
+
     const prepareEditForm = () => {
       if (!selectedNotification.value) return
-      
       isEditMode.value = true
       notificationForm.value = {
         event_type: selectedNotification.value.event_type,
@@ -757,201 +757,97 @@ export default {
       }
       isFormModalOpen.value = true
     }
-    
+
     const submitNotificationForm = async () => {
       try {
         if (isEditMode.value) {
-          // Update notification
           await axios.put(`/api/notifications/${selectedNotification.value.id}`, notificationForm.value)
-          
-          // Update local state
-          const index = notifications.value.findIndex(n => n.id === selectedNotification.value.id)
-          if (index !== -1) {
-            notifications.value[index] = {
-              ...notifications.value[index],
-              ...notificationForm.value
-            }
-            selectedNotification.value = notifications.value[index]
+          const idx = notifications.value.findIndex(x => x.id === selectedNotification.value.id)
+          if (idx !== -1) {
+            notifications.value[idx] = { ...notifications.value[idx], ...notificationForm.value }
+            selectedNotification.value = notifications.value[idx]
           }
-          
           showToast('Notification updated', 'success')
         } else {
-          // Create new notification
-          const response = await axios.post('/api/notifications', notificationForm.value)
-          
-          // Add to local state
-          notifications.value.unshift(response.data.notification)
-          
+          const res = await axios.post('/api/notifications', notificationForm.value)
+          notifications.value.unshift(res.data.notification)
           showToast('Notification created', 'success')
         }
-        
         isFormModalOpen.value = false
-      } catch (err) {
-        console.error('Error saving notification:', err)
+      } catch {
         showToast('Failed to save notification', 'error')
       }
     }
-    
+
     const forwardNotification = async (agentId) => {
       if (!selectedNotification.value) return
-      
       try {
-        await axios.post(`/api/notifications/${selectedNotification.value.id}/assign`, {
-          agent_id: agentId
-        })
-        
+        await axios.post(`/api/notifications/${selectedNotification.value.id}/assign`, { agent_id: agentId })
         const agent = agents.value.find(a => a.id === agentId)
-        if (agent) {
-          // Update local state
-          selectedNotification.value.assigned_agent = agent.username
-          
-          // Update in the main notifications array
-          const notification = notifications.value.find(n => n.id === selectedNotification.value.id)
-          if (notification) {
-            notification.assigned_agent = agent.username
-          }
-        }
-        
+        selectedNotification.value.assigned_agent = agent?.username
+        const n = notifications.value.find(x => x.id === selectedNotification.value.id)
+        if (n) n.assigned_agent = agent?.username
         isAgentDropdownOpen.value = false
-        showToast(`Notification forwarded to ${agent ? agent.username : 'agent'}`, 'success')
-      } catch (err) {
-        console.error('Error forwarding notification:', err)
+        showToast(`Forwarded to ${agent?.username || 'agent'}`, 'success')
+      } catch {
+        isAgentDropdownOpen.value = false
         showToast('Failed to forward notification', 'error')
-        isAgentDropdownOpen.value = false
       }
     }
-    
-    const fetchCurrentUser = async () => {
-      try {
-        const response = await axios.get('/api/session')
-        user.value = response.data
-      } catch (err) {
-        console.error('Error fetching current user:', err)
-      }
-    }
-    
+
     const toggleSound = () => {
       soundEnabled.value = !soundEnabled.value
       localStorage.setItem('notificationSound', soundEnabled.value)
       showToast(`Sound ${soundEnabled.value ? 'enabled' : 'disabled'}`, 'info')
       isMenuOpen.value = false
     }
-    
+
     const toggleDarkMode = () => {
       isDarkMode.value = !isDarkMode.value
       localStorage.setItem('darkMode', isDarkMode.value)
     }
-    
-    const openImageModal = (imageSrc) => {
-      imageModalSrc.value = imageSrc
+
+    const openImageModal = (src) => {
+      imageModalSrc.value = src
     }
-    
-    const setupSocketConnection = () => {
-      // Connect to socket server with namespace
-      socket.value = io('/notifications', {
-        transports: ['websocket'],
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000
-      })
-      
-      // Socket event handlers
-      socket.value.on('connect', () => {
-        console.log('Connected to notification server')
-        showToast('Connected to notification server', 'success')
-      })
-      
-      socket.value.on('connect_error', (error) => {
-        console.error('Socket connection error:', error)
-      })
-      
-      socket.value.on('disconnect', () => {
-        console.log('Disconnected from notification server')
-      })
-      
-      // Handle new notifications
-      socket.value.on('notification', (data) => {
-        console.log('New notification received:', data)
-        
-        // Add to local state if not already present
-        if (!notifications.value.some(n => n.id === data.id)) {
-          notifications.value.unshift(data)
-          newNotificationIds.value.push(data.id)
-          
-          // Remove from newNotificationIds after animation completes
-          setTimeout(() => {
-            newNotificationIds.value = newNotificationIds.value.filter(id => id !== data.id)
-          }, 5000)
-          
-          // Play sound if enabled
-          if (soundEnabled.value) {
-            playNotificationSound()
-          }
-          
-          showToast('New notification received', 'info')
-        }
-      })
-      
-      // Handle notification updates (read status, etc.)
-      socket.value.on('notification_update', (data) => {
-        console.log('Notification update received:', data)
-        
-        const { id, type } = data
-        
-        // Update local state
-        if (type === 'read') {
-          const notification = notifications.value.find(n => n.id === id)
-          if (notification) {
-            notification.read = true
-          }
-        } else if (type === 'deleted') {
-          notifications.value = notifications.value.filter(n => n.id !== id)
-          
-          // Reset selected notification if it's the one being deleted
-          if (selectedNotification.value && selectedNotification.value.id === id) {
-            selectedNotification.value = null
-          }
-        }
-      })
-    }
-    
+
     const playNotificationSound = () => {
       const audio = new Audio('/notification.mp3')
-      audio.play().catch(err => console.error('Error playing notification sound:', err))
+      audio.play().catch(() => {})
     }
-    
-    const showToast = (message, type = 'info') => {
+
+    const showToast = (msg, type = 'info') => {
       const id = toastCounter++
-      toasts.value.push({ id, message, type })
-      
-      // Auto remove after 3 seconds
+      toasts.value.push({ id, message: msg, type })
       setTimeout(() => {
-        toasts.value = toasts.value.filter(toast => toast.id !== id)
+        toasts.value = toasts.value.filter(t => t.id !== id)
       }, 3000)
     }
-    
+
     const handleResize = () => {
       isMobile.value = window.innerWidth < 768
     }
-    
-    // Lifecycle hooks
+
+    // Lifecycle
     onMounted(() => {
       fetchNotifications()
       fetchAgents()
       fetchCurrentUser()
       setupSocketConnection()
-      
       window.addEventListener('resize', handleResize)
+      window.addEventListener('online', setupSocketConnection)
     })
-    
+
     onBeforeUnmount(() => {
       if (socket.value) {
+        socket.value.off('notification', handleNewNotification)
+        socket.value.off('notification_update', handleNotificationUpdate)
         socket.value.disconnect()
       }
-      
       window.removeEventListener('resize', handleResize)
+      window.removeEventListener('online', setupSocketConnection)
     })
-    
+
     return {
       notifications,
       selectedNotification,
@@ -965,8 +861,8 @@ export default {
       isDeleteModalOpen,
       isAgentDropdownOpen,
       isFormModalOpen,
-      notificationForm,
       isEditMode,
+      notificationForm,
       agents,
       user,
       soundEnabled,
@@ -997,11 +893,13 @@ export default {
       toggleSound,
       toggleDarkMode,
       openImageModal,
-      showToast
+      showToast,
+      safeSocketEmit
     }
   }
 }
 </script>
+
 
 <style scoped>
 .notifications-page {

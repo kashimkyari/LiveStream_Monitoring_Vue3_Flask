@@ -1,367 +1,433 @@
 <template>
-  <div class="mobile-login-container">
-    <!-- Show Login Form when not in Forgot Password mode and not in Create Account mode -->
-    <form v-if="!showForgotPassword && !showCreateAccount" @submit.prevent="handleSubmit" class="mobile-login-form" ref="loginForm">
-      <div class="logo-container" ref="logoContainer">
-        <font-awesome-icon icon="user-lock" class="logo-icon" />
+  <div class="mobile-login">
+    <div class="login-container">
+      <div class="login-header">
+        <h1 class="login-title">Login</h1>
+        <p class="login-subtitle">Sign in to your account</p>
       </div>
-      <h2 class="welcome-text" ref="welcomeText">Welcome Back</h2>
-      <p class="subtitle" ref="subtitle">Sign in to continue</p>
       
-      <div class="form-content" ref="formContent">
-        <div class="input-group" ref="usernameGroup">
+      <form @submit.prevent="handleLogin" class="login-form">
+        <div class="form-group">
+          <label for="username">Username</label>
           <div class="input-container">
             <font-awesome-icon icon="user" class="input-icon" />
-            <input
-              type="text"
-              id="username"
-              v-model="username"
-              :disabled="loading"
-              class="input-field"
-              autocomplete="username"
-              placeholder="Username or Email"
+            <input 
+              type="text" 
+              id="username" 
+              v-model="username" 
+              placeholder="Enter your username"
               required
-              ref="usernameInput"
-            />
+              autocomplete="username"
+              :disabled="isLoading"
+            >
           </div>
         </div>
-
-        <div class="input-group" ref="passwordGroup">
+        
+        <div class="form-group">
+          <label for="password">Password</label>
           <div class="input-container">
             <font-awesome-icon icon="lock" class="input-icon" />
-            <input
-              type="password"
-              id="password"
-              v-model="password"
-              :disabled="loading"
-              class="input-field"
-              autocomplete="current-password"
-              placeholder="Password"
+            <input 
+              :type="showPassword ? 'text' : 'password'"
+              id="password" 
+              v-model="password" 
+              placeholder="Enter your password"
               required
-              ref="passwordInput"
-            />
+              autocomplete="current-password"
+              :disabled="isLoading"
+            >
+            <button 
+              type="button" 
+              class="toggle-password"
+              @click="togglePasswordVisibility"
+              :disabled="isLoading"
+            >
+              <font-awesome-icon :icon="showPassword ? 'eye-slash' : 'eye'" />
+            </button>
           </div>
         </div>
-
-        <button type="submit" class="login-button" :disabled="loading" ref="loginButton">
-          <template v-if="loading">
-            <font-awesome-icon icon="spinner" spin class="mr-2" />
-            Signing In...
-          </template>
-          <template v-else>
-            <font-awesome-icon icon="sign-in-alt" class="mr-2" />
-            Sign In
-          </template>
+        
+        <div class="form-options">
+          <div class="remember-me">
+            <input 
+              type="checkbox" 
+              id="remember" 
+              v-model="rememberMe"
+              :disabled="isLoading"
+            >
+            <label for="remember">Remember me</label>
+          </div>
+          <button 
+            type="button" 
+            class="forgot-password-link"
+            @click="goToForgotPassword"
+            :disabled="isLoading"
+          >
+            Forgot password?
+          </button>
+        </div>
+        
+        <div v-if="errorMessage" class="error-message">
+          <font-awesome-icon icon="exclamation-circle" />
+          <span>{{ errorMessage }}</span>
+        </div>
+        
+        <button 
+          type="submit" 
+          class="login-button"
+          :disabled="isLoading"
+        >
+          <span v-if="!isLoading">Sign In</span>
+          <div v-else class="spinner">
+            <font-awesome-icon icon="spinner" spin />
+          </div>
         </button>
-      </div>
-
-      <div class="additional-links" ref="additionalLinks">
-        <a href="#" class="link-text" @click.prevent="forgotPassword">Forgot password?</a>
-        <span class="separator">•</span>
-        <a href="#" class="link-text" @click.prevent="createAccount">Create account</a>
-      </div>
-    </form>
-    
-    <MobileForgotPassword 
-      v-else-if="showForgotPassword" 
-      @back="showForgotPassword = false" 
-    />
-    <MobileCreateAccount 
-      v-else-if="showCreateAccount" 
-      @back="showCreateAccount = false" 
-      @account-created="handleAccountCreated"
-    />
+        
+        <div class="register-option">
+          <span>Don't have an account?</span>
+          <button 
+            type="button" 
+            class="register-link"
+            @click="goToRegister"
+            :disabled="isLoading"
+          >
+            Create Account
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 </template>
 
 <script>
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { useToast } from 'vue-toastification'
-import "vue-toastification/dist/index.css"
-import api from '@/services/api'
-import MobileForgotPassword from './MobileForgotPassword.vue'
-import MobileCreateAccount from './MobileCreateAccount.vue'
+import { ref, inject } from 'vue';
+import AuthService from '../services/AuthService';
+import { useToast } from 'vue-toastification';
 
 export default {
-  name: 'MobileLoginComponent',
-  components: { 
-    FontAwesomeIcon,
-    MobileForgotPassword,
-    MobileCreateAccount
-  },
-  emits: ['login-success'],
-  setup() {
-    const toast = useToast()
-    return { toast }
-  },
-  data() {
-    return {
-      username: '',
-      password: '',
-      loading: false,
-      error: null,
-      showForgotPassword: false,
-      showCreateAccount: false,
-      sessionChecking: false
-    }
-  },
-  mounted() {
-    // Check if user is already authenticated when component mounts
-    this.checkSession();
-  },
-  methods: {
-    async checkSession() {
-      this.sessionChecking = true;
-      
-      try {
-        console.log("Checking session status...");
-        const response = await api.get('/api/session');
-        
-        if (response.status === 200 && response.data.isLoggedIn) {
-          console.log("User already logged in as:", response.data.user.role);
-          this.$emit('login-success', response.data.user);
-          
-          this.toast.success("Welcome back!", {
-            timeout: 2000,
-            position: "top-center",
-            icon: true
-          });
-        }
-      } catch (error) {
-        console.error('Session check failed:', error);
-        
-        // Only show error if it's not a 401 (which is expected for logged out users)
-        if (error.response && error.response.status !== 401) {
-          this.toast.error("Could not verify login status. Please check your connection.", {
-            timeout: 5000,
-            position: "top-center",
-            icon: true
-          });
-        }
-      } finally {
-        this.sessionChecking = false;
-      }
-    },
+  name: 'MobileLogin',
+  emits: ['login-success', 'goto-forgot-password', 'goto-register'],
+  setup(props, { emit }) {
+    // State
+    const username = ref('');
+    const password = ref('');
+    const rememberMe = ref(false);
+    const showPassword = ref(false);
+    const isLoading = ref(false);
+    const errorMessage = ref('');
     
-    async handleSubmit() {
-      if (!this.username.trim() || !this.password.trim()) {
-        this.showError('Please fill in all fields');
+    // Toast notifications
+    const toast = useToast();
+    
+    // Get context help functions from global context
+    const analyzeContext = inject('analyzeContext');
+    
+    // Methods
+    const togglePasswordVisibility = () => {
+      showPassword.value = !showPassword.value;
+    };
+    
+    const handleLogin = async () => {
+      if (!username.value || !password.value) {
+        errorMessage.value = 'Please enter both username and password.';
         return;
       }
-
-      this.loading = true;
-      this.error = null;
+      
+      isLoading.value = true;
+      errorMessage.value = '';
       
       try {
-        const response = await api.post('/api/login', {
-              username: this.username,
-              password: this.password
-            });
-
-        if (response.status === 200 && response.data.message === "Login successful") {
-          this.toast.success("Login successful!", {
-            timeout: 2000,
-            position: "top-center",
-            icon: true
-          });
+        const result = await AuthService.login(username.value, password.value);
+        
+        if (result.success) {
+          // Save username in localStorage if remember me is checked
+          if (rememberMe.value) {
+            localStorage.setItem('rememberedUsername', username.value);
+          } else {
+            localStorage.removeItem('rememberedUsername');
+          }
           
-          const userData = {
-            role: response.data.role,
-            username: response.data.username
-          };
-          
-          setTimeout(() => {
-            this.$emit('login-success', userData);
-          }, 500);
+          toast.success('Login successful!');
+          emit('login-success', result.user);
         } else {
-          this.showError(response.data.message || 'Login failed. Please try again.');
+          const errorMsg = result.message || 'Login failed. Please try again.';
+          errorMessage.value = errorMsg;
+          
+          // Show help bubble for login error
+          if (analyzeContext) {
+            analyzeContext({
+              screen: 'login',
+              action: 'error',
+              error: { message: errorMsg }
+            });
+          }
         }
       } catch (error) {
         console.error('Login error:', error);
-        if (error.response) {
-          // Server responded with error status
-          this.showError(error.response.data?.message || 
-                        `Server error: ${error.response.status} ${error.response.statusText}`);
-        } else if (error.request) {
-          // Request was made but no response received
-          this.showError('Network error - please check your connection');
-        } else {
-          // Something else happened
-          this.showError(error.message || 'Login failed. Please try again.');
+        const errorMsg = 'An unexpected error occurred. Please try again.';
+        errorMessage.value = errorMsg;
+        
+        // Show help bubble for login error
+        if (analyzeContext) {
+          analyzeContext({
+            screen: 'login',
+            action: 'error',
+            error: { 
+              message: errorMsg,
+              details: error.message || 'Connection error'
+            }
+          });
         }
       } finally {
-        this.loading = false;
+        isLoading.value = false;
       }
-    },
+    };
     
-    forgotPassword() {
-      // Show the ForgotPassword component
-      this.showForgotPassword = true;
-    },
+    const goToForgotPassword = () => {
+      emit('goto-forgot-password');
+    };
     
-    createAccount() {
-      // Show the CreateAccount component
-      this.showCreateAccount = true;
-    },
+    const goToRegister = () => {
+      emit('goto-register');
+    };
     
-    handleAccountCreated(username) {
-      // Auto-login after account creation
-      this.username = username;
-      this.showCreateAccount = false;
-      
-      this.toast.success("Account created successfully! You can now log in.", {
-        timeout: 3000,
-        position: "top-center",
-        icon: true
-      });
-    },
-    
-    showError(message) {
-      this.error = message;
-      this.toast.error(message, {
-        timeout: 5000,
-        position: "top-center",
-        icon: true,
-        closeButton: true
-      });
+    // Initialize
+    // Check if username is stored in localStorage
+    const rememberedUsername = localStorage.getItem('rememberedUsername');
+    if (rememberedUsername) {
+      username.value = rememberedUsername;
+      rememberMe.value = true;
     }
+    
+    // Show login help for first-time users
+    // Get current context once component is mounted
+    setTimeout(() => {
+      if (analyzeContext) {
+        analyzeContext({
+          screen: 'login',
+          action: 'view',
+          isFirstTime: !localStorage.getItem('login_help_shown')
+        });
+        
+        // Mark that login help has been shown
+        localStorage.setItem('login_help_shown', 'true');
+      }
+    }, 500); // Small delay to ensure component is fully mounted
+    
+    return {
+      username,
+      password,
+      rememberMe,
+      showPassword,
+      isLoading,
+      errorMessage,
+      togglePasswordVisibility,
+      handleLogin,
+      goToForgotPassword,
+      goToRegister
+    };
   }
-}
+};
 </script>
 
 <style scoped>
-.mobile-login-container {
+.mobile-login {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
+  align-items: center;
   min-height: 100vh;
-  width: 100%;
-  padding: 1rem;
-  background-color: var(--bs-dark);
-}
-
-.mobile-login-form {
-  width: 100%;
-  max-width: 480px;
   padding: 1.5rem;
-  background: var(--bs-gray-800);
+  background-color: var(--bs-body-bg);
+}
+
+.login-container {
+  width: 100%;
+  max-width: 400px;
+  background-color: var(--bs-body-bg);
   border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-  position: relative;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
 }
 
-.logo-container {
+.login-header {
   text-align: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
 }
 
-.logo-icon {
-  font-size: 2rem;
-  color: var(--bs-info);
-  padding: 1rem;
-  border-radius: 50%;
-  background: rgba(13, 202, 240, 0.1);
+.login-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: var(--bs-primary);
 }
 
-.welcome-text {
-  color: white;
-  font-size: 1.5rem;
-  text-align: center;
-  margin: 0 0 0.5rem 0;
-  font-weight: 600;
+.login-subtitle {
+  font-size: 1rem;
+  color: var(--bs-secondary);
+  margin: 0;
 }
 
-.subtitle {
-  color: var(--bs-gray-400);
-  text-align: center;
-  margin-bottom: 1.5rem;
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
   font-size: 0.9rem;
-}
-
-.form-content {
-  margin-top: 1rem;
-}
-
-.input-group {
-  margin-bottom: 1rem;
+  font-weight: 600;
 }
 
 .input-container {
   position: relative;
-  border-radius: 8px;
-  overflow: hidden;
+  display: flex;
+  align-items: center;
 }
 
 .input-icon {
   position: absolute;
   left: 1rem;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--bs-gray-500);
-  font-size: 0.9rem;
+  color: var(--bs-secondary);
+  font-size: 1rem;
 }
 
-.input-field {
+.input-container input {
   width: 100%;
-  padding: 0.8rem 0.8rem 0.8rem 2.5rem;
-  border: 1px solid var(--bs-gray-700);
+  padding: 0.75rem 1rem 0.75rem 2.5rem;
+  border: 1px solid var(--bs-border-color);
   border-radius: 8px;
-  color: white;
-  font-size: 0.95rem;
-  background: var(--bs-gray-900);
+  font-size: 1rem;
+  background-color: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.input-field:focus {
-  border-color: var(--bs-info);
+.input-container input:focus {
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.25);
   outline: none;
 }
 
-.login-button {
-  width: 100%;
-  padding: 0.8rem;
-  background: var(--bs-info);
-  color: white;
+.toggle-password {
+  position: absolute;
+  right: 1rem;
+  background: none;
   border: none;
-  border-radius: 8px;
-  font-weight: 600;
+  color: var(--bs-secondary);
+  cursor: pointer;
   font-size: 1rem;
-  margin-top: 0.5rem;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.form-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.remember-me {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
+}
+
+.remember-me input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--bs-primary);
+}
+
+.forgot-password-link {
+  color: var(--bs-primary);
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+
+.forgot-password-link:hover {
+  color: var(--bs-primary-darker, var(--bs-primary));
+  filter: brightness(0.9);
+}
+
+.error-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.login-button {
+  background-color: var(--bs-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.875rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 3rem;
+}
+
+.login-button:hover {
+  filter: brightness(0.9);
 }
 
 .login-button:disabled {
-  opacity: 0.7;
+  background-color: var(--bs-secondary);
+  cursor: not-allowed;
 }
 
-.additional-links {
-  margin-top: 1.5rem;
+.spinner {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
   justify-content: center;
+  align-items: center;
+  font-size: 1.25rem;
 }
 
-.link-text {
-  color: var(--bs-gray-300);
-  text-decoration: none;
-  font-size: 0.85rem;
+.register-option {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  margin-top: 1rem;
 }
 
-.separator {
-  color: var(--bs-gray-500);
-  font-size: 0.85rem;
+.register-link {
+  color: var(--bs-primary);
+  background: none;
+  border: none;
+  padding: 0;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s;
 }
 
-@media (max-width: 480px) {
-  .mobile-login-container {
-    padding: 0.5rem;
-  }
-  
-  .mobile-login-form {
-    padding: 1.25rem;
-  }
+.register-link:hover {
+  color: var(--bs-primary-darker, var(--bs-primary));
+  filter: brightness(0.9);
 }
 </style>

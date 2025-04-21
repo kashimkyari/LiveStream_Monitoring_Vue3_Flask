@@ -5,7 +5,7 @@ main.py - Flask application entry point with SSL support, robust CORS, and Socke
 
 import logging
 import os
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
 import secrets

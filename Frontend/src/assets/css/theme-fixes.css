@@ -1,0 +1,142 @@
+/**
+ * Theme Fixes CSS
+ * 
+ * This stylesheet provides fixes for dark/light mode styling issues,
+ * particularly focusing on text readability and icon visibility.
+ */
+
+:root {
+  /* Enhanced color variables for better contrast in both modes */
+  --text-primary-dark: #ffffff;
+  --text-secondary-dark: rgba(255, 255, 255, 0.7);
+  --text-primary-light: #212529;
+  --text-secondary-light: rgba(33, 37, 41, 0.7);
+  
+  /* Icon visibility fixes */
+  --icon-color-dark: var(--bs-secondary);
+  --icon-color-light: var(--bs-secondary);
+  --icon-active-color: var(--bs-primary);
+}
+
+/* Force proper text contrast in dark mode */
+[data-bs-theme=dark] {
+  color-scheme: dark;
+  --bs-body-color: var(--text-primary-dark);
+  --bs-body-color-rgb: 255, 255, 255;
+  
+  /* Fix secondary text color for better contrast */
+  --bs-secondary-color: var(--text-secondary-dark);
+  --bs-tertiary-bg-hover: rgba(255, 255, 255, 0.05);
+}
+
+/* Force proper text contrast in light mode */
+[data-bs-theme=light] {
+  color-scheme: light;
+  --bs-body-color: var(--text-primary-light);
+  --bs-body-color-rgb: 33, 37, 41;
+  
+  /* Fix secondary text color for better contrast */
+  --bs-secondary-color: var(--text-secondary-light);
+  --bs-tertiary-bg-hover: rgba(0, 0, 0, 0.05);
+}
+
+/* Fix for navigation icons in both dark and light mode */
+.nav-item, 
+.nav-icon-container,
+.nav-item.active .nav-icon-container {
+  color: var(--icon-color-dark) !important;
+}
+
+.nav-item.active,
+.nav-item.active .nav-icon-container,
+.nav-item.active .nav-label {
+  color: var(--icon-active-color) !important;
+}
+
+/* Fix for message colors in dark mode */
+[data-bs-theme=dark] .message-content {
+  color: var(--bs-body-color);
+}
+
+[data-bs-theme=dark] .message-item.outgoing .message-content {
+  color: white;
+}
+
+/* Fix for notification meta in dark mode */
+[data-bs-theme=dark] .notification-meta {
+  color: var(--text-secondary-dark);
+}
+
+/* Fix for input fields in dark mode */
+[data-bs-theme=dark] input,
+[data-bs-theme=dark] textarea,
+[data-bs-theme=dark] select {
+  color: var(--bs-body-color) !important;
+  background-color: var(--bs-tertiary-bg) !important;
+}
+
+/* Fix for form labels in dark mode */
+[data-bs-theme=dark] label {
+  color: var(--bs-body-color);
+}
+
+/* Fix for placeholder text contrast in both modes */
+[data-bs-theme=dark] ::placeholder {
+  color: var(--text-secondary-dark) !important;
+  opacity: 0.7 !important;
+}
+
+[data-bs-theme=light] ::placeholder {
+  color: var(--text-secondary-light) !important;
+  opacity: 0.7 !important;
+}
+
+/* Improved hover states for better feedback */
+.nav-item:hover {
+  opacity: 0.9;
+}
+
+.nav-item:active {
+  transform: scale(0.95);
+}
+
+/* Fix for button text in both modes */
+button {
+  color: inherit;
+}
+
+/* Fix for list items in dropdown menus */
+.dropdown-item {
+  color: var(--bs-body-color);
+}
+
+/* Special contrast fix for empty states and placeholders */
+.empty-state, 
+.thumbnail-placeholder, 
+.loading-container {
+  color: var(--bs-secondary);
+}
+
+/* Fix for font awesome icons to ensure they're visible in both modes */
+.fa-home,
+.fa-video,
+.fa-comment,
+.fa-bell,
+.fa-user {
+  color: currentColor;
+}
+
+/* Media query to handle smaller screens with extra contrast */
+@media (max-width: 576px) {
+  :root {
+    --text-primary-dark: #ffffff;
+    --text-secondary-dark: rgba(255, 255, 255, 0.8); /* Slightly higher contrast for small screens */
+  }
+  
+  /* Increase touch targets for better mobile UX */
+  button, 
+  .nav-item,
+  .action-button {
+    min-height: 44px; /* Apple's recommended minimum */
+  }
+}

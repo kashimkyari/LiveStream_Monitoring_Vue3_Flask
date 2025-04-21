@@ -1,260 +1,432 @@
 /**
- * Mobile-optimized notifications composable
- * Uses MobileNotificationService for a more efficient implementation
- * specifically for mobile devices
+ * Mobile Notifications Composable
+ * 
+ * Provides a reactive interface for working with notifications in mobile views
+ * Features:
+ * - Real-time notification updates
+ * - Notification filtering and grouping
+ * - Read status management
+ * - Notification preferences
  */
-import { ref, computed, onMounted } from 'vue';
-import MobileNotificationService from '../services/MobileNotificationService';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import axios from 'axios';
+import { useToast } from 'vue-toastification';
+import io from 'socket.io-client';
 
 export function useMobileNotifications() {
-  // Local reactive state
+  // State
+  const notifications = ref([]);
+  const filteredNotifications = ref([]);
+  const unreadCount = ref(0);
   const loading = ref(false);
   const error = ref(null);
+  const socket = ref(null);
+  const preferences = ref({
+    showOnlyUnread: false,
+    filterByType: null,
+    groupByStream: false,
+    groupByType: false,
+    muteNotifications: false,
+    notificationSound: 'default'
+  });
   
-  // Computed properties from service
-  const notifications = computed(() => MobileNotificationService.notifications.value);
-  const unreadCount = computed(() => MobileNotificationService.unreadCount.value);
-  const groupedNotifications = computed(() => MobileNotificationService.groupedNotifications.value);
-  const isGroupedByType = computed(() => MobileNotificationService.groupByType.value);
-  const isGroupedByStream = computed(() => MobileNotificationService.groupByStream.value);
+  // Toast for notifications
+  const toast = useToast();
   
-  /**
-   * Load notifications from server
-   * @param {Object} options - Options for loading notifications
-   * @param {boolean} [options.onlyUnread=false] - Only load unread notifications
-   * @param {boolean} [options.forceRefresh=false] - Force a refresh from server
-   * @returns {Promise<Array>} - Array of notifications
-   */
-  const loadNotifications = async ({ onlyUnread = false, forceRefresh = false } = {}) => {
-    loading.value = true;
+  // Load user preferences from localStorage
+  const loadPreferences = () => {
     try {
-      const result = await MobileNotificationService.getNotifications({ 
-        onlyUnread, 
-        forceRefresh 
+      const savedPrefs = localStorage.getItem('notificationPreferences');
+      if (savedPrefs) {
+        preferences.value = { ...preferences.value, ...JSON.parse(savedPrefs) };
+      }
+    } catch (e) {
+      console.error('Failed to load notification preferences', e);
+    }
+  };
+  
+  // Save user preferences to localStorage
+  const savePreferences = () => {
+    try {
+      localStorage.setItem('notificationPreferences', JSON.stringify(preferences.value));
+    } catch (e) {
+      console.error('Failed to save notification preferences', e);
+    }
+  };
+  
+  // Connect to Socket.IO for real-time notifications
+  const connectSocket = () => {
+  socket.value = io('http://localhost:5000/notifications', {
+    path: '/ws',
+    transports: ['websocket', 'polling']
+  });
+    
+    socket.value.on('notification', (notification) => {
+      handleNewNotification(notification);
+    });
+    
+    socket.value.on('notification_update', (data) => {
+      if (data.action === 'read' || data.action === 'updated') {
+        updateNotificationStatus(data.notification_id, data.action === 'read');
+      } else if (data.action === 'deleted') {
+        removeNotification(data.notification_id);
+      }
+    });
+  };
+  
+  // Disconnect Socket.IO
+  const disconnectSocket = () => {
+    if (socket.value) {
+      socket.value.disconnect();
+      socket.value = null;
+    }
+  };
+  
+  // Handle a new notification
+  const handleNewNotification = (notification) => {
+    // Check if notification already exists to avoid duplicates
+    const exists = notifications.value.some(n => n.id === notification.id);
+    if (!exists) {
+      notifications.value.unshift(notification);
+      
+      // Update unread count
+      if (!notification.read) {
+        unreadCount.value++;
+      }
+      
+      // Apply filters
+      applyFilters();
+      
+      // Show toast notification if not muted
+      if (!preferences.value.muteNotifications) {
+        showNotificationToast(notification);
+      }
+      
+      // Play sound if enabled
+      if (preferences.value.notificationSound !== 'none') {
+        playNotificationSound(preferences.value.notificationSound);
+      }
+    }
+  };
+  
+  // Show toast notification
+  const showNotificationToast = (notification) => {
+    const title = getNotificationTitle(notification);
+    const message = getNotificationMessage(notification);
+    
+    toast.info(
+      `<div><strong>${title}</strong><br>${message}</div>`, 
+      { timeout: 5000, position: 'bottom-right' }
+    );
+  };
+  
+  // Get notification title based on event type
+  const getNotificationTitle = (notification) => {
+    switch (notification.event_type) {
+      case 'face_detected':
+        return 'Face Detected';
+      case 'object_detected':
+        return 'Object Detected';
+      case 'keyword_detected':
+        return 'Keyword Detected';
+      case 'stream_created':
+        return 'Stream Started';
+      case 'stream_ended':
+        return 'Stream Ended';
+      default:
+        return notification.event_type
+          .split('_')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+    }
+  };
+  
+  // Get notification message based on details
+  const getNotificationMessage = (notification) => {
+    const details = notification.details || {};
+    const streamer = details.streamer_name || notification.streamer || 'Unknown';
+    
+    // Format message based on event type
+    switch (notification.event_type) {
+      case 'face_detected':
+        return `Face detected in ${streamer}'s stream with ${Math.round((details.confidence || 0) * 100)}% confidence`;
+      case 'object_detected':
+        return `${details.name || 'Object'} detected in ${streamer}'s stream`;
+      case 'keyword_detected':
+        return `"${details.keyword || 'Keyword'}" found in ${streamer}'s chat`;
+      case 'stream_created':
+        return `${streamer} started streaming on ${details.platform || 'platform'}`;
+      case 'stream_ended':
+        return `${streamer}'s stream has ended`;
+      default:
+        return details.message || `Notification from ${streamer}'s stream`;
+    }
+  };
+  
+  // Play notification sound
+  const playNotificationSound = (soundType) => {
+    let soundUrl = '';
+    
+    switch (soundType) {
+      case 'default':
+        soundUrl = '/assets/sounds/notification.mp3';
+        break;
+      case 'alert':
+        soundUrl = '/assets/sounds/alert.mp3';
+        break;
+      case 'soft':
+        soundUrl = '/assets/sounds/soft.mp3';
+        break;
+      default:
+        soundUrl = '/assets/sounds/notification.mp3';
+    }
+    
+    try {
+      const audio = new Audio(soundUrl);
+      audio.play().catch(e => console.warn('Could not play notification sound', e));
+    } catch (e) {
+      console.warn('Sound playback not supported', e);
+    }
+  };
+  
+  // Update notification read status
+  const updateNotificationStatus = (notificationId, isRead = true) => {
+    const notification = notifications.value.find(n => n.id === notificationId);
+    if (notification) {
+      const wasUnread = !notification.read;
+      notification.read = isRead;
+      
+      // Update unread count
+      if (wasUnread && isRead) {
+        unreadCount.value = Math.max(0, unreadCount.value - 1);
+      }
+      
+      // Apply filters
+      applyFilters();
+    }
+  };
+  
+  // Remove notification
+  const removeNotification = (notificationId) => {
+    const index = notifications.value.findIndex(n => n.id === notificationId);
+    if (index !== -1) {
+      // Update unread count if removing an unread notification
+      if (!notifications.value[index].read) {
+        unreadCount.value = Math.max(0, unreadCount.value - 1);
+      }
+      
+      // Remove notification
+      notifications.value.splice(index, 1);
+      
+      // Apply filters
+      applyFilters();
+    }
+  };
+  
+  // Apply filters based on preferences
+  const applyFilters = () => {
+    let result = [...notifications.value];
+    
+    // Filter by read status
+    if (preferences.value.showOnlyUnread) {
+      result = result.filter(n => !n.read);
+    }
+    
+    // Filter by event type
+    if (preferences.value.filterByType) {
+      result = result.filter(n => n.event_type === preferences.value.filterByType);
+    }
+    
+    // Group by stream if enabled
+    if (preferences.value.groupByStream) {
+      // Group notifications by room_url
+      const grouped = {};
+      result.forEach(notification => {
+        const key = notification.room_url;
+        if (!grouped[key]) {
+          grouped[key] = {
+            room_url: notification.room_url,
+            streamer: notification.details?.streamer_name || notification.streamer || 'Unknown',
+            platform: notification.details?.platform || 'Unknown',
+            notifications: []
+          };
+        }
+        grouped[key].notifications.push(notification);
       });
-      error.value = MobileNotificationService.error.value;
-      return result;
+      
+      // Convert back to array for rendering
+      filteredNotifications.value = Object.values(grouped);
+      return;
+    }
+    
+    // Group by event type if enabled
+    if (preferences.value.groupByType) {
+      // Group notifications by event_type
+      const grouped = {};
+      result.forEach(notification => {
+        const key = notification.event_type;
+        if (!grouped[key]) {
+          grouped[key] = {
+            event_type: notification.event_type,
+            title: getNotificationTitle(notification),
+            notifications: []
+          };
+        }
+        grouped[key].notifications.push(notification);
+      });
+      
+      // Convert back to array for rendering
+      filteredNotifications.value = Object.values(grouped);
+      return;
+    }
+    
+    // If no grouping, just use the filtered list
+    filteredNotifications.value = result;
+  };
+  
+  // Fetch notifications from API
+  const fetchNotifications = async () => {
+    loading.value = true;
+    error.value = null;
+    
+    try {
+      // Use the agent notifications endpoint from the documentation
+      const response = await axios.get('/notifications');
+      
+      if (response.data) {
+        notifications.value = response.data;
+        
+        // Count unread notifications
+        unreadCount.value = notifications.value.filter(n => !n.read).length;
+        
+        // Apply filters
+        applyFilters();
+      }
     } catch (err) {
-      error.value = err.message || 'Failed to load notifications';
-      return [];
+      console.error('Failed to fetch notifications', err);
+      error.value = 'Failed to load notifications';
+      toast.error('Failed to load notifications');
     } finally {
       loading.value = false;
     }
   };
   
-  /**
-   * Mark a notification as read
-   * @param {number} notificationId - ID of notification to mark as read
-   * @returns {Promise<boolean>} - Success status
-   */
+  // Mark a notification as read
   const markAsRead = async (notificationId) => {
-    return await MobileNotificationService.markAsRead(notificationId);
+    try {
+      // Use the correct endpoint from the documentation
+      await axios.put(`/api/notifications/${notificationId}/read`);
+      updateNotificationStatus(notificationId, true);
+    } catch (err) {
+      console.error('Failed to mark notification as read', err);
+      toast.error('Failed to update notification');
+    }
   };
   
-  /**
-   * Mark all notifications as read
-   * @returns {Promise<boolean>} - Success status
-   */
+  // Mark all notifications as read
   const markAllAsRead = async () => {
-    return await MobileNotificationService.markAllAsRead();
-  };
-  
-  /**
-   * Toggle grouping notifications by type
-   */
-  const toggleGroupByType = () => {
-    MobileNotificationService.toggleGroupByType();
-  };
-  
-  /**
-   * Toggle grouping notifications by stream
-   */
-  const toggleGroupByStream = () => {
-    MobileNotificationService.toggleGroupByStream();
-  };
-  
-  /**
-   * Get count of unread notifications
-   * @returns {Promise<number>} - Count of unread notifications
-   */
-  const getUnreadCount = async () => {
-    return await MobileNotificationService.getUnreadCount();
-  };
-  
-  /**
-   * Format notification timestamp relative to now (e.g. "5 min ago")
-   * @param {string|Date} timestamp - Timestamp to format
-   * @returns {string} - Formatted timestamp
-   */
-  const formatTimeAgo = (timestamp) => {
-    if (!timestamp) return '';
-    
-    const now = new Date();
-    const date = new Date(timestamp);
-    const seconds = Math.floor((now - date) / 1000);
-    
-    // Return different formats based on how long ago
-    if (seconds < 60) {
-      return 'just now';
-    } else if (seconds < 3600) {
-      const minutes = Math.floor(seconds / 60);
-      return `${minutes} min ago`;
-    } else if (seconds < 86400) {
-      const hours = Math.floor(seconds / 3600);
-      return `${hours} hr ago`;
-    } else if (seconds < 604800) {
-      const days = Math.floor(seconds / 86400);
-      return `${days} day${days > 1 ? 's' : ''} ago`;
-    } else {
-      // Just return the date for older notifications
-      return date.toLocaleDateString(undefined, { 
-        month: 'short', 
-        day: 'numeric' 
+    try {
+      // Use the correct endpoint from the documentation
+      await axios.put('/api/notifications/read-all');
+      
+      // Update all notifications in local state
+      notifications.value.forEach(n => {
+        n.read = true;
       });
+      
+      // Reset unread count
+      unreadCount.value = 0;
+      
+      // Apply filters
+      applyFilters();
+      
+      toast.success('All notifications marked as read');
+    } catch (err) {
+      console.error('Failed to mark all notifications as read', err);
+      toast.error('Failed to update notifications');
     }
   };
   
-  /**
-   * Get notification icon based on type
-   * @param {Object} notification - Notification object
-   * @returns {string} - Icon name
-   */
-  const getNotificationIcon = (notification) => {
-    if (!notification) return 'bell';
-    
-    // Get appropriate icon for different notification types
-    const eventType = notification.event_type || '';
-    
-    switch (eventType.toLowerCase()) {
-      case 'keyword_detected': {
-        return 'comment-dots';
-      }
-      case 'object_detected': {
-        return 'eye';
-      }
-      case 'stream_ended': {
-        return 'video-slash';
-      }
-      case 'stream_started': {
-        return 'video';
-      }
-      case 'assignment_created': {
-        return 'user-check';
-      }
-      case 'assignment_removed': {
-        return 'user-times';
-      }
-      default: {
-        return 'bell';
-      }
+  // Delete a notification
+  // Note: The API documentation doesn't specify a delete endpoint for notifications,
+  // but we'll keep this method in case it's implemented in the future
+  const deleteNotification = async (notificationId) => {
+    try {
+      // This is a placeholder. The API doesn't have a documented endpoint for deleting
+      // notifications, so we should confirm with backend team if this is supported
+      await axios.delete(`/api/notifications/${notificationId}`);
+      removeNotification(notificationId);
+      toast.success('Notification deleted');
+    } catch (err) {
+      console.error('Failed to delete notification', err);
+      toast.error('Failed to delete notification');
     }
   };
   
-  /**
-   * Get notification color based on type
-   * @param {Object} notification - Notification object
-   * @returns {string} - CSS color variable
-   */
-  const getNotificationColor = (notification) => {
-    if (!notification) return 'var(--light-primary)';
-    
-    // Get appropriate color for different notification types
-    const eventType = notification.event_type || '';
-    
-    switch (eventType.toLowerCase()) {
-      case 'keyword_detected': {
-        return 'var(--light-danger)';
+  // Get notification types for filter dropdown
+  const notificationTypes = computed(() => {
+    const types = new Set();
+    notifications.value.forEach(n => {
+      types.add(n.event_type);
+    });
+    return Array.from(types).sort();
+  });
+  
+  // Get streams for filter dropdown
+  const notificationStreams = computed(() => {
+    const streams = new Set();
+    notifications.value.forEach(n => {
+      if (n.room_url) {
+        streams.add(n.room_url);
       }
-      case 'object_detected': {
-        return 'var(--light-warning)';
-      }
-      case 'stream_ended': {
-        return 'var(--light-secondary)';
-      }
-      case 'stream_started': {
-        return 'var(--light-success)';
-      }
-      case 'assignment_created': {
-        return 'var(--light-info)';
-      }
-      case 'assignment_removed': {
-        return 'var(--light-danger)';
-      }
-      default: {
-        return 'var(--light-primary)';
-      }
-    }
+    });
+    return Array.from(streams).sort();
+  });
+  
+  // Update notification preferences
+  const updatePreferences = (newPreferences) => {
+    preferences.value = { ...preferences.value, ...newPreferences };
+    savePreferences();
+    applyFilters();
   };
   
-  /**
-   * Get human-readable notification title
-   * @param {Object} notification - Notification object
-   * @returns {string} - Formatted title
-   */
-  const getNotificationTitle = (notification) => {
-    if (!notification) return 'Notification';
+  // Initialize
+  onMounted(() => {
+    loadPreferences();
+    fetchNotifications();
+    connectSocket();
     
-    // Get appropriate title for different notification types
-    const eventType = notification.event_type || '';
-    const streamer = notification.streamer_username || 
-                    notification.details?.streamer_username || 
-                    'Unknown';
-    
-    switch (eventType.toLowerCase()) {
-      case 'keyword_detected': {
-        return `Keyword detected in ${streamer}'s chat`;
-      }
-      case 'object_detected': {
-        // Include object name if available
-        const objectName = notification.details?.object_name || 'Object';
-        return `${objectName} detected in ${streamer}'s stream`;
-      }
-      case 'stream_ended': {
-        return `${streamer}'s stream ended`;
-      }
-      case 'stream_started': {
-        return `${streamer} started streaming`;
-      }
-      case 'assignment_created': {
-        return `You were assigned to monitor ${streamer}`;
-      }
-      case 'assignment_removed': {
-        return `You were unassigned from ${streamer}`;
-      }
-      default: {
-        return notification.message || 'New notification';
-      }
-    }
-  };
+    // Apply filters whenever preferences change
+    watch(preferences, () => {
+      applyFilters();
+    }, { deep: true });
+  });
   
-  // Initialize on mount
-  onMounted(async () => {
-    await loadNotifications();
-    await getUnreadCount();
+  // Clean up
+  onUnmounted(() => {
+    disconnectSocket();
   });
   
   return {
     // State
     notifications,
+    filteredNotifications,
+    unreadCount,
     loading,
     error,
-    unreadCount,
-    groupedNotifications,
-    isGroupedByType,
-    isGroupedByStream,
+    preferences,
+    
+    // Getters
+    notificationTypes,
+    notificationStreams,
     
     // Actions
-    loadNotifications,
+    fetchNotifications,
     markAsRead,
     markAllAsRead,
-    toggleGroupByType,
-    toggleGroupByStream,
-    getUnreadCount,
-    
-    // Helpers
-    formatTimeAgo,
-    getNotificationIcon,
-    getNotificationColor,
-    getNotificationTitle
+    deleteNotification,
+    updatePreferences,
+    getNotificationTitle,
+    getNotificationMessage
   };
 }

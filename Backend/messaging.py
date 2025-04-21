@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 from utils.notifications import emit_message_update
 
 
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="http://localhost:8080")
 online_users = {}  # {user_id: sid}
 
 
