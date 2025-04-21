@@ -116,9 +116,9 @@ export default {
     const showThemeToggle = ref(false);
     const showLogoutConfirm = ref(false);
     const loggingOut = ref(false);
-    const username = ref(null);
-    const userRole = ref(null);
-    const isDarkTheme = ref(localStorage.getItem('theme') === 'light');
+    const username = ref(localStorage.getItem('username') || null);
+    const userRole = ref(localStorage.getItem('userRole') || 'user');
+    const isDarkTheme = ref(localStorage.getItem('theme') === 'dark');
     const newNotificationReceived = ref(false);
     const newMessageReceived = ref(false);
     
@@ -151,12 +151,13 @@ export default {
     
     // Computed properties
     const roleName = computed(() => {
+      if (!userRole.value) return '';
       return userRole.value.charAt(0).toUpperCase() + userRole.value.slice(1);
     });
     
     const navigationItems = computed(() => {
       const baseItems = [
-        { id: 'home', label: 'Home', icon: 'home' },
+        { id: 'home', label: 'Home', icon: 'house' },
         { id: 'streams', label: 'Streams', icon: 'video' },
         { id: 'messages', label: 'Messages', icon: 'comment' },
         { id: 'notifications', label: 'Alerts', icon: 'bell' },
@@ -226,6 +227,9 @@ export default {
     };
     
     const confirmLogout = async () => {
+      // Prevent multiple executions
+      if (loggingOut.value) return;
+      
       loggingOut.value = true;
       
       try {
@@ -245,6 +249,7 @@ export default {
       } catch (error) {
         console.error('Logout failed:', error);
         toast.error('Logout failed. Please try again.');
+      } finally {
         loggingOut.value = false;
         showLogoutConfirm.value = false;
       }

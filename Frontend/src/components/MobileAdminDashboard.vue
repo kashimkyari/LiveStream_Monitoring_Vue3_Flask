@@ -469,7 +469,7 @@ export default {
     // Tab navigation
     const activeTab = ref(0)
     const tabs = [
-      { label: 'Home', icon: 'home' },
+      { label: 'Home', icon: 'house' },
       { label: 'Streams', icon: 'video' },
       { label: 'Agents', icon: 'users' },
       { label: 'Detections', icon: 'eye' },
@@ -534,13 +534,13 @@ export default {
       },
       {
         label: 'Active Agents',
-        value: dashboardStats.value.active_agents || 0,
+        value: agents.value.length || 0,
         icon: 'users'
       },
       {
         label: 'Detections',
-        value: dashboardStats.value.total_detections || 0,
-        icon: 'bell'
+        value: notifications.value.length || 0,
+        icon: 'eye'
       }
     ])
     

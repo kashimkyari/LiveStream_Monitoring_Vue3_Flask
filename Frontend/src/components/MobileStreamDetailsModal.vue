@@ -38,13 +38,23 @@
           </div>
           
           <div class="stream-preview">
-            <div class="field-label">Preview:</div>
-            <div v-if="stream.preview_url" class="preview-image-container">
-              <img :src="stream.preview_url" alt="Stream Preview" class="preview-image" />
-            </div>
-            <div v-else class="no-preview">
-              <font-awesome-icon icon="image" class="no-preview-icon" />
-              <p>No preview available</p>
+            <div class="field-label">Stream:</div>
+            <div class="video-container">
+              <mobile-video-player
+                v-if="stream.is_online && stream.m3u8_url"
+                :streamUrl="stream.m3u8_url"
+                :streamTitle="stream.streamer_username || 'Live Stream'"
+                :streamPlatform="stream.platform || 'Unknown'"
+                :autoplay="true"
+                @refresh-request="refreshStream"
+              />
+              <div v-else-if="stream.preview_url" class="preview-image-container">
+                <img :src="stream.preview_url" alt="Stream Preview" class="preview-image" />
+              </div>
+              <div v-else class="no-preview">
+                <font-awesome-icon icon="image" class="no-preview-icon" />
+                <p>No preview available</p>
+              </div>
             </div>
           </div>
           
@@ -79,9 +89,15 @@
 import { ref, computed, watchEffect, inject } from 'vue'
 import { useToast } from 'vue-toastification'
 import { formatDistance } from 'date-fns'
+import MobileVideoPlayer from './MobileVideoPlayer.vue'
 
 export default {
   name: 'MobileStreamDetailsModal',
+  
+  components: {
+    MobileVideoPlayer
+  },
+  
   props: {
     show: {
       type: Boolean,
@@ -92,7 +108,7 @@ export default {
       default: () => ({})
     }
   },
-  emits: ['close', 'assign-toggled'],
+  emits: ['close', 'assign-toggled', 'stream-refresh'],
   setup(props, { emit }) {
     const toast = useToast()
     const isDarkTheme = inject('theme')
@@ -217,6 +233,12 @@ export default {
       }
     }
     
+    // Refresh stream
+    const refreshStream = () => {
+      emit('stream-refresh', props.stream.id);
+      toast.info('Refreshing stream...');
+    }
+    
     return {
       isDarkTheme,
       assignedAgents,
@@ -227,7 +249,8 @@ export default {
       closeModal,
       copyToClipboard,
       formatNumber,
-      formatStreamTime
+      formatStreamTime,
+      refreshStream
     }
   }
 }
@@ -368,6 +391,13 @@ export default {
 
 .stream-preview {
   margin-bottom: 1.5rem;
+}
+
+.video-container {
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #000;
 }
 
 .preview-image-container {

@@ -135,7 +135,7 @@ import MobileDetectionNotification from './components/MobileDetectionNotificatio
 import { useToast } from "vue-toastification"
 import "vue-toastification/dist/index.css"
 import { useIsMobile } from './composables/useIsMobile'
-import { useMobileNotifications } from './composables/useMobileNotifications'
+// import { useMobileNotifications } from './composables/useMobileNotifications'
 
 // Add all required icons
 library.add(
@@ -178,21 +178,19 @@ export default {
     const { isMobile } = useIsMobile()
     
     // Use mobile notifications composable
-    const { 
-      notifications, 
-      unreadCount: unreadNotificationCount, 
-      markAsRead,
-      markAllAsRead,
-      toggleGroupByType,
-      toggleGroupByStream
-    } = useMobileNotifications()
+    // const { 
+    //   unreadCount: unreadNotificationCount, 
+    //   markAsRead,
+    //   markAllAsRead,
+    //   toggleGroupByType,
+    //   toggleGroupByStream
+    // } = useMobileNotifications()
     
     // Provide theme to child components
     provide('theme', isDarkTheme)
     
     // Provide notification data to child components
-    provide('notifications', notifications)
-    provide('unreadNotifications', unreadNotificationCount)
+    // provide('unreadNotifications', unreadNotificationCount)
     
     // Handle detection notification click
     const handleDetectionClick = (detection) => {
@@ -221,9 +219,9 @@ export default {
         }
         
         // Mark as read
-        if (detection.id) {
-          markAsRead(detection.id);
-        }
+        // if (detection.id) {
+        //   markAsRead(detection.id);
+        // }
       }
     };
     
@@ -622,12 +620,11 @@ export default {
       sidebar,
       dashboardContainer,
       handleDetectionClick,
-      unreadNotificationCount,
-      notifications,
-      markAsRead,
-      markAllAsRead,
-      toggleGroupByType,
-      toggleGroupByStream,
+      // unreadNotificationCount,
+      // markAsRead,
+      // markAllAsRead,
+      // toggleGroupByType,
+      // toggleGroupByStream,
       spinnerContainer,
       toggleTheme,
       handleLoginSuccess,

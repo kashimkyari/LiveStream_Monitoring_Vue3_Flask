@@ -130,9 +130,11 @@ try:
     # Import socket_events here (after socketio init) to register the events
     from socket_events import register_socket_events
     register_socket_events(socketio)
-    
+    from utils.notifications import emit_notification
     start_notification_monitor()
     start_detection_cleanup_thread()
+    emit_notification(notification_data)
+
     logging.info("Background services started")
 except Exception as e:
     logging.error("Background services failed: %s", e)

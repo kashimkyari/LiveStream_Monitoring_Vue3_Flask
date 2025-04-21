@@ -51,7 +51,7 @@ export function useRealTimeDetection() {
     }
     
     // Initialize socket
-    const url = serverUrl || window.location.origin;
+    const url = serverUrl;
     socket.value = io(url, {
       autoConnect,
       path: '/ws',

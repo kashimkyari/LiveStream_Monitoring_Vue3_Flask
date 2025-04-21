@@ -105,7 +105,7 @@ const HlsPlayer = defineComponent({
     const MAX_RETRIES = 3;
     let hls = null;
     
-    // Initialize HLS.js player
+    // Initialize HLS.js player with performance optimizations
     const initializePlayer = () => {
       const videoElement = videoRef.value;
       if (!videoElement || !props.m3u8Url) {
@@ -119,14 +119,31 @@ const HlsPlayer = defineComponent({
       
       // Check if HLS.js is supported
       if (window.Hls && window.Hls.isSupported()) {
-        hls = new window.Hls({ 
+        // Get optimization settings based on device
+        const isMobile = window.innerWidth < 768 || 
+                        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        // Optimized HLS configuration with device-specific settings
+        const hlsConfig = {
           autoStartLoad: true,
-          startLevel: -1,
-          maxBufferLength: 30,
-          maxMaxBufferLength: 60,
-          maxBufferSize: 60 * 1000 * 1000,
-          debug: false
-        });
+          startLevel: isMobile ? 0 : -1, // Start with lowest quality on mobile
+          abrEwmaDefaultEstimate: isMobile ? 500000 : 1000000, // Lower bandwidth estimate for mobile
+          backBufferLength: isMobile ? 30 : 60, // Smaller back buffer on mobile
+          maxBufferLength: isMobile ? 15 : 30, // Reduced buffer size on mobile
+          maxMaxBufferLength: isMobile ? 30 : 60,
+          maxBufferSize: isMobile ? 15 * 1000 * 1000 : 60 * 1000 * 1000, // Smaller buffer on mobile
+          maxBufferHole: isMobile ? 0.5 : 0.3,
+          lowLatencyMode: !isMobile, // Disable low latency mode on mobile to save battery
+          progressive: isMobile, // Progressive loading on mobile
+          enableWorker: !isMobile, // Disable web workers on mobile for battery saving
+          debug: false,
+          testBandwidth: !isMobile, // Skip bandwidth tests on mobile
+          fragLoadingMaxRetry: isMobile ? 2 : 4, // Fewer retries on mobile
+          manifestLoadingMaxRetry: isMobile ? 2 : 4,
+          levelLoadingMaxRetry: isMobile ? 2 : 4
+        };
+        
+        hls = new window.Hls(hlsConfig);
         
         hls.loadSource(props.m3u8Url);
         hls.attachMedia(videoElement);
@@ -138,38 +155,65 @@ const HlsPlayer = defineComponent({
           
           videoElement.muted = isMuted.value;
           videoElement.volume = volume.value;
+          
+          // Optimize animations for mobile
+          const isLowPowerDevice = isMobile || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+          
           videoElement.play()
             .then(() => {
               isPlaying.value = true;
-              animatePlayerStart();
+              
+              // Use simpler animations on low-power devices
+              if (!isLowPowerDevice) {
+                animatePlayerStart();
+              } else {
+                // Simple opacity fade for low-power devices
+                videoRef.value.style.opacity = '1';
+              }
             })
-            .catch(err => console.warn("Autoplay prevented:", err));
+            .catch(err => {
+              console.warn("Autoplay prevented:", err);
+              // Show big play button when autoplay is prevented
+              showControls.value = true;
+            });
         });
         
-        // Error handling
+        // Error handling with improved recovery strategies
         hls.on(window.Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
+            console.warn(`HLS fatal error: ${data.type} - ${data.details}`);
+            
             switch(data.type) {
               case window.Hls.ErrorTypes.NETWORK_ERROR:
                 if (retryAttempts.value < MAX_RETRIES) {
                   retryAttempts.value++;
                   console.log(`Network error, retrying (${retryAttempts.value}/${MAX_RETRIES})...`);
-                  hls.startLoad();
+                  // Exponential backoff for retries
+                  setTimeout(() => {
+                    hls.startLoad();
+                  }, 1000 * Math.pow(2, retryAttempts.value - 1));
                 } else {
                   hasError.value = true;
                   isLoading.value = false;
-                  errorMessage.value = "Network error";
+                  errorMessage.value = "Network error - check your connection";
                 }
                 break;
               case window.Hls.ErrorTypes.MEDIA_ERROR:
                 if (retryAttempts.value < MAX_RETRIES) {
                   retryAttempts.value++;
                   console.log(`Media error, retrying (${retryAttempts.value}/${MAX_RETRIES})...`);
-                  hls.recoverMediaError();
+                  
+                  // Try different recovery methods based on retry count
+                  if (retryAttempts.value === 1) {
+                    hls.recoverMediaError();
+                  } else {
+                    hls.swapAudioCodec();
+                    hls.recoverMediaError();
+                  }
                 } else {
                   hasError.value = true;
                   isLoading.value = false;
-                  errorMessage.value = "Media error";
+                  errorMessage.value = "Media playback error";
                 }
                 break;
               default:
@@ -178,6 +222,9 @@ const HlsPlayer = defineComponent({
                 errorMessage.value = data.details || "Fatal playback error";
                 break;
             }
+          } else {
+            // Non-fatal errors - just log for debugging
+            console.log(`HLS non-fatal error: ${data.type} - ${data.details}`);
           }
         });
       } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
@@ -192,19 +239,29 @@ const HlsPlayer = defineComponent({
           videoElement.play()
             .then(() => {
               isPlaying.value = true;
-              animatePlayerStart();
+              const isMobile = window.innerWidth < 768;
+              if (!isMobile) {
+                animatePlayerStart();
+              } else {
+                // Simple opacity change for mobile Safari
+                videoRef.value.style.opacity = '1';
+              }
             })
-            .catch(console.error);
+            .catch(err => {
+              console.error("Playback error:", err);
+              showControls.value = true; // Show play button when autoplay fails
+            });
         });
         
         videoElement.addEventListener('error', () => {
           if (retryAttempts.value < MAX_RETRIES) {
             retryAttempts.value++;
-            setTimeout(() => videoElement.load(), 1000);
+            // Exponential backoff
+            setTimeout(() => videoElement.load(), 1000 * Math.pow(2, retryAttempts.value - 1));
           } else {
             hasError.value = true;
             isLoading.value = false;
-            errorMessage.value = "Playback error";
+            errorMessage.value = "Playback error - try refreshing";
           }
         });
       } else {
@@ -319,25 +376,45 @@ const HlsPlayer = defineComponent({
       });
     };
     
-    // Animation for player start
+    // Animation for player start with device optimizations
     const animatePlayerStart = () => {
-      anime({
-        targets: videoRef.value,
-        opacity: [0, 1],
-        scale: [0.95, 1],
-        easing: 'easeOutCubic',
-        duration: 400
-      });
+      // Check if device is mobile or low-power
+      const isMobile = window.innerWidth < 768 || 
+                      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isLowPowerDevice = isMobile || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
       
-      // Animate live indicator entrance
-      anime({
-        targets: '.live-indicator',
-        translateX: [-20, 0],
-        opacity: [0, 1],
-        easing: 'easeOutBack',
-        duration: 600,
-        delay: 200
-      });
+      if (isLowPowerDevice) {
+        // Simple CSS transition for low-power devices
+        if (videoRef.value) {
+          videoRef.value.style.opacity = '1';
+          videoRef.value.style.transform = 'scale(1)';
+        }
+        
+        const liveIndicator = document.querySelector('.live-indicator');
+        if (liveIndicator) {
+          liveIndicator.style.opacity = '1';
+          liveIndicator.style.transform = 'translateX(0)';
+        }
+      } else {
+        // Full animation for high-power devices
+        anime({
+          targets: videoRef.value,
+          opacity: [0, 1],
+          scale: [0.98, 1],
+          easing: 'easeOutCubic',
+          duration: 400
+        });
+        
+        // Animate live indicator entrance
+        anime({
+          targets: '.live-indicator',
+          translateX: [-20, 0],
+          opacity: [0, 1],
+          easing: 'easeOutQuad', // Simpler easing
+          duration: 400,
+          delay: 200
+        });
+      }
     };
     
     // Watch for stream loaded state to trigger analytics
@@ -565,9 +642,14 @@ export default defineComponent({
     
     let refreshTimeout = null;
     
-    // Toggle modal state with animation
+    // Toggle modal state with device-optimized animations
     const toggleModal = () => {
       if (!isOnline.value) return;
+      
+      // Check if device is mobile or low-power
+      const isMobile = window.innerWidth < 768 || 
+                      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isLowPowerDevice = isMobile || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
       
       if (!isModalOpen.value) {
         isModalOpen.value = true;
@@ -575,42 +657,72 @@ export default defineComponent({
         
         // Wait for modal to be in DOM
         nextTick(() => {
-          // Animate modal opening
+          if (isLowPowerDevice) {
+            // Simple CSS transitions for low-power devices
+            if (modalOverlay.value) {
+              modalOverlay.value.style.opacity = '1';
+            }
+            
+            if (modalContent.value) {
+              modalContent.value.style.opacity = '1';
+              modalContent.value.style.transform = 'scale(1)';
+            }
+          } else {
+            // Full animations for desktop
+            anime({
+              targets: modalOverlay.value,
+              opacity: [0, 1],
+              duration: 300,
+              easing: 'easeOutQuad'
+            });
+            
+            anime({
+              targets: modalContent.value,
+              scale: [0.9, 1],
+              opacity: [0, 1],
+              duration: 400,
+              easing: 'easeOutCubic'
+            });
+          }
+        });
+      } else {
+        if (isLowPowerDevice) {
+          // Simple CSS transitions for low-power devices
+          if (modalOverlay.value) {
+            modalOverlay.value.style.opacity = '0';
+          }
+          
+          if (modalContent.value) {
+            modalContent.value.style.opacity = '0';
+            modalContent.value.style.transform = 'scale(0.9)';
+          }
+          
+          // Use setTimeout instead of animation callbacks
+          setTimeout(() => {
+            isModalOpen.value = false;
+            document.body.style.overflow = '';
+          }, 300);
+        } else {
+          // Full animations for desktop
           anime({
             targets: modalOverlay.value,
-            opacity: [0, 1],
+            opacity: 0,
             duration: 300,
-            easing: 'easeOutQuad'
+            easing: 'easeOutQuad',
+            complete: () => {
+              isModalOpen.value = false;
+              document.body.style.overflow = '';
+            }
           });
           
           anime({
             targets: modalContent.value,
-            scale: [0.9, 1],
-            opacity: [0, 1],
-            duration: 400,
-            easing: 'easeOutCubic'
+            scale: 0.9,
+            opacity: 0,
+            duration: 300,
+            easing: 'easeOutQuad'
           });
-        });
-      } else {
-        // Animate modal closing
-        anime({
-          targets: modalOverlay.value,
-          opacity: 0,
-          duration: 300,
-          easing: 'easeOutQuad',
-          complete: () => {
-            isModalOpen.value = false;
-            document.body.style.overflow = '';
-          }
-        });
-        
-        anime({
-          targets: modalContent.value,
-          scale: 0.9,
-          opacity: 0,
-          duration: 300,
-          easing: 'easeOutQuad'
-        });
+        }
       }
     };
     
@@ -685,27 +797,60 @@ export default defineComponent({
       }
     };
 
-    // Animate thumbnail entrance
+    // Optimized thumbnail entrance animation with device detection
     const animateThumbnail = () => {
       if (!thumbnailEl.value) return;
       
-      anime({
-        targets: thumbnailEl.value,
-        opacity: [0, 1],
-        translateY: [20, 0],
-        easing: 'easeOutCubic',
-        duration: 600
-      });
+      // Check if device is mobile or low-power
+      const isMobile = window.innerWidth < 768 || 
+                      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isLowPowerDevice = isMobile || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
       
-      // Animate live indicator
-      anime({
-        targets: '.thumbnail-live-indicator',
-        translateX: [-20, 0],
-        opacity: [0, 1],
-        easing: 'easeOutBack',
-        duration: 600,
-        delay: 300
-      });
+      if (isLowPowerDevice) {
+        // Simple CSS transitions for low-power devices
+        if (thumbnailEl.value) {
+          thumbnailEl.value.style.opacity = '1';
+          thumbnailEl.value.style.transform = 'translateY(0)';
+        }
+        
+        // Simple transition for live indicator
+        const liveIndicator = document.querySelector('.thumbnail-live-indicator');
+        if (liveIndicator) {
+          // Small delay for the indicator
+          setTimeout(() => {
+            liveIndicator.style.opacity = '1';
+            liveIndicator.style.transform = 'translateX(0)';
+          }, 150);
+        }
+      } else {
+        // Full animations for desktop
+        anime({
+          targets: thumbnailEl.value,
+          opacity: [0, 1],
+          translateY: [20, 0],
+          easing: 'easeOutCubic',
+          duration: 600
+        });
+        
+        // Animate live indicator
+        anime({
+          targets: '.thumbnail-live-indicator',
+          translateX: [-20, 0],
+          opacity: [0, 1],
+          easing: 'easeOutBack',
+          duration: 600,
+          delay: 300
+        });
+      }
+      
+      // Preload video if appropriate (for high-bandwidth users)
+      if (!isMobile && navigator.connection && navigator.connection.effectiveType === '4g') {
+        const preloadLink = document.createElement('link');
+        preloadLink.rel = 'preload';
+        preloadLink.as = 'video';
+        preloadLink.href = m3u8Url.value;
+        document.head.appendChild(preloadLink);
+      }
     };
 
     // Refresh stream with toast notifications
@@ -827,19 +972,44 @@ export default defineComponent({
       }
     };
     
-    // Setup and cleanup
+    // Setup and cleanup with device-optimized loading animation
     onMounted(() => {
       fetchStreamData();
       window.addEventListener('keydown', handleKeyDown);
       
-      // Animate loading spinner
-      anime({
-        targets: '.loading-spinner',
-        rotateZ: '360deg',
-        easing: 'linear',
-        duration: 1000,
-        loop: true
-      });
+      // Check if device is mobile or low-power
+      const isMobile = window.innerWidth < 768 || 
+                       /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isLowPowerDevice = isMobile || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+      
+      // Use CSS animation for spinner on mobile/low-power devices, anime.js for desktop
+      if (isLowPowerDevice) {
+        // Let CSS handle the animation via @keyframes for better performance
+        const spinners = document.querySelectorAll('.loading-spinner');
+        spinners.forEach(spinner => {
+          if (spinner) {
+            spinner.classList.add('css-spin-animation');
+          }
+        });
+      } else {
+        // Use anime.js for desktop
+        anime({
+          targets: '.loading-spinner',
+          rotateZ: '360deg',
+          easing: 'linear',
+          duration: 1000,
+          loop: true
+        });
+      }
+      
+      // Preload resources for faster loading when bandwidth allows
+      if (!isMobile && navigator.connection && 
+          (navigator.connection.effectiveType === '4g' || navigator.connection.effectiveType === 'wifi')) {
+        const fontAwesomePreconnect = document.createElement('link');
+        fontAwesomePreconnect.rel = 'preconnect';
+        fontAwesomePreconnect.href = 'https://use.fontawesome.com';
+        document.head.appendChild(fontAwesomePreconnect);
+      }
     });
     
     onBeforeUnmount(() => {
@@ -941,6 +1111,11 @@ export default defineComponent({
   to { transform: rotate(360deg); }
 }
 
+/* CSS spinner animation for better performance on mobile */
+.css-spin-animation {
+  animation: spin 1s infinite linear !important;
+}
+
 .error-icon {
   font-size: 24px;
   color: #ff4d4d;
@@ -979,7 +1154,9 @@ export default defineComponent({
   cursor: pointer;
   overflow: hidden;
   border-radius: 8px;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, opacity 0.4s ease;
+  opacity: 0; /* Initially hidden for smooth animation */
+  transform: translateY(20px); /* Initial position for animation */
 }
 
 .thumbnail-wrapper:hover {
@@ -1005,6 +1182,10 @@ export default defineComponent({
   font-size: 12px;
   font-weight: bold;
   color: white;
+  /* Add transitions for CSS animation fallback */
+  opacity: 0;
+  transform: translateX(-20px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
 .red-dot {

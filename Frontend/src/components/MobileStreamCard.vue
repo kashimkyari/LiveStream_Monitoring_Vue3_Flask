@@ -1,56 +1,75 @@
 <template>
   <div class="mobile-stream-card" :class="platformClass">
-    <div class="stream-card-content" @click="$emit('click')">
-      <div class="stream-header">
-        <h3 class="stream-title">{{ stream.streamer_username }}</h3>
-        <div class="stream-badge">{{ streamType }}</div>
-      </div>
-      
-      <div class="stream-details">
-        <!-- Stream URL -->
-        <div class="detail-item">
-          <font-awesome-icon icon="link" class="detail-icon" />
-          <div class="detail-text url-text" @click.stop="openStreamUrl">
-            {{ formatRoomUrl(stream.room_url) }}
-          </div>
-        </div>
-        
-        <!-- Assignments -->
-        <div class="detail-item">
-          <font-awesome-icon icon="users" class="detail-icon" />
-          <div class="detail-text">
-            {{ assignmentsText }}
-          </div>
-        </div>
-        
-        <!-- Stream Status -->
-        <div class="detail-item">
-          <font-awesome-icon :icon="statusIcon" class="detail-icon" :class="statusClass" />
-          <div class="detail-text" :class="statusClass">
-            {{ statusText }}
-          </div>
-        </div>
-      </div>
+    <div class="stream-preview" v-if="stream.is_online">
+      <mobile-video-player
+        :streamUrl="stream.m3u8_url"
+        :streamTitle="stream.streamer_username || 'Live Stream'"
+        :streamPlatform="stream.platform || 'Unknown'"
+        :autoplay="false"
+        :muted="true"
+        @refresh-request="$emit('refresh')"
+        @close="openStreamDetails"
+      />
     </div>
     
-    <div class="stream-actions">
-      <button 
-        class="refresh-button" 
-        @click.stop="$emit('refresh')"
-        :disabled="isRefreshing"
-        :class="{ 'refreshing': isRefreshing }"
-      >
-        <font-awesome-icon icon="sync" :class="{ 'fa-spin': isRefreshing }" />
-      </button>
+    <div class="stream-card-content-wrapper">
+      <div class="stream-card-content" @click="$emit('click')">
+        <div class="stream-header">
+          <h3 class="stream-title">{{ stream.streamer_username }}</h3>
+          <div class="stream-badge">{{ streamType }}</div>
+        </div>
+        
+        <div class="stream-details">
+          <!-- Stream URL -->
+          <div class="detail-item">
+            <font-awesome-icon icon="link" class="detail-icon" />
+            <div class="detail-text url-text" @click.stop="openStreamUrl">
+              {{ formatRoomUrl(stream.room_url) }}
+            </div>
+          </div>
+          
+          <!-- Assignments -->
+          <div class="detail-item">
+            <font-awesome-icon icon="users" class="detail-icon" />
+            <div class="detail-text">
+              {{ assignmentsText }}
+            </div>
+          </div>
+          
+          <!-- Stream Status -->
+          <div class="detail-item">
+            <font-awesome-icon :icon="statusIcon" class="detail-icon" :class="statusClass" />
+            <div class="detail-text" :class="statusClass">
+              {{ statusText }}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="stream-actions">
+        <button 
+          class="refresh-button" 
+          @click.stop="$emit('refresh')"
+          :disabled="isRefreshing"
+          :class="{ 'refreshing': isRefreshing }"
+        >
+          <font-awesome-icon icon="sync" :class="{ 'fa-spin': isRefreshing }" />
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
 import { computed } from 'vue'
+import MobileVideoPlayer from './MobileVideoPlayer.vue'
 
 export default {
   name: 'MobileStreamCard',
+  
+  components: {
+    MobileVideoPlayer
+  },
   
   props: {
     stream: {
@@ -65,7 +84,7 @@ export default {
   
   emits: ['click', 'refresh'],
   
-  setup(props) {
+  setup(props, { emit }) {
     // Determine platform/type for styling
     const streamType = computed(() => {
       const type = (props.stream.type || props.stream.platform || '').toLowerCase()
@@ -124,11 +143,17 @@ export default {
       return isStreamActive.value ? 'status-online' : 'status-offline'
     })
     
+    // Open stream details modal (for video player)
+    const openStreamDetails = () => {
+      emit('click');
+    }
+    
     return {
       streamType,
       platformClass,
       formatRoomUrl,
       openStreamUrl,
+      openStreamDetails,
       assignmentsText,
       statusText,
       statusIcon,
@@ -141,12 +166,17 @@ export default {
 <style scoped>
 .mobile-stream-card {
   display: flex;
+  flex-direction: column;
   background-color: var(--light-card-bg);
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: transform 0.2s ease, background-color 0.3s ease, box-shadow 0.3s ease;
   position: relative;
+  contain: content; /* Improve rendering performance */
+  will-change: transform; /* Hint for better performance on scroll/animations */
+  backface-visibility: hidden; /* Prevent flickering on some mobile browsers */
+  -webkit-font-smoothing: antialiased; /* Better text rendering on Safari */
 }
 
 [data-theme='dark'] .mobile-stream-card {
@@ -156,6 +186,20 @@ export default {
 
 .mobile-stream-card:active {
   transform: scale(0.98);
+}
+
+.stream-preview {
+  width: 100%;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+[data-theme='dark'] .stream-preview {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stream-card-content-wrapper {
+  display: flex;
+  width: 100%;
 }
 
 .stream-card-content {
@@ -206,18 +250,21 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  text-rendering: optimizeSpeed; /* Optimize for performance over aesthetics */
 }
 
 .detail-item {
   display: flex;
   align-items: center;
   font-size: 0.85rem;
+  transform: translateZ(0); /* Create a new stacking context for better text rendering */
 }
 
 .detail-icon {
   width: 16px;
   margin-right: 10px;
   color: var(--light-text-secondary);
+  flex-shrink: 0; /* Prevent icon from shrinking */
 }
 
 [data-theme='dark'] .detail-icon {
@@ -226,6 +273,10 @@ export default {
 
 .detail-text {
   color: var(--light-text-secondary);
+  white-space: nowrap; /* Prevent text wrapping for better performance */
+  overflow: hidden;
+  text-overflow: ellipsis; /* Add ellipsis for overflowing text */
+  max-width: 100%; /* Limit text width */
 }
 
 [data-theme='dark'] .detail-text {
@@ -286,7 +337,11 @@ export default {
   justify-content: center;
   color: var(--light-text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease; /* Specific transitions for better performance */
+  will-change: transform, color; /* Hint for browser to optimize these properties */
+  transform: translateZ(0); /* Force GPU acceleration */
+  -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+  touch-action: manipulation; /* Optimize for touch */
 }
 
 [data-theme='dark'] .refresh-button {
@@ -295,6 +350,7 @@ export default {
 
 .refresh-button:active {
   background-color: rgba(0, 0, 0, 0.1);
+  transform: scale(0.95); /* Slight scale down effect on press */
 }
 
 [data-theme='dark'] .refresh-button:active {
@@ -304,6 +360,7 @@ export default {
 .refresh-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none !important; /* Prevent transform when disabled */
 }
 
 .refresh-button.refreshing {
@@ -312,5 +369,14 @@ export default {
 
 [data-theme='dark'] .refresh-button.refreshing {
   color: var(--dark-primary);
+}
+
+/* Optimized spin animation for the refresh icon */
+@keyframes optimized-spin {
+  to { transform: rotate(360deg); }
+}
+
+.refresh-button .fa-spin {
+  animation: optimized-spin 1s linear infinite;
 }
 </style>

@@ -12,6 +12,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import axios from 'axios';
 import { useToast } from 'vue-toastification';
 import io from 'socket.io-client';
+import { formatDistance } from 'date-fns';
 
 export function useMobileNotifications() {
   // State
@@ -56,9 +57,10 @@ export function useMobileNotifications() {
   
   // Connect to Socket.IO for real-time notifications
   const connectSocket = () => {
-  socket.value = io('http://54.86.99.85:5000/notifications', {
+  socket.value = io('http://54.86.99.85:5000', {
     path: '/ws',
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'],
+    secure: true
   });
     
     socket.value.on('notification', (notification) => {
@@ -138,6 +140,63 @@ export function useMobileNotifications() {
           .split('_')
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ');
+    }
+  };
+  
+  // Get notification icon based on event type
+  const getNotificationIcon = (notification) => {
+    switch (notification.event_type) {
+      case 'face_detected':
+        return 'user';
+      case 'object_detected':
+        return 'box';
+      case 'keyword_detected':
+        return 'comment';
+      case 'stream_created':
+        return 'video';
+      case 'stream_ended':
+        return 'video-slash';
+      case 'assignment_changed':
+        return 'exchange-alt';
+      case 'system_alert':
+        return 'exclamation-triangle';
+      default:
+        return 'bell';
+    }
+  };
+  
+  // Get notification color based on event type
+  const getNotificationColor = (notification) => {
+    switch (notification.event_type) {
+      case 'face_detected':
+        return '#4caf50'; // green
+      case 'object_detected':
+        return '#2196f3'; // blue
+      case 'keyword_detected':
+        return '#ff9800'; // orange
+      case 'stream_created':
+        return '#9c27b0'; // purple
+      case 'stream_ended':
+        return '#f44336'; // red
+      case 'assignment_changed':
+        return '#00bcd4'; // cyan
+      case 'system_alert':
+        return '#ff5722'; // deep orange
+      default:
+        return '#607d8b'; // blue grey
+    }
+  };
+  
+  // Format time as relative time ago (e.g. "5 minutes ago")
+  const formatTimeAgo = (timestamp) => {
+    if (!timestamp) return 'Unknown';
+    
+    try {
+      const date = new Date(timestamp);
+      return formatDistance(date, new Date(), { addSuffix: true });
+    } catch (e) {
+      console.error('Error formatting date:', e);
+      return 'Unknown';
     }
   };
   
@@ -427,6 +486,9 @@ export function useMobileNotifications() {
     deleteNotification,
     updatePreferences,
     getNotificationTitle,
-    getNotificationMessage
+    getNotificationMessage,
+    getNotificationIcon,
+    getNotificationColor,
+    formatTimeAgo
   };
 }

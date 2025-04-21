@@ -26,7 +26,7 @@
         </button>
       </div>
       
-      <!-- Add detection toggle button -->
+      <!-- Detection toggle button -->
       <div class="detection-controls">
         <button 
           class="detection-toggle" 
@@ -133,7 +133,7 @@ export default {
     // Get the global store or event bus if available
     const eventBus = inject('eventBus', null)
     
-    // Get the theme from parent component (App.vue)
+    // Get the theme from parent component
     const isDarkTheme = inject('theme', ref(true))
     
     // Computed property to determine if compact view should be used
@@ -536,7 +536,7 @@ export default {
     })
 
     // Watch for platform changes and set up viewer count refresh accordingly
-    watch(() => props.stream.platform, (newPlatform, oldPlatform) => {
+    watch(() => props.stream.platform, (newPlatform) => {
       // Clean up existing interval if any
       cleanupViewerCountRefresh()
       
@@ -560,7 +560,7 @@ export default {
       isDetectionActive,
       isDetectionLoading,
       viewers,
-      isStripchatStream, // Export computed property
+      isStripchatStream,
       addHoverAnimation,
       removeHoverAnimation,
       getStreamTime,

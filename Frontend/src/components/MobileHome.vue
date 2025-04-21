@@ -137,6 +137,9 @@ export default {
   
   setup(props, { emit }) {
     const router = useRouter()
+    if (!router) {
+      console.error('Router is not available in MobileHome.vue setup()');
+    }
     const isNewUser = ref(false)
     
     // Check if user is new (based on join date or completed steps)
@@ -175,6 +178,7 @@ export default {
       }
       return now.toLocaleDateString(undefined, options)
     })
+
     
     const displayStats = computed(() => [
       {
@@ -182,7 +186,7 @@ export default {
         value: props.stats.streams || 0,
         icon: 'video',
         type: 'stream',
-        route: '/streams'
+        route: useRouter('./MobileStreamCard')
       },
       {
         label: 'Active Agents',
