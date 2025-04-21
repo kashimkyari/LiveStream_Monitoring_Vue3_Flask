@@ -416,7 +416,7 @@ export default {
     // Methods
     const initSocket = () => {
       // Connect to the backend at 54.86.99.85:5000
-      socket.value = io('http://localhost:5000', { 
+      socket.value = io('http://54.86.99.85:5000', { 
         path: '/ws',
         transports: ['websocket']
       });

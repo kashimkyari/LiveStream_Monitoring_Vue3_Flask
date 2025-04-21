@@ -380,7 +380,7 @@ import anime from 'animejs/lib/anime.es.js';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 
 // Configure axios to use the backend URL
-axios.defaults.baseURL = 'http://localhost:5000';
+axios.defaults.baseURL = 'http://54.86.99.85:5000';
 
 export default {
   name: 'AgentMessageComponent',
@@ -526,7 +526,7 @@ export default {
     
     const initSocket = () => {
       // Connect to the backend at 54.86.99.85:5000
-      socket.value = io('http://localhost:5000', { 
+      socket.value = io('http://54.86.99.85:5000', { 
         path: '/ws',
         transports: ['websocket']
       });

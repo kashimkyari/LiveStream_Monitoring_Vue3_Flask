@@ -15341,3 +15341,305 @@ AssertionError: write() before start_response
 2025-04-21 02:35:47,615 [INFO] Agent kashim joined stream_8 room
 2025-04-21 02:35:47,618 [INFO] Agent kashim joined stream_12 room
 2025-04-21 02:37:27,170 [INFO]  * Detected change in '/home/kashim/Desktop/FinalApp/Backend/main.py', reloading
+2025-04-21 02:37:41,899 [INFO]  * Restarting with stat
+2025-04-21 02:38:15,833 [INFO] [Background] Updated proxy list with 885 proxies at 2025-04-21 02:38:15.833189
+2025-04-21 02:38:31,901 [INFO] Database tables initialized
+2025-04-21 02:38:32,802 [INFO] Admin user already exists
+2025-04-21 02:38:33,130 [INFO] Starting notification monitoring system
+2025-04-21 02:38:33,132 [INFO] Notification monitor loop started
+2025-04-21 02:38:33,133 [INFO] Notification monitoring system started successfully
+2025-04-21 02:38:33,134 [INFO] Background services started
+2025-04-21 02:38:33,134 [INFO] Running without SSL
+2025-04-21 02:38:33,259 [WARNING]  * Debugger is active!
+2025-04-21 02:38:33,297 [INFO]  * Debugger PIN: 133-044-257
+2025-04-21 02:38:33,810 [INFO] 127.0.0.1 - - [21/Apr/2025 02:38:33] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:38:33,815 [INFO] 127.0.0.1 - - [21/Apr/2025 02:38:33] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:38:33,831 [INFO] 127.0.0.1 - - [21/Apr/2025 02:38:33] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:38:33,833 [INFO] 127.0.0.1 - - [21/Apr/2025 02:38:33] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:38:33,841 [INFO] 127.0.0.1 - - [21/Apr/2025 02:38:33] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:38:33,842 [INFO] 127.0.0.1 - - [21/Apr/2025 02:38:33] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:38:33,844 [INFO] 127.0.0.1 - - [21/Apr/2025 02:38:33] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:38:33,852 [INFO] 127.0.0.1 - - [21/Apr/2025 02:38:33] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:38:33,848 [INFO] 127.0.0.1 - - [21/Apr/2025 02:38:33] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:38:33,853 [INFO] 127.0.0.1 - - [21/Apr/2025 02:38:33] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:38:33,866 [INFO] 127.0.0.1 - - [21/Apr/2025 02:38:33] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:38:33,872 [INFO] 127.0.0.1 - - [21/Apr/2025 02:38:33] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:38:33,905 [INFO] Client connected: 7rTEBSR3MmqmTFPoAAAO
+2025-04-21 02:38:33,911 [INFO] Client connected to notifications namespace: 86Lq71gzrqj2BI4EAAAQ
+2025-04-21 02:38:33,934 [INFO] Client connected: IKNA3v9HhZSkA61JAAAT
+2025-04-21 02:38:33,945 [INFO] Client connected to notifications namespace: S0DDK4dAYw5XIuwaAAAV
+2025-04-21 02:38:33,951 [INFO] Client connected: gEct7Y6hVa5YSBbwAAAW
+2025-04-21 02:38:34,012 [INFO] Client connected: 2u3wCS9zzYC_SoM7AAAX
+2025-04-21 02:38:34,034 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:38:34,037 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:38:34,039 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:38:34,039 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:38:34,041 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:38:34,041 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:38:34,041 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:38:34,041 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:38:34,042 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:38:34,042 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:38:34,042 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:38:34,043 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:38:35,093 [INFO] Client connected to notifications namespace: d0HyLMnEHX6O5pSyAAAY
+2025-04-21 02:38:35,559 [INFO] User admin joined notification room
+2025-04-21 02:38:35,560 [INFO] User admin joined role_admin room
+2025-04-21 02:38:35,808 [INFO] User kashim joined notification room
+2025-04-21 02:38:35,808 [INFO] User kashim joined role_agent room
+2025-04-21 02:38:35,809 [INFO] Agent kashim joined stream_8 room
+2025-04-21 02:38:35,809 [INFO] Agent kashim joined stream_12 room
+2025-04-21 02:38:35,868 [INFO] User kashim joined notification room
+2025-04-21 02:38:35,877 [INFO] User kashim joined role_agent room
+2025-04-21 02:38:35,878 [INFO] Agent kashim joined stream_8 room
+2025-04-21 02:38:35,878 [INFO] Agent kashim joined stream_12 room
+2025-04-21 02:38:36,038 [INFO] Client connected to notifications namespace: LfyPbudRhc3XnQnpAAAZ
+2025-04-21 02:38:36,788 [INFO] User admin joined notification room
+2025-04-21 02:38:36,790 [INFO] User admin joined role_admin room
+2025-04-21 02:40:03,651 [INFO] 127.0.0.1 - - [21/Apr/2025 02:40:03] "GET /api/session HTTP/1.1" 200 -
+2025-04-21 02:40:05,085 [INFO] 127.0.0.1 - - [21/Apr/2025 02:40:05] "GET /api/dashboard?view=mobile&mobile_optimized=true HTTP/1.1" 200 -
+2025-04-21 02:40:06,464 [INFO] 127.0.0.1 - - [21/Apr/2025 02:40:06] "GET /api/agents HTTP/1.1" 200 -
+2025-04-21 02:40:06,827 [INFO] 127.0.0.1 - - [21/Apr/2025 02:40:06] "GET /api/streams?mobile_view=true&exclude_thumbnails=true&min_data=true HTTP/1.1" 200 -
+2025-04-21 02:42:23,220 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:23] "[33mGET /notifications HTTP/1.1[0m" 404 -
+2025-04-21 02:42:23,258 [INFO] Client connected: JzNB-_GDNsWIWEL4AAAb
+2025-04-21 02:42:23,260 [INFO] Anonymous connection: JzNB-_GDNsWIWEL4AAAb
+2025-04-21 02:42:23,262 [INFO] Client connected to notifications namespace: KQl9dt5HUKWH2wxkAAAc
+2025-04-21 02:42:23,576 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:23] "[31m[1mGET /api/session HTTP/1.1[0m" 401 -
+2025-04-21 02:42:28,332 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:28] "OPTIONS /api/login HTTP/1.1" 200 -
+2025-04-21 02:42:31,211 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:31] "POST /api/login HTTP/1.1" 200 -
+2025-04-21 02:42:34,288 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:34] "GET /api/session HTTP/1.1" 200 -
+2025-04-21 02:42:36,377 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:36] "OPTIONS /api/login HTTP/1.1" 200 -
+2025-04-21 02:42:38,947 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:38] "POST /api/login HTTP/1.1" 200 -
+2025-04-21 02:42:43,166 [ERROR] Socket.IO error: register_socket_events.<locals>.handle_disconnect() takes 0 positional arguments but 1 was given
+2025-04-21 02:42:43,170 [ERROR] Socket.IO error: register_socket_events.<locals>.handle_notification_disconnect() takes 0 positional arguments but 1 was given
+2025-04-21 02:42:43,189 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:43] "[35m[1mGET /ws/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+2025-04-21 02:42:43,202 [ERROR] Error on request:
+Traceback (most recent call last):
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 336, in execute
+    write(b"")
+  File "/home/kashim/.local/lib/python3.10/site-packages/werkzeug/serving.py", line 261, in write
+    assert status_set is not None, "write() before start_response"
+AssertionError: write() before start_response
+2025-04-21 02:42:44,011 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:44] "[33mGET /notifications HTTP/1.1[0m" 404 -
+2025-04-21 02:42:44,123 [INFO] Client connected: U09RJud9xBsVgAeBAAAe
+2025-04-21 02:42:45,139 [INFO] Client connected to notifications namespace: b6JjqbNmOIt0hAROAAAf
+2025-04-21 02:42:45,838 [INFO] User admin joined notification room
+2025-04-21 02:42:45,839 [INFO] User admin joined role_admin room
+2025-04-21 02:42:46,264 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:46] "GET /api/session HTTP/1.1" 200 -
+2025-04-21 02:42:47,027 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:47] "[31m[1mGET /api/messages HTTP/1.1[0m" 405 -
+2025-04-21 02:42:47,029 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:47] "[31m[1mGET /api/messages HTTP/1.1[0m" 405 -
+2025-04-21 02:42:47,467 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:47] "GET /api/keywords HTTP/1.1" 200 -
+2025-04-21 02:42:47,503 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:47] "GET /api/telegram_recipients HTTP/1.1" 200 -
+2025-04-21 02:42:47,522 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:47] "GET /api/objects HTTP/1.1" 200 -
+2025-04-21 02:42:49,028 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:49] "GET /api/session HTTP/1.1" 200 -
+2025-04-21 02:42:49,066 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:49] "[31m[1mGET /api/messages HTTP/1.1[0m" 405 -
+2025-04-21 02:42:50,163 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:50] "GET /api/agents HTTP/1.1" 200 -
+2025-04-21 02:42:50,324 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:50] "GET /api/dashboard HTTP/1.1" 200 -
+2025-04-21 02:42:50,331 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:50] "GET /api/streams HTTP/1.1" 200 -
+2025-04-21 02:42:50,858 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:42:50,955 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:42:50,970 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:42:51,452 [INFO] Client connected: RXZuFqmqWcKgk1OtAAAi
+2025-04-21 02:42:51,459 [INFO] Client connected to notifications namespace: 1Cv_-10rwTBFRewMAAAj
+2025-04-21 02:42:52,040 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:52] "GET /api/online-users HTTP/1.1" 200 -
+2025-04-21 02:42:52,062 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:52] "GET /api/agents HTTP/1.1" 200 -
+2025-04-21 02:42:52,823 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:52] "GET /api/messages/2/unread-count HTTP/1.1" 200 -
+2025-04-21 02:42:52,829 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:52] "GET /api/messages/1/unread-count HTTP/1.1" 200 -
+2025-04-21 02:42:52,832 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:52] "GET /api/session HTTP/1.1" 200 -
+2025-04-21 02:42:56,518 [INFO] 127.0.0.1 - - [21/Apr/2025 02:42:56] "GET /api/notifications HTTP/1.1" 200 -
+2025-04-21 02:42:59,054 [INFO] User admin joined notification room
+2025-04-21 02:42:59,056 [INFO] User admin joined role_admin room
+2025-04-21 02:43:20,865 [INFO] 127.0.0.1 - - [21/Apr/2025 02:43:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:43:20,953 [INFO] 127.0.0.1 - - [21/Apr/2025 02:43:20] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:43:20,964 [INFO] 127.0.0.1 - - [21/Apr/2025 02:43:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:43:50,865 [INFO] 127.0.0.1 - - [21/Apr/2025 02:43:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:43:50,887 [INFO] 127.0.0.1 - - [21/Apr/2025 02:43:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:43:50,934 [INFO] 127.0.0.1 - - [21/Apr/2025 02:43:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:44:20,852 [INFO] 127.0.0.1 - - [21/Apr/2025 02:44:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:44:20,925 [INFO] 127.0.0.1 - - [21/Apr/2025 02:44:20] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:44:20,933 [INFO] 127.0.0.1 - - [21/Apr/2025 02:44:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:44:50,867 [INFO] 127.0.0.1 - - [21/Apr/2025 02:44:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:44:50,888 [INFO] 127.0.0.1 - - [21/Apr/2025 02:44:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:44:50,923 [INFO] 127.0.0.1 - - [21/Apr/2025 02:44:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:45:08,996 [INFO] 127.0.0.1 - - [21/Apr/2025 02:45:08] "GET /api/session HTTP/1.1" 200 -
+2025-04-21 02:45:10,239 [INFO] 127.0.0.1 - - [21/Apr/2025 02:45:10] "GET /api/dashboard?view=mobile&mobile_optimized=true HTTP/1.1" 200 -
+2025-04-21 02:45:11,664 [INFO] 127.0.0.1 - - [21/Apr/2025 02:45:11] "GET /api/agents HTTP/1.1" 200 -
+2025-04-21 02:45:11,867 [INFO] 127.0.0.1 - - [21/Apr/2025 02:45:11] "GET /api/streams?mobile_view=true&exclude_thumbnails=true&min_data=true HTTP/1.1" 200 -
+2025-04-21 02:45:21,014 [INFO] 127.0.0.1 - - [21/Apr/2025 02:45:21] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:45:21,023 [INFO] 127.0.0.1 - - [21/Apr/2025 02:45:21] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:45:21,050 [INFO] 127.0.0.1 - - [21/Apr/2025 02:45:21] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:45:50,859 [INFO] 127.0.0.1 - - [21/Apr/2025 02:45:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:45:50,916 [INFO] 127.0.0.1 - - [21/Apr/2025 02:45:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:45:51,025 [INFO] 127.0.0.1 - - [21/Apr/2025 02:45:51] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:46:20,860 [INFO] 127.0.0.1 - - [21/Apr/2025 02:46:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:46:20,908 [INFO] 127.0.0.1 - - [21/Apr/2025 02:46:20] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:46:21,013 [INFO] 127.0.0.1 - - [21/Apr/2025 02:46:21] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:46:50,894 [INFO] 127.0.0.1 - - [21/Apr/2025 02:46:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:46:50,920 [INFO] 127.0.0.1 - - [21/Apr/2025 02:46:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:46:50,976 [INFO] 127.0.0.1 - - [21/Apr/2025 02:46:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:47:20,855 [INFO] 127.0.0.1 - - [21/Apr/2025 02:47:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:47:20,892 [INFO] 127.0.0.1 - - [21/Apr/2025 02:47:20] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:47:20,932 [INFO] 127.0.0.1 - - [21/Apr/2025 02:47:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:47:50,864 [INFO] 127.0.0.1 - - [21/Apr/2025 02:47:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:47:50,898 [INFO] 127.0.0.1 - - [21/Apr/2025 02:47:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:47:50,932 [INFO] 127.0.0.1 - - [21/Apr/2025 02:47:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:48:20,860 [INFO] 127.0.0.1 - - [21/Apr/2025 02:48:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:48:20,894 [INFO] 127.0.0.1 - - [21/Apr/2025 02:48:20] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:48:20,947 [INFO] 127.0.0.1 - - [21/Apr/2025 02:48:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:48:50,953 [INFO] 127.0.0.1 - - [21/Apr/2025 02:48:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:48:50,966 [INFO] 127.0.0.1 - - [21/Apr/2025 02:48:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:48:50,992 [INFO] 127.0.0.1 - - [21/Apr/2025 02:48:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:49:20,858 [INFO] 127.0.0.1 - - [21/Apr/2025 02:49:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:49:20,892 [INFO] 127.0.0.1 - - [21/Apr/2025 02:49:20] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:49:20,931 [INFO] 127.0.0.1 - - [21/Apr/2025 02:49:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:49:50,910 [INFO] 127.0.0.1 - - [21/Apr/2025 02:49:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:49:50,973 [INFO] 127.0.0.1 - - [21/Apr/2025 02:49:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:49:51,143 [INFO] 127.0.0.1 - - [21/Apr/2025 02:49:51] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:50:14,104 [INFO] 127.0.0.1 - - [21/Apr/2025 02:50:14] "GET /api/session HTTP/1.1" 200 -
+2025-04-21 02:50:15,545 [INFO] 127.0.0.1 - - [21/Apr/2025 02:50:15] "GET /api/dashboard?view=mobile&mobile_optimized=true HTTP/1.1" 200 -
+2025-04-21 02:50:16,826 [INFO] 127.0.0.1 - - [21/Apr/2025 02:50:16] "GET /api/agents HTTP/1.1" 200 -
+2025-04-21 02:50:17,031 [INFO] 127.0.0.1 - - [21/Apr/2025 02:50:17] "GET /api/streams?mobile_view=true&exclude_thumbnails=true&min_data=true HTTP/1.1" 200 -
+2025-04-21 02:50:20,861 [INFO] 127.0.0.1 - - [21/Apr/2025 02:50:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:50:20,890 [INFO] 127.0.0.1 - - [21/Apr/2025 02:50:20] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:50:20,936 [INFO] 127.0.0.1 - - [21/Apr/2025 02:50:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:50:50,906 [INFO] 127.0.0.1 - - [21/Apr/2025 02:50:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:50:50,939 [INFO] 127.0.0.1 - - [21/Apr/2025 02:50:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:50:50,967 [INFO] 127.0.0.1 - - [21/Apr/2025 02:50:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:51:20,859 [INFO] 127.0.0.1 - - [21/Apr/2025 02:51:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:51:20,893 [INFO] 127.0.0.1 - - [21/Apr/2025 02:51:20] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:51:20,932 [INFO] 127.0.0.1 - - [21/Apr/2025 02:51:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:51:50,869 [INFO] 127.0.0.1 - - [21/Apr/2025 02:51:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:51:50,918 [INFO] 127.0.0.1 - - [21/Apr/2025 02:51:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:51:51,022 [INFO] 127.0.0.1 - - [21/Apr/2025 02:51:51] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:52:20,860 [INFO] 127.0.0.1 - - [21/Apr/2025 02:52:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:52:20,895 [INFO] 127.0.0.1 - - [21/Apr/2025 02:52:20] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:52:20,940 [INFO] 127.0.0.1 - - [21/Apr/2025 02:52:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:52:50,867 [INFO] 127.0.0.1 - - [21/Apr/2025 02:52:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:52:50,917 [INFO] 127.0.0.1 - - [21/Apr/2025 02:52:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:52:51,013 [INFO] 127.0.0.1 - - [21/Apr/2025 02:52:51] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:53:20,879 [INFO] 127.0.0.1 - - [21/Apr/2025 02:53:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:53:21,067 [INFO] 127.0.0.1 - - [21/Apr/2025 02:53:21] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:53:21,074 [INFO] 127.0.0.1 - - [21/Apr/2025 02:53:21] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:53:50,869 [INFO] 127.0.0.1 - - [21/Apr/2025 02:53:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:53:50,912 [INFO] 127.0.0.1 - - [21/Apr/2025 02:53:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:53:50,975 [INFO] 127.0.0.1 - - [21/Apr/2025 02:53:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:54:21,007 [INFO] 127.0.0.1 - - [21/Apr/2025 02:54:21] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:54:21,075 [INFO] 127.0.0.1 - - [21/Apr/2025 02:54:21] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:54:21,156 [INFO] 127.0.0.1 - - [21/Apr/2025 02:54:21] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:54:50,881 [INFO] 127.0.0.1 - - [21/Apr/2025 02:54:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:54:50,939 [INFO] 127.0.0.1 - - [21/Apr/2025 02:54:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:54:51,012 [INFO] 127.0.0.1 - - [21/Apr/2025 02:54:51] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:55:19,589 [INFO] 127.0.0.1 - - [21/Apr/2025 02:55:19] "GET /api/session HTTP/1.1" 200 -
+2025-04-21 02:55:20,869 [INFO] 127.0.0.1 - - [21/Apr/2025 02:55:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:55:20,909 [INFO] 127.0.0.1 - - [21/Apr/2025 02:55:20] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:55:20,975 [INFO] 127.0.0.1 - - [21/Apr/2025 02:55:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:55:21,033 [INFO] 127.0.0.1 - - [21/Apr/2025 02:55:21] "GET /api/dashboard?view=mobile&mobile_optimized=true HTTP/1.1" 200 -
+2025-04-21 02:55:22,083 [INFO] 127.0.0.1 - - [21/Apr/2025 02:55:22] "GET /api/agents HTTP/1.1" 200 -
+2025-04-21 02:55:22,288 [INFO] 127.0.0.1 - - [21/Apr/2025 02:55:22] "GET /api/streams?mobile_view=true&exclude_thumbnails=true&min_data=true HTTP/1.1" 200 -
+2025-04-21 02:55:50,865 [INFO] 127.0.0.1 - - [21/Apr/2025 02:55:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:55:50,894 [INFO] 127.0.0.1 - - [21/Apr/2025 02:55:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:55:50,952 [INFO] 127.0.0.1 - - [21/Apr/2025 02:55:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:56:20,863 [INFO] 127.0.0.1 - - [21/Apr/2025 02:56:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:56:20,898 [INFO] 127.0.0.1 - - [21/Apr/2025 02:56:20] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:56:20,960 [INFO] 127.0.0.1 - - [21/Apr/2025 02:56:20] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:56:50,866 [INFO] 127.0.0.1 - - [21/Apr/2025 02:56:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/159625023/master/159625023_auto.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:56:50,897 [INFO] 127.0.0.1 - - [21/Apr/2025 02:56:50] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
+2025-04-21 02:56:50,997 [INFO] 127.0.0.1 - - [21/Apr/2025 02:56:50] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
