@@ -291,7 +291,7 @@ export function useMobileNotifications() {
     
     try {
       // Use the agent notifications endpoint from the documentation
-      const response = await axios.get('/notifications');
+      const response = await axios.get('/api/notifications');
       
       if (response.data) {
         notifications.value = response.data;
