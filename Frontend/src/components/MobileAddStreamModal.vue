@@ -116,7 +116,8 @@ export default {
     // Form data
     const formData = ref({
       room_url: '',
-      platform: ''
+      platform: '',
+      agent_id: ''
     })
     
     // UI states
