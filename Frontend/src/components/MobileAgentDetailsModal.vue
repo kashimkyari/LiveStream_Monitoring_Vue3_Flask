@@ -184,7 +184,7 @@ export default {
         message.value = '';
         
         // Add mobile optimization parameter
-        await MobileStreamService.getOptimizedRequest(`/api/agents/${agent.id}?mobile_optimized=true`, { _method: 'DELETE' });
+        await MobileStreamService.getOptimizedRequest(`/api/agents/${agent.id}`, { _method: 'DELETE' });
         
         toast.success('Agent deleted successfully');
         emit('agent-deleted', agent.id);

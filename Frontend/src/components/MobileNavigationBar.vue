@@ -229,7 +229,7 @@ export default {
       loggingOut.value = true;
       
       try {
-        await axios.post('/api/auth/logout');
+        await axios.post('/api/logout');
         
         // Show toast and wait briefly before clearing localStorage and redirecting
         toast.success('Logged out successfully');
