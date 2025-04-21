@@ -138,7 +138,7 @@ except Exception as e:
     logging.error("Background services failed: %s", e)
 
 if __name__ == "__main__":
-    debug = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
+    debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
     if os.getenv('ENABLE_SSL', 'false').lower() == 'true':
         cert_dir = os.path.expanduser(os.getenv('CERT_DIR', '~/certs'))
         ssl_cert = os.path.join(cert_dir, 'fullchain.pem')
