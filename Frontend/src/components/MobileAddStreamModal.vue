@@ -139,7 +139,7 @@ export default {
         message.value = ''
         
         // Mobile optimization: Add mobile parameter to reduce data usage
-        const response = await axios.post('/api/streams?mobile_optimized=true', {
+        const response = await axios.post('/api/streams', {
           ...formData.value,
           mobile: true
         })
@@ -203,7 +203,7 @@ export default {
       
       try {
         // Mobile optimization: Add mobile parameter to reduce data usage
-        const response = await axios.get(`/api/jobs/${jobId.value}?mobile_optimized=true`)
+        const response = await axios.get(`/api/streams/interactive/sse?job_id=${jobId.value}`)
         
         jobStatus.value = response.data.status
         jobProgress.value = response.data.progress_message || ''
