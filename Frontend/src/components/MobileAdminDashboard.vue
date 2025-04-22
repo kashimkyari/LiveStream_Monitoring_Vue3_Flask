@@ -747,7 +747,7 @@ export default {
       try {
         await axios.post('/api/logout')
         toast.info('Logged out successfully')
-        router.push('/login')
+        window.location.href = '/'
       } catch (error) {
         console.error('Logout failed:', error)
         toast.error('Logout failed')

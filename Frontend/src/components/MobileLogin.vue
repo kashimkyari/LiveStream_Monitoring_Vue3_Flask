@@ -149,6 +149,7 @@ export default {
           
           toast.success('Login successful!');
           emit('login-success', result.user);
+
         } else {
           const errorMsg = result.message || 'Login failed. Please try again.';
           errorMessage.value = errorMsg;
@@ -180,6 +181,7 @@ export default {
         }
       } finally {
         isLoading.value = false;
+        window.location.href = '/';
       }
     };
     

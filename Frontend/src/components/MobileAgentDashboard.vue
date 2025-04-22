@@ -365,6 +365,7 @@ import { formatDistance, format } from 'date-fns'
 import { useMobileNotifications } from '../composables/useMobileNotifications'
 import anime from 'animejs/lib/anime.es'
 import io from 'socket.io-client'
+import axios from 'axios'
 
 export default {
   name: 'MobileAgentDashboard',
@@ -555,7 +556,7 @@ export default {
           // local storage will always be cleared, so we don't need to do it again here
           
           // Notify parent component about logout
-          const logout = inject('logout')
+          const logout = await axios.post('/api/logout');
           if (typeof logout === 'function') {
             logout(true) // This will navigate to login page
           } else {
