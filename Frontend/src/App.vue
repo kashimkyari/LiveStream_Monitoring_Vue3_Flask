@@ -9,7 +9,11 @@
     
     <!-- Loading spinner while checking authentication -->
     <div v-if="isCheckingAuth" class="loading-overlay">
-      <div class="spinner-container" ref="spinnerContainer">
+      <div 
+      class="spinner-container" 
+      ref="spinnerContainer" 
+      @mouseenter="handleSpinnerHover" 
+      @mouseleave="handleSpinnerLeave">
         <div class="spinner">
           <div class="spinner-circle" v-for="n in 12" :key="n" :style="`--i: ${n}`"></div>
         </div>
@@ -106,534 +110,272 @@
   </div>
 </template>
 
-<script>
-import { ref, onMounted, onBeforeUnmount, watch, provide } from 'vue'
+<script setup>
+import { ref, onMounted, watch, provide } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
-import { 
-  faMoon, faSun, faSignOutAlt, faBroadcastTower,
-  faTachometerAlt, faVideo, faExclamationTriangle, faChartLine, faCog, faUserLock, faUser, faLock,
-  faBell, faComment, faCommentAlt, faEye, faCommentDots
+import {
+  faMoon, faSun, faSignOutAlt, faBroadcastTower, faTachometerAlt,
+  faVideo, faExclamationTriangle, faChartLine, faCog, faUserLock,
+  faUser, faLock, faBell, faComment, faCommentAlt, faEye, faCommentDots
 } from '@fortawesome/free-solid-svg-icons'
 import axios from 'axios'
 import anime from 'animejs/lib/anime.es.js'
+
+// Components
 import LoginComponent from './components/Login.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
 import AgentDashboard from './components/AgentDashboard.vue'
-// Import mobile versions of dashboards
 import MobileAdminDashboard from './components/MobileAdminDashboard.vue'
 import MobileAgentDashboard from './components/MobileAgentDashboard.vue'
-// Import mobile authentication components
 import MobileLoginComponent from './components/MobileLogin.vue'
 import MobileCreateAccount from './components/MobileCreateAccount.vue'
 import MobileForgotPassword from './components/MobileForgotPassword.vue'
-// Import mobile notification components
 import MobileDetectionNotification from './components/MobileDetectionNotification.vue'
-// These components are used by child components
-// import MobileNavigationBar from './components/MobileNavigationBar.vue'
-// import MobileNotificationBadge from './components/MobileNotificationBadge.vue'
-import { useToast } from "vue-toastification"
-import "vue-toastification/dist/index.css"
+
+// Toasts & utilities
+import { useToast } from 'vue-toastification'
+import 'vue-toastification/dist/index.css'
 import { useIsMobile } from './composables/useIsMobile'
-// import { useMobileNotifications } from './composables/useMobileNotifications'
 
-// Add all required icons
-library.add(
-  faMoon, faSun, faSignOutAlt, faBroadcastTower,
-  faTachometerAlt, faVideo, faExclamationTriangle, faChartLine, faCog,
-  faUserLock, faUser, faLock, faBell, faComment, faCommentAlt, 
-  faEye, faCommentDots
-)
+// Icon setup
+const faIcons = [
+  faMoon, faSun, faSignOutAlt, faBroadcastTower, faTachometerAlt,
+  faVideo, faExclamationTriangle, faChartLine, faCog, faUserLock,
+  faUser, faLock, faBell, faComment, faCommentAlt, faEye, faCommentDots
+]
+library.add(...faIcons)
 
-export default {
-  name: 'App',
-  components: {
-    FontAwesomeIcon,
-    LoginComponent,
-    AdminDashboard,
-    AgentDashboard,
-    MobileAdminDashboard,
-    MobileAgentDashboard,
-    MobileDetectionNotification,
-    MobileLoginComponent,
-    MobileCreateAccount,
-    MobileForgotPassword
-  },
-  setup() {
-    const toast = useToast();
-    const isDarkTheme = ref(true)
-    const isLoggedIn = ref(false)
-    const isCheckingAuth = ref(true)
-    const userRole = ref(null)
-    const appContainer = ref(null)
-    const themeToggle = ref(null)
-    const sidebar = ref(null)
-    const logoutButton = ref(null)
-    const dashboardContainer = ref(null)
-    const spinnerContainer = ref(null)
-    const showDebugInfo = ref(false) // Set to true to show debug info
-    const mobileAuthView = ref('login') // Controls which mobile auth component to show
-    
-    // Use mobile detection composable
-    const { isMobile } = useIsMobile()
-    
-    // Use mobile notifications composable
-    // const { 
-    //   unreadCount: unreadNotificationCount, 
-    //   markAsRead,
-    //   markAllAsRead,
-    //   toggleGroupByType,
-    //   toggleGroupByStream
-    // } = useMobileNotifications()
-    
-    // Provide theme to child components
-    provide('theme', isDarkTheme)
-    
-    // Provide notification data to child components
-    // provide('unreadNotifications', unreadNotificationCount)
-    
-    // Handle detection notification click
-    const handleDetectionClick = (detection) => {
-      console.log('Detection notification clicked:', detection);
-      
-      // If it's a streaming detection, navigate to the stream view
-      if (detection?.room_url) {
-        toast.info(`Navigating to stream: ${detection.streamer || 'Unknown'}`);
-        
-        // Navigate to appropriate view based on detection type
-        if (detection.event_type === 'keyword_detected') {
-          // For keyword detection, go to chat monitoring
-          // If we have a stream ID, use that for direct navigation
-          const streamId = detection.stream_id || detection.details?.stream_id;
-          if (streamId) {
-            // Implement appropriate navigation logic here
-            console.log(`View stream ${streamId} chat`);
-          }
-        } else if (detection.event_type === 'object_detected') {
-          // For object detection, go to video monitoring
-          const streamId = detection.stream_id || detection.details?.stream_id;
-          if (streamId) {
-            // Implement appropriate navigation logic here
-            console.log(`View stream ${streamId} video`);
-          }
-        }
-        
-        // Mark as read
-        // if (detection.id) {
-        //   markAsRead(detection.id);
-        // }
-      }
-    };
-    
-    // Initial setup
-    onMounted(() => {
-      console.log("App component mounted")
-      
-      // Load theme preference
-      const savedTheme = localStorage.getItem('themePreference')
-      isDarkTheme.value = savedTheme ? savedTheme === 'dark' : true
-      
-      // Set up axios defaults
-      axios.defaults.baseURL = "http://54.86.99.85:5000"
-      axios.defaults.withCredentials = true
-      
-      // Apply theme to document
-      document.documentElement.setAttribute('data-theme', isDarkTheme.value ? 'dark' : 'light')
-      
-      // Apply theme colors to all areas of the document
-      document.documentElement.style.backgroundColor = isDarkTheme.value ? 'var(--dark-bg)' : 'var(--light-bg)'
-      document.body.style.backgroundColor = isDarkTheme.value ? 'var(--dark-bg)' : 'var(--light-bg)'
-      document.documentElement.style.color = isDarkTheme.value ? 'var(--dark-text)' : 'var(--light-text)'
-      document.body.style.color = isDarkTheme.value ? 'var(--dark-text)' : 'var(--light-text)'
-      
-      // Listen for window resize events
-      window.addEventListener('resize', handleResize)
-      handleResize()
-      
-      // Initialize spinner animation
-      initSpinnerAnimation();
-      
-      // Check user authentication status with a small delay for spinner to show
-      setTimeout(() => {
-        checkAuthentication()
-      }, 200)
-    })
-    
-    onBeforeUnmount(() => {
-      window.removeEventListener('resize', handleResize)
-    })
-    
-    // Watch for theme changes
-    watch(isDarkTheme, (newValue) => {
-      // Update document theme and background color when theme changes
-      document.documentElement.setAttribute('data-theme', newValue ? 'dark' : 'light')
-      
-      // These are backup styles in case the CSS variables don't apply
-      document.documentElement.style.backgroundColor = newValue ? 'var(--dark-bg)' : 'var(--light-bg)'
-      document.body.style.backgroundColor = newValue ? 'var(--dark-bg)' : 'var(--light-bg)'
-      
-      // Ensure all areas use theme colors
-      document.documentElement.style.color = newValue ? 'var(--dark-text)' : 'var(--light-text)'
-      document.body.style.color = newValue ? 'var(--dark-text)' : 'var(--light-text)'
-      
-      // Save theme preference to localStorage
-      localStorage.setItem('themePreference', newValue ? 'dark' : 'light')
-    })
-    
-    // Method to update theme from child components
-    const updateTheme = (isDark) => {
-      isDarkTheme.value = isDark
-    }
-    
-    // Provide theme update method to child components
-    provide('updateTheme', updateTheme)
-    
-    // Initialize loading spinner animation
-    const initSpinnerAnimation = () => {
-      if (!spinnerContainer.value) return;
-      
-      // Simplify animations on mobile to save resources
-      const animationDuration = isMobile.value ? 400 : 800;
-      
-      // Animate the spinner container
-      anime({
-        targets: spinnerContainer.value,
-        opacity: [0, 1],
-        translateY: ['-20px', '0px'],
-        duration: animationDuration,
-        easing: 'easeOutExpo'
-      });
-      
-      // Animate the spinner circles - simpler on mobile
-      anime({
-        targets: '.spinner-circle',
-        scale: [0, 1],
-        opacity: [0, 1],
-        delay: anime.stagger(isMobile.value ? 50 : 100, {start: isMobile.value ? 150 : 300}),
-        easing: 'easeOutExpo'
-      });
-      
-      // Pulsing animation for the text
-      anime({
-        targets: '.spinner-text',
-        opacity: [0.6, 1],
-        duration: 800,
-        direction: 'alternate',
-        loop: true,
-        easing: 'easeInOutSine'
-      });
-      
-      // Continuous rotation animation
-      anime({
-        targets: '.spinner',
-        rotate: '360deg',
-        duration: 2000,
-        loop: true,
-        easing: 'linear'
-      });
-      
-      // Interactive hover effect setup - skip on mobile
-      if (!isMobile.value) {
-        const spinnerEl = document.querySelector('.spinner-container');
-        if (spinnerEl) {
-          spinnerEl.addEventListener('mouseenter', () => {
-            anime({
-              targets: '.spinner-circle',
-              scale: 1.2,
-              duration: 300,
-              easing: 'easeOutElastic(1, .5)'
-            });
-          });
-          
-          spinnerEl.addEventListener('mouseleave', () => {
-            anime({
-              targets: '.spinner-circle',
-              scale: 1,
-              duration: 500,
-              easing: 'easeOutElastic(1, .5)'
-            });
-          });
-        }
-      }
-    };
-    
-    // Methods
-    const toggleTheme = () => {
-      // Skip complex animation on mobile for better performance
-      if (isMobile.value) {
-        isDarkTheme.value = !isDarkTheme.value
-        localStorage.setItem('themePreference', isDarkTheme.value ? 'dark' : 'light')
-        return;
-      }
-      
-      // Create a circular overlay element for the animation
-      const overlay = document.createElement('div')
-      overlay.className = 'theme-overlay'
-      overlay.style.position = 'fixed'
-      overlay.style.zIndex = '-1'
-      overlay.style.borderRadius = '50%'
-      overlay.style.transform = 'scale(0)'
-      
-      // Get the toggle button position to make the animation start from there
-      const toggleRect = themeToggle.value.getBoundingClientRect()
-      const centerX = toggleRect.left + toggleRect.width / 2
-      const centerY = toggleRect.top + toggleRect.height / 2
-      
-      overlay.style.top = `${centerY}px`
-      overlay.style.left = `${centerX}px`
-      
-      // Set the color for the opposite theme
-      overlay.style.backgroundColor = isDarkTheme.value ? 'var(--light-bg)' : 'var(--dark-bg)'
-      
-      // Add to DOM
-      document.body.appendChild(overlay)
-      
-      // Animate the toggle icon
-      anime({
-        targets: themeToggle.value,
-        rotate: '+=360',
-        scale: [1, 1.2, 1],
-        duration: 800,
-        easing: 'easeInOutBack'
-      })
-      
-      // Calculate the maximum dimension to ensure the circle covers the entire screen
-      const maxDim = Math.max(
-        window.innerWidth * 2,
-        window.innerHeight * 2
-      )
-      
-      // Animate the overlay
+// State & refs
+const toast = useToast()
+const isDarkTheme = ref(true)
+const isLoggedIn = ref(false)
+const isCheckingAuth = ref(true)
+const userRole = ref(null)
+const appContainer = ref(null)
+const themeToggle = ref(null)
+const sidebar = ref(null)
+const logoutButton = ref(null)
+const dashboardContainer = ref(null)
+const spinnerContainer = ref(null)
+const spinner = ref(null)
+const showDebugInfo = ref(false)
+const mobileAuthView = ref('login')
+
+// Composables
+const { isMobile } = useIsMobile()
+
+// Animation configurations
+const animationConfig = {
+  basic: { duration: 800, easing: 'easeOutExpo' },
+  mobile: { duration: 400, easing: 'easeOutExpo' }
+}
+
+const getAnimationParams = () => 
+  isMobile.value ? animationConfig.mobile : animationConfig.basic
+
+// Provide theme state and updater
+provide('theme', isDarkTheme)
+provide('updateTheme', (isDark) => { isDarkTheme.value = isDark })
+
+// Theme handling
+watch(isDarkTheme, (newValue) => {
+  const theme = newValue ? 'dark' : 'light'
+  document.documentElement.setAttribute('data-theme', theme)
+  localStorage.setItem('themePreference', theme)
+})
+
+// Theme toggler with animation
+const toggleTheme = () => {
+  const themeChanged = () => {
+    isDarkTheme.value = !isDarkTheme.value
+    localStorage.setItem('themePreference', isDarkTheme.value ? 'dark' : 'light')
+  }
+
+  if (isMobile.value) return themeChanged()
+
+  const overlay = document.createElement('div')
+  overlay.className = 'theme-overlay'
+  const toggleRect = themeToggle.value.getBoundingClientRect()
+  const centerX = toggleRect.left + toggleRect.width / 2
+  const centerY = toggleRect.top + toggleRect.height / 2
+
+  Object.assign(overlay.style, {
+    position: 'fixed',
+    zIndex: '-1',
+    borderRadius: '50%',
+    transform: 'scale(0)',
+    top: `${centerY}px`,
+    left: `${centerX}px`,
+    backgroundColor: isDarkTheme.value ? 'var(--light-bg)' : 'var(--dark-bg)'
+  })
+
+  document.body.appendChild(overlay)
+
+  anime({
+    targets: themeToggle.value,
+    rotate: '+=360',
+    scale: [1, 1.2, 1],
+    ...getAnimationParams(),
+    easing: 'easeInOutBack'
+  })
+
+  const maxDim = Math.max(window.innerWidth * 2, window.innerHeight * 2)
+  anime({
+    targets: overlay,
+    scale: [0, Math.ceil(maxDim / 100)],
+    opacity: [0.8, 1],
+    ...getAnimationParams(),
+    complete: () => {
+      themeChanged()
       anime({
         targets: overlay,
-        scale: [0, Math.ceil(maxDim / 100)],
-        opacity: [0.8, 1],
-        duration: 700,
-        easing: 'easeOutQuad',
-        complete: () => {
-          // Change theme state
-          isDarkTheme.value = !isDarkTheme.value
-          localStorage.setItem('themePreference', isDarkTheme.value ? 'dark' : 'light')
-          
-          // Update text color for elements
-          const newTextColor = isDarkTheme.value ? 'var(--dark-text)' : 'var(--light-text)'
-          anime({
-            targets: ['body', '#app'],
-            color: newTextColor,
-            duration: 300,
-            easing: 'easeOutQuad'
-          })
-          
-          // Fade out and remove the overlay
-          anime({
-            targets: overlay,
-            opacity: 0,
-            duration: 400,
-            easing: 'easeInQuad',
-            delay: 200,
-            complete: () => {
-              document.body.removeChild(overlay)
-            }
-          })
-          
-          // Apply subtle fade animation to all content
-          anime({
-            targets: '.content-area, .sidebar, .header-controls',
-            opacity: [0.85, 1],
-            duration: 500,
-            easing: 'easeOutExpo'
-          })
-        }
+        opacity: 0,
+        duration: 400,
+        easing: 'easeInQuad',
+        delay: 200,
+        complete: () => document.body.removeChild(overlay)
       })
     }
-    
-    const animateControls = () => {
-      console.log("Animating controls")
-      
-      // Use simplified animations for mobile
-      const animDuration = isMobile.value ? 400 : 800;
-      
-      // Animate header controls with a smooth entrance
-      anime({
-        targets: '.header-controls',
-        translateY: ['-50px', '0'],
-        opacity: [0, 1],
-        duration: animDuration,
-        easing: 'easeOutExpo'
-      })
-      
-      // Animate sidebar if available
-      if (sidebar.value && isLoggedIn.value) {
-        anime({
-          targets: sidebar.value,
-          translateX: ['-100%', '0'],
-          opacity: [0, 1],
-          duration: animDuration,
-          easing: 'easeOutExpo',
-          delay: isMobile.value ? 100 : 200
-        })
-        
-        // Animate sidebar items - simplify for mobile
-        anime({
-          targets: sidebar.value.querySelectorAll('.sidebar-item'),
-          translateX: ['-30px', '0'],
-          opacity: [0, 1],
-          delay: anime.stagger(isMobile.value ? 40 : 80, {start: isMobile.value ? 300 : 600}),
-          duration: isMobile.value ? 300 : 600,
-          easing: 'easeOutCubic'
-        })
-      }
-      
-      // Animate logout button appearance if available
-      if (logoutButton.value) {
-        anime({
-          targets: logoutButton.value,
-          translateY: ['20px', '0'],
-          opacity: [0, 1],
-          delay: isMobile.value ? 600 : 1200,
-          duration: isMobile.value ? 300 : 600,
-          easing: 'easeOutExpo'
-        })
-      }
-    }
-    
-    const checkAuthentication = async () => {
-      try {
-        console.log("Checking authentication status...")
-        const response = await axios.get('/api/session');
-        
-        if (response.data.isLoggedIn) {
-          console.log("User is logged in as:", response.data.user.role)
-          isLoggedIn.value = true;
-          userRole.value = response.data.user.role;
-          localStorage.setItem('userRole', response.data.user.role);
-          
-          // Animate loading spinner exit
-          anime({
-            targets: spinnerContainer.value,
-            translateY: [0, '-20px'],
-            opacity: [1, 0],
-            duration: isMobile.value ? 300 : 600,
-            easing: 'easeInOutExpo',
-            complete: () => {
-              // Set checking state to false only after animation completes
-              isCheckingAuth.value = false;
-              
-              // Apply animations after login state is confirmed
-              setTimeout(() => {
-                animateControls();
-              }, 100);
-            }
-          });
-        } else {
-          console.log("User is not logged in")
-          
-          // Animate loading spinner exit
-          anime({
-            targets: spinnerContainer.value,
-            translateY: [0, '-20px'],
-            opacity: [1, 0],
-            duration: isMobile.value ? 300 : 600,
-            easing: 'easeInOutExpo',
-            complete: () => {
-              logout(false);
-              isCheckingAuth.value = false;
-            }
-          });
-        }
-      } catch (error) {
-        console.error('Authentication check failed:', error);
-        
-        // More specific error handling
-        if (error.response && error.response.status === 401) {
-          // Session expired or invalid
-          toast.warning("Your session has expired. Please log in again.");
-        } else {
-          // Network error or server error
-          toast.error("Could not verify login status. Please check your connection.");
-        }
-        
-        // Animate loading spinner exit
-        anime({
-          targets: spinnerContainer.value,
-          translateY: [0, '-20px'],
-          opacity: [1, 0],
-          duration: isMobile.value ? 300 : 600,
-          easing: 'easeInOutExpo',
-          complete: () => {
-            logout(false);
-            isCheckingAuth.value = false;
-          }
-        });
-      }
-    };
-    
-    const handleLoginSuccess = (userData) => {
-      console.log("Login successful:", userData);
-      isLoggedIn.value = true;
-      userRole.value = userData.role;
-      
-      // Store user role in localStorage
-      localStorage.setItem('userRole', userData.role);
-    };
-    
-    const handleAccountCreated = (username) => {
-      console.log("Account created successfully for:", username);
-      
-      // Show success message
-      toast.success(`Account created for ${username}! You can now log in.`);
-      
-      // Switch back to login view
-      mobileAuthView.value = 'login';
-      
-      // Apply entrance animations
-      setTimeout(() => {
-        animateControls();
-      }, 100);
-    };
-    
-    const logout = (showAlert = true) => {
-      console.log("Logging out");
-      localStorage.removeItem('userRole');
-      isLoggedIn.value = false;
-      userRole.value = null;
-      
-      if (showAlert) {
-        toast.info("You have been logged out");
-      }
-    };
-    
-    const handleResize = () => {
-      // For any window resize operations beyond what the useIsMobile composable handles
-      console.log("Window resized - handled by useIsMobile composable");
-    };
-    
-    return {
-      isMobile,
-      isDarkTheme,
-      isLoggedIn,
-      isCheckingAuth,
-      userRole,
-      showDebugInfo,
-      appContainer,
-      themeToggle,
-      sidebar,
-      dashboardContainer,
-      handleDetectionClick,
-      // unreadNotificationCount,
-      // markAsRead,
-      // markAllAsRead,
-      // toggleGroupByType,
-      // toggleGroupByStream,
-      spinnerContainer,
-      toggleTheme,
-      handleLoginSuccess,
-      handleAccountCreated,
-      mobileAuthView,
-      logout
-    }
+  })
+}
+
+// Spinner animation
+const initSpinnerAnimation = () => {
+  if (!spinnerContainer.value) return
+  const { duration } = getAnimationParams()
+
+  anime({
+    targets: spinnerContainer.value,
+    opacity: [0, 1],
+    translateY: ['-20px', '0px'],
+    ...getAnimationParams()
+  })
+
+  anime({
+    targets: spinnerContainer.value.querySelectorAll('.spinner-circle'),
+    scale: [0, 1],
+    opacity: [0, 1],
+    delay: anime.stagger(duration / 8),
+    easing: 'easeOutExpo'
+  })
+
+  anime({
+    targets: spinner.value,
+    rotate: '360deg',
+    duration: 2000,
+    loop: true,
+    easing: 'linear'
+  })
+}
+
+// Authentication handling
+const hideSpinner = () => {
+  anime({
+    targets: spinnerContainer.value,
+    translateY: [0, '-20px'],
+    opacity: [1, 0],
+    ...getAnimationParams(),
+    complete: () => (isCheckingAuth.value = false)
+  })
+}
+
+const handleAuthSuccess = (user) => {
+  isLoggedIn.value = true
+  userRole.value = user.role
+  localStorage.setItem('userRole', user.role)
+  animateControls()
+}
+
+const checkAuthentication = async () => {
+  try {
+    const { data } = await axios.get('/api/session')
+    data.isLoggedIn ? handleAuthSuccess(data.user) : logout(false)
+  } catch (error) {
+    toast.error("Authentication check failed. Please log in again.")
+    logout(false)
+  } finally {
+    hideSpinner()
   }
 }
+
+// Control animations
+const animateControls = () => {
+  const { duration, easing } = getAnimationParams()
+  
+  anime({ 
+    targets: '.header-controls', 
+    translateY: ['-50px', '0'], 
+    opacity: [0, 1], 
+    duration, 
+    easing 
+  })
+
+  if (sidebar.value && isLoggedIn.value) {
+    anime({ 
+      targets: sidebar.value, 
+      translateX: ['-100%', '0'], 
+      opacity: [0, 1], 
+      duration, 
+      easing 
+    })
+    
+    anime({
+      targets: sidebar.value.querySelectorAll('.sidebar-item'),
+      translateX: ['-30px', '0'],
+      opacity: [0, 1],
+      delay: anime.stagger(60),
+      duration,
+      easing: 'easeOutCubic'
+    })
+  }
+
+  if (logoutButton.value) {
+    anime({
+      targets: logoutButton.value,
+      translateY: ['20px', '0'],
+      opacity: [0, 1],
+      duration,
+      easing
+    })
+  }
+}
+
+// Event handlers
+const handleDetectionClick = (detection) => {
+  if (!detection?.room_url) return
+  toast.info(`Navigating to stream: ${detection.streamer || 'Unknown'}`)
+  // Stream navigation logic...
+}
+
+const handleLoginSuccess = (userData) => {
+  isLoggedIn.value = true
+  userRole.value = userData.role
+  localStorage.setItem('userRole', userData.role)
+}
+
+const handleAccountCreated = (username) => {
+  toast.success(`Account created for ${username}!`)
+  mobileAuthView.value = 'login'
+  setTimeout(animateControls, 100)
+}
+
+const logout = (showAlert = true) => {
+  localStorage.removeItem('userRole')
+  isLoggedIn.value = false
+  userRole.value = null
+  showAlert && toast.info("You have been logged out")
+}
+
+// Lifecycle hooks
+onMounted(() => {
+  isDarkTheme.value = localStorage.getItem('themePreference') === 'dark'
+  axios.defaults.baseURL = "http://54.86.99.85:5000"
+  axios.defaults.withCredentials = true
+  document.documentElement.setAttribute('data-theme', isDarkTheme.value ? 'dark' : 'light')
+  initSpinnerAnimation()
+  setTimeout(checkAuthentication, 200)
+})
 </script>
 
 <style>
@@ -680,10 +422,14 @@ html, body {
   width: 100%;
   height: 100%;
   overflow-x: hidden;
-  background-color: inherit;
-  color: inherit;
+  background-color: var(--bg);
+  color: var(--text);
+  transition: background-color 0.3s, color 0.3s;
 }
-
+.theme-overlay {
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -695,13 +441,13 @@ body {
 
 /* Theme-specific styles */
 [data-theme='light'] {
-  background-color: var(--light-bg);
-  color: var(--light-text);
+  --bg: var(--light-bg);
+  --text: var(--light-text);
 }
 
 [data-theme='dark'] {
-  background-color: var(--dark-bg);
-  color: var(--dark-text);
+  --bg: var(--dark-bg);
+  --text: var(--dark-text);
 }
 
 /* App container */
