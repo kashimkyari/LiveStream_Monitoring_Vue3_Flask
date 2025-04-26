@@ -41,6 +41,7 @@
               class="toggle-password"
               @click="togglePasswordVisibility"
               :disabled="isLoading"
+              aria-label="Toggle password visibility"
             >
               <font-awesome-icon :icon="showPassword ? 'eye-slash' : 'eye'" />
             </button>
@@ -83,6 +84,21 @@
           </div>
         </button>
         
+        <div class="divider">
+          <span>or</span>
+        </div>
+        
+        <div class="social-login">
+          <button type="button" class="social-button google">
+            <font-awesome-icon :icon="['fab', 'google']" />
+            <span>Sign in with Google</span>
+          </button>
+          <button type="button" class="social-button apple">
+            <font-awesome-icon :icon="['fab', 'apple']" />
+            <span>Sign in with Apple</span>
+          </button>
+        </div>
+        
         <div class="register-option">
           <span>Don't have an account?</span>
           <button 
@@ -100,13 +116,13 @@
 </template>
 
 <script>
-import { ref, inject } from 'vue';
+import { ref, inject, onMounted } from 'vue';
 import AuthService from '../services/AuthService';
 import { useToast } from 'vue-toastification';
 
 export default {
   name: 'MobileLogin',
-  emits: ['login-success', 'goto-forgot-password', 'goto-register'],
+  emits: ['login-success', 'forgot-password', 'create-account'],
   setup(props, { emit }) {
     // State
     const username = ref('');
@@ -120,7 +136,7 @@ export default {
     const toast = useToast();
     
     // Get context help functions from global context
-    const analyzeContext = inject('analyzeContext');
+    const analyzeContext = inject('analyzeContext', null);
     
     // Methods
     const togglePasswordVisibility = () => {
@@ -149,7 +165,9 @@ export default {
           
           toast.success('Login successful!');
           emit('login-success', result.user);
-
+          
+          // Redirect to home page
+          window.location.href = '/';
         } else {
           const errorMsg = result.message || 'Login failed. Please try again.';
           errorMessage.value = errorMsg;
@@ -181,40 +199,41 @@ export default {
         }
       } finally {
         isLoading.value = false;
-        window.location.href = '/';
       }
     };
     
     const goToForgotPassword = () => {
-      emit('goto-forgot-password');
+      // Emit event to navigate to the MobileForgotPasswordComponent
+      emit('forgot-password');
     };
-    
+
     const goToRegister = () => {
-      emit('goto-register');
+      // Emit event to navigate to the MobileCreateAccountComponent
+      emit('create-account');
     };
     
-    // Initialize
-    // Check if username is stored in localStorage
-    const rememberedUsername = localStorage.getItem('rememberedUsername');
-    if (rememberedUsername) {
-      username.value = rememberedUsername;
-      rememberMe.value = true;
-    }
-    
-    // Show login help for first-time users
-    // Get current context once component is mounted
-    setTimeout(() => {
-      if (analyzeContext) {
-        analyzeContext({
-          screen: 'login',
-          action: 'view',
-          isFirstTime: !localStorage.getItem('login_help_shown')
-        });
-        
-        // Mark that login help has been shown
-        localStorage.setItem('login_help_shown', 'true');
+    onMounted(() => {
+      // Check if username is stored in localStorage
+      const rememberedUsername = localStorage.getItem('rememberedUsername');
+      if (rememberedUsername) {
+        username.value = rememberedUsername;
+        rememberMe.value = true;
       }
-    }, 500); // Small delay to ensure component is fully mounted
+      
+      // Show login help for first-time users
+      setTimeout(() => {
+        if (analyzeContext) {
+          analyzeContext({
+            screen: 'login',
+            action: 'view',
+            isFirstTime: !localStorage.getItem('login_help_shown')
+          });
+          
+          // Mark that login help has been shown
+          localStorage.setItem('login_help_shown', 'true');
+        }
+      }, 500);
+    });
     
     return {
       username,
@@ -233,58 +252,78 @@ export default {
 </script>
 
 <style scoped>
+:root {
+  --primary-color: #5e72e4;
+  --primary-dark: #324cdd;
+  --secondary-color: #8392ab;
+  --success-color: #2dce89;
+  --info-color: #11cdef;
+  --warning-color: #fb6340;
+  --danger-color: #f5365c;
+  --background-color: #f8f9fe;
+  --surface-color: #ffffff;
+  --text-primary: #32325d;
+  --text-secondary: #8898aa;
+  --border-color: #e9ecef;
+  --input-bg: #ffffff;
+}
+
+/* Mobile-first approach - base styles are for mobile */
 .mobile-login {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   min-height: 100vh;
-  padding: 1.5rem;
-  background-color: var(--bs-body-bg);
+  padding: 1rem;
+  background-color: var(--background-color);
+  width: 100%;
 }
 
 .login-container {
   width: 100%;
-  max-width: 400px;
-  background-color: var(--bs-body-bg);
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-  padding: 2rem;
+  max-width: 100%; /* Full width on mobile */
+  background-color: var(--surface-color);
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  margin-top: 2rem;
 }
 
 .login-header {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .login-title {
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
-  color: var(--bs-primary);
+  color: var(--primary-color);
 }
 
 .login-subtitle {
-  font-size: 1rem;
-  color: var(--bs-secondary);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 
 .form-group label {
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .input-container {
@@ -295,47 +334,62 @@ export default {
 
 .input-icon {
   position: absolute;
-  left: 1rem;
-  color: var(--bs-secondary);
-  font-size: 1rem;
+  left: 0.875rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
 }
 
 .input-container input {
   width: 100%;
-  padding: 0.75rem 1rem 0.75rem 2.5rem;
-  border: 1px solid var(--bs-border-color);
+  padding: 0.75rem 2.5rem 0.75rem 2.5rem;
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   font-size: 1rem;
-  background-color: var(--bs-tertiary-bg);
-  color: var(--bs-body-color);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+  height: 48px;
+  -webkit-appearance: none; /* Remove default styling on iOS */
 }
 
 .input-container input:focus {
-  border-color: var(--bs-primary);
-  box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.25);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(94, 114, 228, 0.2);
   outline: none;
+}
+
+.input-container input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
 }
 
 .toggle-password {
   position: absolute;
-  right: 1rem;
+  right: 0.875rem;
   background: none;
   border: none;
-  color: var(--bs-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.875rem;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 48px;
+  width: 32px;
+  transition: color 0.2s ease;
+}
+
+.toggle-password:active {
+  color: var(--primary-color);
 }
 
 .form-options {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
 }
 
 .remember-me {
@@ -347,66 +401,162 @@ export default {
 .remember-me input[type="checkbox"] {
   width: 1rem;
   height: 1rem;
-  accent-color: var(--bs-primary);
+  accent-color: var(--primary-color);
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  position: relative;
+}
+
+.remember-me input[type="checkbox"]:checked {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.remember-me input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.remember-me label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.75rem;
 }
 
 .forgot-password-link {
-  color: var(--bs-primary);
+  color: var(--primary-color);
   background: none;
   border: none;
   padding: 0;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 600;
   cursor: pointer;
-  text-decoration: underline;
+  text-decoration: none;
   transition: color 0.2s;
 }
 
-.forgot-password-link:hover {
-  color: var(--bs-primary-darker, var(--bs-primary));
-  filter: brightness(0.9);
+.forgot-password-link:active {
+  color: var(--primary-dark);
 }
 
 .error-message {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  background-color: var(--bs-danger-bg-subtle);
-  color: var(--bs-danger);
-  border-radius: 6px;
-  font-size: 0.9rem;
+  padding: 0.75rem;
+  background-color: rgba(245, 54, 92, 0.1);
+  color: var(--danger-color);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
 }
 
 .login-button {
-  background-color: var(--bs-primary);
+  background-color: var(--primary-color);
   color: white;
   border: none;
   border-radius: 8px;
-  padding: 0.875rem;
-  font-size: 1rem;
+  padding: 0;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 3rem;
+  height: 48px;
+  width: 100%;
+  margin-top: 0.5rem;
+  box-shadow: 0 4px 6px rgba(50, 50, 93, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.login-button:hover {
-  filter: brightness(0.9);
+.login-button:active {
+  background-color: var(--primary-dark);
+  transform: translateY(1px);
 }
 
 .login-button:disabled {
-  background-color: var(--bs-secondary);
+  background-color: var(--secondary-color);
   cursor: not-allowed;
+  opacity: 0.7;
+  box-shadow: none;
 }
 
 .spinner {
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 1.25rem;
+  font-size: 1.125rem;
+  color: white;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 1.25rem 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.divider::before {
+  margin-right: 0.75rem;
+}
+
+.divider::after {
+  margin-left: 0.75rem;
+}
+
+.social-login {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.social-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0;
+  height: 48px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  background-color: var(--surface-color);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.social-button.google {
+  color: #ea4335;
+}
+
+.social-button.apple {
+  color: #000000;
+}
+
+.social-button:active {
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
 .register-option {
@@ -414,22 +564,74 @@ export default {
   justify-content: center;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.9rem;
-  margin-top: 1rem;
+  font-size: 0.75rem;
+  margin-top: 1.5rem;
+  color: var(--text-secondary);
 }
 
 .register-link {
-  color: var(--bs-primary);
+  color: var(--primary-color);
   background: none;
   border: none;
   padding: 0;
   font-weight: 600;
+  font-size: 0.75rem;
   cursor: pointer;
   transition: color 0.2s;
 }
 
-.register-link:hover {
-  color: var(--bs-primary-darker, var(--bs-primary));
-  filter: brightness(0.9);
+.register-link:active {
+  color: var(--primary-dark);
+}
+
+/* Fix for iOS input zoom issue */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  select,
+  textarea,
+  input[type="text"],
+  input[type="password"],
+  input[type="number"] {
+    font-size: 16px;
+  }
+}
+
+/* Media query for devices in portrait orientation */
+@media screen and (orientation: portrait) {
+  .login-container {
+    margin-top: 10vh;
+    padding: 1.75rem;
+  }
+}
+
+/* Additional mobile-specific adjustments */
+@media (max-width: 380px) {
+  .login-container {
+    padding: 1.25rem;
+  }
+  
+  .login-title {
+    font-size: 1.375rem;
+  }
+  
+  .form-options {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  
+  .forgot-password-link {
+    align-self: flex-end;
+    margin-top: -2rem;
+  }
+}
+
+/* Handle iPhone notch areas */
+@supports (padding: max(0px)) {
+  .mobile-login {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding-top: max(1rem, env(safe-area-inset-top));
+  }
 }
 </style>

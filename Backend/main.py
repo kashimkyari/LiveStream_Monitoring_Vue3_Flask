@@ -39,7 +39,7 @@ socketio.init_app(
 # Allowed frontends (comma‑separated in .env)
 ALLOWED_ORIGINS = os.getenv(
     'ALLOWED_ORIGINS',
-    'https://live-stream-monitoring-vue3-flask.vercel.app,http://localhost:8080,102.90.45.224,http://127.0.0.1:5173'
+    '*'
 ).split(',')
 
 # === Dynamic CORS Handler ===

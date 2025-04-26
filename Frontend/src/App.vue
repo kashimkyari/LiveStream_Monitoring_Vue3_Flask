@@ -1,8 +1,8 @@
 <template>
   <div id="app" :data-theme="isDarkTheme ? 'dark' : 'light'" :class="{'mobile-view': isMobile}" ref="appContainer">
-    <!-- Theme toggle -->
+    <!-- Theme toggle - hidden on mobile -->
     <div class="header-controls">
-      <div ref="themeToggle" class="theme-toggle" @click="toggleTheme">
+      <div ref="themeToggle" class="theme-toggle" @click="toggleTheme" v-if="!isMobile">
         <font-awesome-icon :icon="isDarkTheme ? 'moon' : 'sun'" />
       </div>
     </div>
@@ -117,8 +117,10 @@ import { library } from '@fortawesome/fontawesome-svg-core'
 import {
   faMoon, faSun, faSignOutAlt, faBroadcastTower, faTachometerAlt,
   faVideo, faExclamationTriangle, faChartLine, faCog, faUserLock,
-  faUser, faLock, faBell, faComment, faCommentAlt, faEye, faCommentDots
+  faUser, faLock, faBell, faComment, faCommentAlt, faEye, faCommentDots,
+  faExclamationCircle, faEyeSlash, faSpinner
 } from '@fortawesome/free-solid-svg-icons'
+import { faGoogle, faApple } from '@fortawesome/free-brands-svg-icons'
 import axios from 'axios'
 import anime from 'animejs/lib/anime.es.js'
 
@@ -142,9 +144,11 @@ import { useIsMobile } from './composables/useIsMobile'
 const faIcons = [
   faMoon, faSun, faSignOutAlt, faBroadcastTower, faTachometerAlt,
   faVideo, faExclamationTriangle, faChartLine, faCog, faUserLock,
-  faUser, faLock, faBell, faComment, faCommentAlt, faEye, faCommentDots
+  faUser, faLock, faBell, faComment, faCommentAlt, faEye, faCommentDots,
+  faExclamationCircle, faEyeSlash, faSpinner
 ]
-library.add(...faIcons)
+const fabIcons = [faGoogle, faApple]
+library.add(...faIcons, ...fabIcons)
 
 // State & refs
 const toast = useToast()
@@ -161,6 +165,7 @@ const spinnerContainer = ref(null)
 const spinner = ref(null)
 const showDebugInfo = ref(false)
 const mobileAuthView = ref('login')
+const unreadNotificationCount = ref(0)
 
 // Composables
 const { isMobile } = useIsMobile()
@@ -173,6 +178,25 @@ const animationConfig = {
 
 const getAnimationParams = () => 
   isMobile.value ? animationConfig.mobile : animationConfig.basic
+
+// Spinner hover effects
+const handleSpinnerHover = () => {
+  anime({
+    targets: spinnerContainer.value.querySelectorAll('.spinner-circle'),
+    scale: 1.2,
+    duration: 300,
+    easing: 'easeOutBack'
+  })
+}
+
+const handleSpinnerLeave = () => {
+  anime({
+    targets: spinnerContainer.value.querySelectorAll('.spinner-circle'),
+    scale: 1,
+    duration: 300,
+    easing: 'easeOutBack'
+  })
+}
 
 // Provide theme state and updater
 provide('theme', isDarkTheme)
