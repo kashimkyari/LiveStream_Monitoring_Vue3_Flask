@@ -160,7 +160,7 @@
             @click.stop="toggleDetection(stream)"
             :title="stream.detection_active ? 'Stop detection' : 'Start detection'"
           >
-            <font-awesome-icon :icon="stream.detection_active ? 'stop' : 'play'" />
+            <font-awesome-icon :icon="stream.detection_active ? 'binoculars' : 'binoculars'" />
           </button>
           <button 
             class="refresh-stream-btn" 
@@ -193,15 +193,21 @@
         <div class="video-container">
           <div class="video-player">
             <div v-if="selectedStream.stream_status === 'online'" class="full-player">
-              <video 
-                ref="videoPlayer"
-                class="full-video-player" 
-                id="main-video-player"
-                controls 
-                autoplay
-                playsinline
-              ></video>
-            </div>
+      <video 
+        ref="videoPlayer"
+        class="full-video-player" 
+        id="main-video-player"
+        playsinline
+        muted
+      ></video>
+      <button 
+        v-if="!isPlaying" 
+        class="play-overlay-btn"
+        @click="startPlayback"
+      >
+        <font-awesome-icon icon="play" size="3x" />
+      </button>
+    </div>
             <div v-else-if="selectedStream.stream_status === 'checking'" class="checking-message">
               <div class="loading-spinner"></div>
               <p>Checking stream status...</p>
@@ -694,119 +700,92 @@ const refreshAllStreams = async () => {
 }
 
 const selectStream = async (stream) => {
-  // Destroy existing HLS instance for the main player if any
-  if (hlsInstances.value['main-player']) {
-    hlsInstances.value['main-player'].destroy()
-    delete hlsInstances.value['main-player']
-  }
-  
+  destroyHlsInstance('main-player')
   selectedStream.value = stream
-  
-  // Reset loading attempts for the selected stream if it's not online
-  if (stream.stream_status !== 'online') {
-    loadingAttempts.value[stream.id] = 0
-    stream.stream_status = 'checking'
-    await checkStreamStatusWithHls(stream)
-  }
-  
-  // Initialize HLS player after DOM is updated
   await nextTick()
   initializeHlsPlayer()
 }
 
 const initializeHlsPlayer = () => {
   if (!selectedStream.value) return
-  
-  if (selectedStream.value.stream_status === 'online' && videoPlayer.value) {
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        liveSyncDuration: 3,
-        liveMaxLatencyDuration: 10,
-        liveDurationInfinity: true,
-        xhrSetup: (xhr) => {
-          xhr.timeout = 8000 // 8 second timeout for better error handling
-        }
-      })
-      
-      // Store the instance for cleanup
-      hlsInstances.value['main-player'] = hls
-      
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-        hls.loadSource(selectedStream.value.video_url)
-      })
-      
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        videoPlayer.value.play().catch(error => {
-          console.error('Auto-play prevented for main player:', error)
-        })
-      })
-      
-      let retryCount = 0
-      const MAX_MAIN_RETRIES = 3
-      
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        if (data.fatal) {
-          switch(data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-            case Hls.ErrorTypes.MEDIA_ERROR:
-            default:
-              if (retryCount < MAX_MAIN_RETRIES) {
-                retryCount++
-                console.log(`Retry ${retryCount} for main player`)
-                hls.recoverMediaError()
-                
-                // Try to recover by reloading source after a short delay
-                setTimeout(() => {
-                  hls.loadSource(selectedStream.value.video_url)
-                }, 10000)
-              } else {
-                if (selectedStream.value) {
-                  selectedStream.value.stream_status = 'offline'
-                }
-                hls.destroy()
-                delete hlsInstances.value['main-player']
-              }
-              break
-          }
-        }
-      })
-      
-      // Attach media
-      hls.attachMedia(videoPlayer.value)
-    } else if (videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) {
-      // For browsers that support HLS natively (Safari, iOS)
-      videoPlayer.value.src = selectedStream.value.video_url
-      videoPlayer.value.addEventListener('loadedmetadata', () => {
-        videoPlayer.value.play().catch(error => {
-          console.error('Auto-play prevented for native HLS player:', error)
-        })
-      })
-      
-      videoPlayer.value.addEventListener('error', () => {
-        if (selectedStream.value) {
-          selectedStream.value.stream_status = 'offline'
-        }
-      })
-    }
-  } else if (selectedStream.value.stream_status === 'checking') {
-    // If stream is still checking, wait and try again
-    setTimeout(() => {
-      if (selectedStream.value && selectedStream.value.stream_status === 'checking') {
-        initializeHlsPlayer()
-      }
-    }, 15000)
-  }
-}
 
-
-const closePlayer = () => {
-  // Destroy HLS instance for main player
+  // Clear existing instance first
   if (hlsInstances.value['main-player']) {
     hlsInstances.value['main-player'].destroy()
     delete hlsInstances.value['main-player']
   }
+
+  if (selectedStream.value.stream_status === 'online' && videoPlayer.value) {
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true, // Enable separate thread for parsing
+        lowLatencyMode: true,
+        backBufferLength: 30,
+        maxBufferSize: 60 * 1000, // 60 seconds
+        maxLoadingDelay: 4,
+        liveSyncDuration: 3,
+        liveMaxLatencyDuration: 10,
+        fragLoadingTimeOut: 20000,
+        manifestLoadingTimeOut: 20000,
+        levelLoadingTimeOut: 20000
+      })
+
+      hlsInstances.value['main-player'] = hls
+
+      // Improved error handling
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        console.error('HLS Error:', data)
+        if (data.fatal) {
+          switch(data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hls.startLoad()
+              break
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hls.recoverMediaError()
+              break
+            default:
+              destroyHlsInstance('main-player')
+              initializeHlsPlayer()
+              break
+          }
+        }
+      })
+
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+        hls.loadSource(selectedStream.value.video_url)
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          // Add play button for user interaction
+          videoPlayer.value.controls = true
+          videoPlayer.value.muted = false
+          videoPlayer.value.play().catch(error => {
+            console.log(error,'User interaction required for playback')
+          })
+        })
+      })
+
+      hls.attachMedia(videoPlayer.value)
+    } else if (videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) {
+      // Native HLS support
+      videoPlayer.value.src = selectedStream.value.video_url
+      videoPlayer.value.addEventListener('loadedmetadata', () => {
+        videoPlayer.value.controls = true
+        videoPlayer.value.play().catch(error => {
+          console.log('Native HLS play failed:', error)
+        })
+      })
+    }
+  }
+}
+
+const destroyHlsInstance = (key) => {
+  if (hlsInstances.value[key]) {
+    hlsInstances.value[key].destroy()
+    delete hlsInstances.value[key]
+  }
+}
+
+const closePlayer = () => {
+  destroyHlsInstance('main-player')
   selectedStream.value = null
 }
 
@@ -881,10 +860,10 @@ watch(selectedStream, async (newStream) => {
 }
 
 .refresh-button {
-  width: 2rem;
+  width: 1.2rem;
   height: 2rem;
-  border-radius: 50%;
-  background-color: var(--input-bg);
+  border-radius: 100%;
+  background-color: var(--primary-color);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -893,7 +872,7 @@ watch(selectedStream, async (newStream) => {
 }
 
 .refresh-button:hover {
-  transform: rotate(180deg);
+  transform: rotate(360deg);
 }
 
 /* Grid View */
@@ -931,11 +910,11 @@ watch(selectedStream, async (newStream) => {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: var(--input-bg);
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
+  opacity: 30;
   transition: opacity 0.3s;
   color: white;
   z-index: 2;

@@ -1,4 +1,3 @@
-// MobileAuthContainer.vue - Main container component that manages authentication flow
 <template>
   <div class="mobile-auth-container">
     <transition name="slide-fade" mode="out-in">

@@ -20,7 +20,10 @@ import {
   faExclamationTriangle, 
   faStream, 
   faCog, 
-  faHouse 
+  faHouse,
+  faPlay,
+  faStop,
+  faBinoculars 
 } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import Toast from "vue-toastification"
@@ -44,7 +47,11 @@ library.add(
   faExclamationTriangle, 
   faStream, 
   faCog,
-  faHouse
+  faHouse,
+  faPlay,
+  faStop,
+  faBinoculars
+
 )
 
 // Create a single app instance
@@ -58,7 +65,7 @@ app.use(Toast, {
   transition: "Vue-Toastification__bounce",
   maxToasts: 3,
   newestOnTop: true,
-  position: "top-right",
+  position: "top",
   timeout: 5000,
   closeOnClick: true,
   pauseOnFocusLoss: true,

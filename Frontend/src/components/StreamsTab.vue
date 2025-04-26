@@ -77,7 +77,7 @@
                       <font-awesome-icon icon="eye" />
                     </button>
                     <button @click.stop="handleRefresh(stream)" class="icon-button refresh" title="Refresh Stream" v-wave>
-                      <font-awesome-icon icon="sync-alt" />
+                      <font-awesome-icon icon="sync" />
                     </button>
                     <button @click.stop="openEditorModal(stream)" class="icon-button edit" title="Edit Stream" v-wave>
                       <font-awesome-icon icon="edit" />

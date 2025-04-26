@@ -316,7 +316,7 @@ const checkAuthentication = async () => {
     const { data } = await axios.get('/api/session')
     data.isLoggedIn ? handleAuthSuccess(data.user) : logout(false)
   } catch (error) {
-    toast.error("Authentication check failed. Please log in again.")
+    toast.warning("Authentication check failed. Please log in again.")
     logout(false)
   } finally {
     hideSpinner()

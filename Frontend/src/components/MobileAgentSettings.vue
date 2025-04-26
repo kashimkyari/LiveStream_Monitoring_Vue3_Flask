@@ -312,7 +312,7 @@ const handleLogout = async () => {
   display: block;
   font-weight: 600;
   margin-bottom: 0.75rem;
-  color: var(--text-color);
+  color: var(--primary-color);
   font-size: 1rem;
 }
 
@@ -430,9 +430,10 @@ const handleLogout = async () => {
 
 .logout-button {
   margin-top: 0.75rem;
-  background-color: transparent;
+  background-color: red; /* Changed from transparent */
   border: 1.5px solid var(--danger-color);
-  color: var(--danger-color);
+  color: white; /* Changed from var(--danger-color) */
+
 }
 
 .logout-button:disabled {
@@ -518,7 +519,7 @@ const handleLogout = async () => {
 }
 
 .btn-danger {
-  background-color: var(--danger-color);
+  background-color: red;
   border: none;
   color: white;
 }
