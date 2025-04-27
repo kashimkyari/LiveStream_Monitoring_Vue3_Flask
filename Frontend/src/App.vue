@@ -141,7 +141,7 @@ import { useToast } from 'vue-toastification'
 import 'vue-toastification/dist/index.css'
 import { useIsMobile } from './composables/useIsMobile'
 import { SpeedInsights } from '@vercel/speed-insights/vue';
-import { useAgentStore } from '@/stores/agent'
+
 
 // Icon setup
 const faIcons = [
@@ -172,7 +172,6 @@ const unreadNotificationCount = ref(0)
 
 // Composables
 const { isMobile } = useIsMobile()
-const agentStore = useAgentStore()
 
 // Animation configurations
 const animationConfig = {
@@ -394,7 +393,7 @@ const logout = (showAlert = true) => {
   userRole.value = null
   showAlert && toast.info("You have been logged out")
 }
-await agentStore.initializeAgent()
+
 // Lifecycle hooks
 onMounted(() => {
   isDarkTheme.value = localStorage.getItem('themePreference') === 'dark'
