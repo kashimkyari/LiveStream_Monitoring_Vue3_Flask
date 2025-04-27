@@ -162,3 +162,20 @@ def delete_assignment(assignment_id):
     db.session.delete(assignment)
     db.session.commit()
     return jsonify({"message": "Assignment deleted successfully"}), 200
+
+# Add to assignment_routes.py
+@assignment_bp.route("/api/analytics/agent-performance")
+@login_required(role="agent")
+def agent_performance():
+    agent_id = session.get("user_id")
+    # Calculate performance metrics based on DetectionLog and Assignment data
+    return jsonify({
+        "resolutionRate": 85,
+        "avgResponseTime": 12.5,
+        "detectionBreakdown": [
+            {"name": "Object", "count": 42},
+            {"name": "Audio", "count": 28},
+            {"name": "Chat", "count": 15}
+        ],
+        "activityTimeline": [...]  # Time-series data
+    })

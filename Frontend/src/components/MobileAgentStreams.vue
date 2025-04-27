@@ -21,15 +21,31 @@
           </button>
         </div>
         <div class="refresh-button" @click="loadAssignments">
-          <font-awesome-icon icon="sync" :class="{ 'fa-spin': isLoadingAssignments }" />
+          <font-awesome-icon icon="sync" :class="{ 'fa-spin': isLoading }" />
         </div>
       </div>
     </div>
 
     <!-- Loading State -->
-    <div v-if="isLoadingAssignments" class="loading-container">
-      <div class="loading-spinner"></div>
-      <p>Loading your streams...</p>
+    <div v-if="isLoading" class="skeleton-loading">
+      <div v-if="viewMode === 'grid'" class="stream-grid">
+        <div v-for="i in 6" :key="i" class="skeleton-grid-item">
+          <div class="skeleton-thumbnail"></div>
+          <div class="skeleton-info">
+            <div class="skeleton-title"></div>
+            <div class="skeleton-details"></div>
+          </div>
+        </div>
+      </div>
+      <div v-else class="stream-list">
+        <div v-for="i in 6" :key="i" class="skeleton-list-item">
+          <div class="skeleton-list-thumbnail"></div>
+          <div class="skeleton-list-info">
+            <div class="skeleton-list-title"></div>
+            <div class="skeleton-list-details"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Empty State -->
@@ -42,7 +58,7 @@
     </div>
 
     <!-- Grid View -->
-   <div v-else-if="viewMode === 'grid'" class="stream-grid">
+    <div v-else-if="viewMode === 'grid'" class="stream-grid">
       <div 
         v-for="stream in assignments" 
         :key="stream.id" 
@@ -53,7 +69,7 @@
           <div class="player-overlay">
             <font-awesome-icon icon="play" size="2x" />
           </div>
-          <div v-if="stream.stream_status === 'online'" class="mini-player">
+          <div class="mini-player">
             <video 
               class="mini-video-player" 
               :id="`mini-player-${stream.id}`"
@@ -62,17 +78,8 @@
               playsinline
             ></video>
           </div>
-          <div v-else-if="stream.stream_status === 'checking'" class="offline-placeholder checking">
-            <span class="checking-text">CHECKING...</span>
-            <div class="loading-dots">
-              <span></span><span></span><span></span>
-            </div>
-          </div>
-          <div v-else class="offline-placeholder">
-            <span class="offline-text">OFFLINE</span>
-          </div>
           <div class="stream-badges">
-            <div class="live-badge" v-if="stream.stream_status === 'online'">
+            <div class="live-badge">
               <span class="live-dot"></span>LIVE
             </div>
             <div class="detection-badge" v-if="stream.detection_status">
@@ -119,14 +126,14 @@
         v-for="stream in assignments" 
         :key="stream.id" 
         class="stream-list-item"
-        :class="{ 'selected': selectedStream?.id === stream.id, 'offline': stream.stream_status === 'offline' }"
+        :class="{ 'selected': selectedStream?.id === stream.id }"
         @click="selectStream(stream)"
       >
         <div class="list-thumbnail">
-          <div class="status-indicator" :class="stream.stream_status">
-            <div v-if="stream.stream_status === 'online'" class="status-pulse"></div>
+          <div class="status-indicator">
+            <div class="status-pulse"></div>
           </div>
-          <div v-if="stream.stream_status === 'online'" class="list-live-badge">LIVE</div>
+          <div class="list-live-badge">LIVE</div>
         </div>
         <div class="list-info">
           <div class="list-title-row">
@@ -182,8 +189,8 @@
             <div class="stream-platform" :class="selectedStream.platform.toLowerCase()">
               {{ selectedStream.platform }}
             </div>
-            <div class="stream-status-badge" :class="selectedStream.stream_status">
-              {{ selectedStream.stream_status === 'online' ? 'LIVE' : selectedStream.stream_status === 'checking' ? 'CHECKING' : 'OFFLINE' }}
+            <div class="stream-status-badge">
+              LIVE
             </div>
           </div>
           <button class="close-btn" @click="closePlayer">
@@ -192,29 +199,21 @@
         </div>
         <div class="video-container">
           <div class="video-player">
-            <div v-if="selectedStream.stream_status === 'online'" class="full-player">
-      <video 
-        ref="videoPlayer"
-        class="full-video-player" 
-        id="main-video-player"
-        playsinline
-        muted
-      ></video>
-      <button 
-        v-if="!isPlaying" 
-        class="play-overlay-btn"
-        @click="startPlayback"
-      >
-        <font-awesome-icon icon="play" size="3x" />
-      </button>
-    </div>
-            <div v-else-if="selectedStream.stream_status === 'checking'" class="checking-message">
-              <div class="loading-spinner"></div>
-              <p>Checking stream status...</p>
-            </div>
-            <div v-else class="offline-message">
-              <font-awesome-icon icon="video-slash" size="4x" />
-              <p>Stream is currently offline</p>
+            <div class="full-player">
+              <video 
+                ref="videoPlayer"
+                class="full-video-player" 
+                id="main-video-player"
+                playsinline
+                autoplay 
+              ></video>
+              <button 
+                v-if="!isPlaying" 
+                class="play-overlay-btn"
+                @click="startPlayback"
+              >
+                <font-awesome-icon icon="play" size="3x" />
+              </button>
             </div>
           </div>
         </div>
@@ -233,14 +232,8 @@
               Streaming {{ formatStreamTime(selectedStream.stream_start_time) }}
             </div>
             <div class="status-group">
-              <div v-if="selectedStream.stream_status === 'online'" class="live-status">
+              <div class="live-status">
                 <span class="live-dot"></span> LIVE
-              </div>
-              <div v-else-if="selectedStream.stream_status === 'checking'" class="checking-status">
-                CHECKING
-              </div>
-              <div v-else class="offline-status">
-                OFFLINE
               </div>
               <div v-if="selectedStream.detection_status" class="detection-status">
                 {{ selectedStream.detection_status }}
@@ -276,7 +269,6 @@ import { formatDistance } from 'date-fns'
 import axios from 'axios'
 import Hls from 'hls.js'
 import { useToast } from 'vue-toastification'
-import io from 'socket.io-client'
 
 const toast = useToast()
 
@@ -284,41 +276,27 @@ const toast = useToast()
 const viewMode = ref('list') // 'grid' or 'list'
 const selectedStream = ref(null)
 const assignments = ref([])
-const isLoadingAssignments = ref(false)
+const isLoading = ref(false)
 const currentAgentId = ref(null)
 const videoPlayer = ref(null)
 const hlsInstances = ref({})
-const socket = ref(null)
-const loadingAttempts = ref({}) // Track loading attempts per stream
-
-// Constants
-const MAX_RETRY_ATTEMPTS = 3
-const RETRY_DELAY = 5000 // 2 seconds between retries
+const isPlaying = ref(false)
 
 onMounted(() => {
   loadAssignments()
-  initSocketConnection()
   
   // Set up auto-refresh interval (every 5 minutes)
   const refreshInterval = setInterval(() => {
-    if (!isLoadingAssignments.value) {
-      refreshAllStreams()
+    if (!isLoading.value) {
+      loadAssignments()
     }
   }, 300000) // 5 minutes
   
   // Clean up interval on unmount
   onUnmounted(() => {
     clearInterval(refreshInterval)
+    destroyAllHlsInstances()
   })
-})
-
-onUnmounted(() => {
-  // Clean up resources
-  destroyAllHlsInstances()
-  
-  if (socket.value) {
-    socket.value.disconnect()
-  }
 })
 
 const destroyAllHlsInstances = () => {
@@ -331,46 +309,9 @@ const destroyAllHlsInstances = () => {
   hlsInstances.value = {}
 }
 
-const initSocketConnection = () => {
-  socket.value = io()
-  
-  // Listen for stream updates
-  socket.value.on('stream_update', (data) => {
-    const streamIndex = assignments.value.findIndex(s => s.id === data.id)
-    if (streamIndex !== -1) {
-      const updatedStream = { ...assignments.value[streamIndex], ...data }
-      assignments.value[streamIndex] = updatedStream
-      
-      // Update selected stream if it's the one being updated
-      if (selectedStream.value && selectedStream.value.id === data.id) {
-        selectedStream.value = updatedStream
-      }
-      
-      // Show toast notification for detection status changes
-      if (data.detection_status) {
-        toast.info(`${updatedStream.streamer_username}: ${data.detection_status}`)
-      }
-    }
-  })
-  
-  // Listen for detection status updates
-  socket.value.on('detection_status', (data) => {
-    const streamIndex = assignments.value.findIndex(s => s.id === data.stream_id)
-    if (streamIndex !== -1) {
-      assignments.value[streamIndex].detection_active = data.active
-      assignments.value[streamIndex].detection_status = data.status
-      
-      // Update selected stream if it's the one being updated
-      if (selectedStream.value && selectedStream.value.id === data.stream_id) {
-        selectedStream.value.detection_active = data.active
-        selectedStream.value.detection_status = data.status
-      }
-    }
-  })
-}
-
 const loadAssignments = async () => {
-  isLoadingAssignments.value = true
+  isLoading.value = true
+  
   try {
     // Get current agent ID
     const sessionResponse = await axios.get('/api/session')
@@ -379,7 +320,7 @@ const loadAssignments = async () => {
     // Get streams
     const streamsResponse = await axios.get('/api/streams')
     
-    // Filter for assigned streams and set up stream properties
+    // Filter for assigned streams
     assignments.value = Object.values(streamsResponse.data)
       .filter(stream => {
         return stream.assignments?.some(a => a.agent_id === currentAgentId.value) && 
@@ -390,7 +331,6 @@ const loadAssignments = async () => {
         video_url: stream.platform === 'Chaturbate' 
           ? stream.chaturbate_m3u8_url 
           : stream.stripchat_m3u8_url,
-        stream_status: 'checking',
         detection_active: false,
         detection_status: null
       }))
@@ -398,183 +338,76 @@ const loadAssignments = async () => {
     // Clean up any existing HLS instances
     destroyAllHlsInstances()
     
-    // Reset loading attempts
-    loadingAttempts.value = {}
+    // Initialize mini-players in grid view
+    if (viewMode.value === 'grid') {
+      await nextTick()
+      initializeMiniPlayers()
+    }
     
-    // Check stream status for each stream in parallel
-    await Promise.all(assignments.value.map(stream => {
-      loadingAttempts.value[stream.id] = 0
-      return checkStreamStatusWithHls(stream)
-    }))
-    
-    // Check detection status for each stream in parallel
+    // Check detection status for each stream
     await Promise.all(assignments.value.map(checkDetectionStatus))
     
-    // If there's a selected stream, make sure its info is updated
-    if (selectedStream.value) {
-      const updatedStream = assignments.value.find(s => s.id === selectedStream.value.id)
-      if (updatedStream) {
-        selectedStream.value = { ...updatedStream }
-      }
-    }
-    
-    // Auto-play the first online stream if no stream is selected
-    if (!selectedStream.value && assignments.value.length > 0) {
-      const onlineStream = assignments.value.find(s => s.stream_status === 'online')
-      if (onlineStream) {
-        selectStream(onlineStream)
-      }
-    }
   } catch (error) {
     toast.error('Failed to load assignments')
     console.error('Error loading assignments:', error)
   } finally {
-    isLoadingAssignments.value = false
+    isLoading.value = false
   }
 }
 
-const checkStreamStatusWithHls = async (stream) => {
-  if (!stream.video_url) {
-    stream.stream_status = 'offline'
-    return
-  }
+const initializeMiniPlayers = () => {
+  // Only setup players for grid view
+  if (viewMode.value !== 'grid') return
   
-  // Wait for the DOM to update
-  await nextTick()
-  
-  // Check if we should retry
-  const attemptCount = loadingAttempts.value[stream.id] || 0
-  if (attemptCount >= MAX_RETRY_ATTEMPTS) {
-    stream.stream_status = 'offline'
-    return
-  }
-  
-  // Increment attempt counter
-  loadingAttempts.value[stream.id] = attemptCount + 1
-  
-  try {
-    const videoElement = document.getElementById(`mini-player-${stream.id}`)
+  assignments.value.forEach(stream => {
+    if (!stream.video_url) return
     
-    if (videoElement && Hls.isSupported()) {
-      // Create new HLS instance
+    const videoElement = document.getElementById(`mini-player-${stream.id}`)
+    if (!videoElement) return
+    
+    if (Hls.isSupported()) {
       const hls = new Hls({
-        maxBufferLength: 10,
-        maxMaxBufferLength: 15,
+        maxBufferLength: 5,
+        maxMaxBufferLength: 10,
         liveSyncDuration: 3,
         liveMaxLatencyDuration: 10,
-        liveDurationInfinity: true,
         debug: false,
-        xhrSetup: (xhr) => {
-          xhr.timeout = 5000 // 5 second timeout for better error handling
-        }
+        autoplay: true
       })
       
-      // Store the instance for cleanup later
       hlsInstances.value[stream.id] = hls
       
-      // Add event listeners
       hls.on(Hls.Events.MEDIA_ATTACHED, () => {
         hls.loadSource(stream.video_url)
       })
       
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        stream.stream_status = 'online'
+        // Lower quality for thumbnails
+        if (hls.levels.length > 1) {
+          hls.currentLevel = hls.levels.length - 1 // Use lowest quality
+        }
+        
         videoElement.play().catch(() => {
-          console.log('Auto-play prevented for stream:', stream.id)
+          console.log('Auto-play prevented for mini player')
         })
       })
       
       hls.on(Hls.Events.ERROR, (event, data) => {
         if (data.fatal) {
-          switch(data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-            case Hls.ErrorTypes.MEDIA_ERROR:
-            default:
-              hls.destroy()
-              delete hlsInstances.value[stream.id]
-              
-              // Try again if under max attempts
-              if (loadingAttempts.value[stream.id] < MAX_RETRY_ATTEMPTS) {
-                console.log(`Retry attempt ${loadingAttempts.value[stream.id]} for stream ${stream.id}`)
-                setTimeout(() => {
-                  checkStreamStatusWithHls(stream)
-                }, RETRY_DELAY)
-              } else {
-                stream.stream_status = 'offline'
-              }
-              break
-          }
+          hls.destroy()
+          delete hlsInstances.value[stream.id]
         }
       })
       
-      // Attach media
       hls.attachMedia(videoElement)
-      
-      // Set timeout for stream status check
-      setTimeout(() => {
-        if (stream.stream_status === 'checking') {
-          // Try again if under max attempts
-          if (loadingAttempts.value[stream.id] < MAX_RETRY_ATTEMPTS) {
-            hls.destroy()
-            delete hlsInstances.value[stream.id]
-            setTimeout(() => {
-              checkStreamStatusWithHls(stream)
-            }, RETRY_DELAY)
-          } else {
-            stream.stream_status = 'offline'
-            hls.destroy()
-            delete hlsInstances.value[stream.id]
-          }
-        }
-      }, 5000)
-    } else {
-      // If HLS is not supported or element not found
-      await checkStreamStatus(stream)
+    } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+      // Native HLS support
+      videoElement.src = stream.video_url
+      videoElement.play().catch(() => {
+        console.log('Auto-play prevented for native HLS')
+      })
     }
-  } catch (error) {
-    console.error('Error checking stream status with HLS:', error)
-    
-    // Try again if under max attempts
-    if (loadingAttempts.value[stream.id] < MAX_RETRY_ATTEMPTS) {
-      setTimeout(() => {
-        checkStreamStatusWithHls(stream)
-      }, RETRY_DELAY)
-    } else {
-      stream.stream_status = 'offline'
-    }
-  }
-}
-
-const checkStreamStatus = async (stream) => {
-  if (!stream.video_url) {
-    stream.stream_status = 'offline'
-    return
-  }
-  
-  // Check if we should retry
-  const attemptCount = loadingAttempts.value[stream.id] || 0
-  if (attemptCount >= MAX_RETRY_ATTEMPTS) {
-    stream.stream_status = 'offline'
-    return
-  }
-  
-  // Increment attempt counter
-  loadingAttempts.value[stream.id] = attemptCount + 1
-  
-  try {
-    // Use a HEAD request with timeout to check if stream is available
-    await axios.head(stream.video_url, { timeout: 15000 })
-    stream.stream_status = 'online'
-  } catch (error) {
-    // Try again if under max attempts
-    if (loadingAttempts.value[stream.id] < MAX_RETRY_ATTEMPTS) {
-      setTimeout(() => {
-        checkStreamStatus(stream)
-      }, RETRY_DELAY)
-    } else {
-      stream.stream_status = 'offline'
-    }
-  }
+  })
 }
 
 const checkDetectionStatus = async (stream) => {
@@ -597,19 +430,10 @@ const toggleDetection = async (stream) => {
     })
     
     // Update stream detection status
-    const streamIndex = assignments.value.findIndex(s => s.id === stream.id)
-    if (streamIndex !== -1) {
-      assignments.value[streamIndex].detection_active = !stream.detection_active
-      assignments.value[streamIndex].detection_status = stream.detection_active ? 'Stopped' : 'Starting...'
-      
-      // Update selected stream if it's the current stream
-      if (selectedStream.value && selectedStream.value.id === stream.id) {
-        selectedStream.value.detection_active = !stream.detection_active
-        selectedStream.value.detection_status = stream.detection_active ? 'Stopped' : 'Starting...'
-      }
-    }
+    stream.detection_active = !stream.detection_active
+    stream.detection_status = stream.detection_active ? 'Running...' : 'Stopped'
     
-    toast.success(`Detection ${stream.detection_active ? 'stopped' : 'started'} for ${stream.streamer_username}`)
+    toast.success(`Detection ${stream.detection_active ? 'started' : 'stopped'} for ${stream.streamer_username}`)
   } catch (error) {
     toast.error(`Failed to ${stream.detection_active ? 'stop' : 'start'} detection`)
   }
@@ -629,46 +453,61 @@ const refreshStreamUrl = async (stream) => {
     
     if (response.data.m3u8_url) {
       // Update the stream URL
-      const streamIndex = assignments.value.findIndex(s => s.id === stream.id)
-      if (streamIndex !== -1) {
-        assignments.value[streamIndex].video_url = response.data.m3u8_url
-        
-        if (stream.platform === 'Chaturbate') {
-          assignments.value[streamIndex].chaturbate_m3u8_url = response.data.m3u8_url
-        } else {
-          assignments.value[streamIndex].stripchat_m3u8_url = response.data.m3u8_url
-        }
-        
-        // Reset stream status to checking
-        assignments.value[streamIndex].stream_status = 'checking'
-        
+      stream.video_url = response.data.m3u8_url
+      
+      if (stream.platform === 'Chaturbate') {
+        stream.chaturbate_m3u8_url = response.data.m3u8_url
+      } else {
+        stream.stripchat_m3u8_url = response.data.m3u8_url
+      }
+      
+      // Reinitialize player if in grid view
+      if (viewMode.value === 'grid') {
         // Clean up existing HLS instance if any
         if (hlsInstances.value[stream.id]) {
           hlsInstances.value[stream.id].destroy()
           delete hlsInstances.value[stream.id]
         }
         
-        // Reset loading attempts for this stream
-        loadingAttempts.value[stream.id] = 0
+        await nextTick()
         
-        // Check if stream is online with HLS
-        await checkStreamStatusWithHls(assignments.value[streamIndex])
-        
-        // If this is the selected stream, update video player
-        if (selectedStream.value && selectedStream.value.id === stream.id) {
-          selectedStream.value = { ...assignments.value[streamIndex] }
+        // Initialize single mini player
+        const videoElement = document.getElementById(`mini-player-${stream.id}`)
+        if (videoElement && Hls.isSupported()) {
+          const hls = new Hls({
+            maxBufferLength: 5,
+            maxMaxBufferLength: 10,
+          })
           
-          // Re-initialize video player
-          if (hlsInstances.value['main-player']) {
-            hlsInstances.value['main-player'].destroy()
-            delete hlsInstances.value['main-player']
-            await nextTick()
-            initializeHlsPlayer()
-          }
+          hlsInstances.value[stream.id] = hls
+          
+          hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+            hls.loadSource(stream.video_url)
+          })
+          
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            if (hls.levels.length > 1) {
+              hls.currentLevel = hls.levels.length - 1 // Use lowest quality
+            }
+            videoElement.play().catch(() => {})
+          })
+          
+          hls.attachMedia(videoElement)
+        }
+      }
+      
+      // If this is the selected stream, update video player
+      if (selectedStream.value && selectedStream.value.id === stream.id) {
+        if (hlsInstances.value['main-player']) {
+          hlsInstances.value['main-player'].destroy()
+          delete hlsInstances.value['main-player']
         }
         
-        toast.success(`Stream refreshed for ${stream.streamer_username}`)
+        await nextTick()
+        initializeMainPlayer()
       }
+      
+      toast.success(`Stream refreshed for ${stream.streamer_username}`)
     } else {
       toast.error(`Failed to refresh stream for ${stream.streamer_username}`)
     }
@@ -677,116 +516,81 @@ const refreshStreamUrl = async (stream) => {
   }
 }
 
-const refreshAllStreams = async () => {
-  toast.info('Refreshing all streams...')
-  
-  for (const stream of assignments.value) {
-    stream.stream_status = 'checking'
-    
-    // Clean up existing HLS instance if any
-    if (hlsInstances.value[stream.id]) {
-      hlsInstances.value[stream.id].destroy()
-      delete hlsInstances.value[stream.id]
-    }
-    
-    // Reset loading attempts for this stream
-    loadingAttempts.value[stream.id] = 0
-  }
-  
-  // Check status for all streams
-  await Promise.all(assignments.value.map(checkStreamStatusWithHls))
-  
-  toast.success('All streams refreshed')
-}
-
 const selectStream = async (stream) => {
-  destroyHlsInstance('main-player')
-  selectedStream.value = stream
-  await nextTick()
-  initializeHlsPlayer()
-}
-
-const initializeHlsPlayer = () => {
-  if (!selectedStream.value) return
-
-  // Clear existing instance first
   if (hlsInstances.value['main-player']) {
     hlsInstances.value['main-player'].destroy()
     delete hlsInstances.value['main-player']
   }
+  
+  selectedStream.value = stream
+  isPlaying.value = false
+  
+  await nextTick()
+  initializeMainPlayer()
+}
 
-  if (selectedStream.value.stream_status === 'online' && videoPlayer.value) {
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true, // Enable separate thread for parsing
-        lowLatencyMode: true,
-        backBufferLength: 30,
-        maxBufferSize: 60 * 1000, // 60 seconds
-        maxLoadingDelay: 4,
-        liveSyncDuration: 3,
-        liveMaxLatencyDuration: 10,
-        fragLoadingTimeOut: 20000,
-        manifestLoadingTimeOut: 20000,
-        levelLoadingTimeOut: 20000
-      })
+const initializeMainPlayer = () => {
+  if (!selectedStream.value || !videoPlayer.value) return
 
-      hlsInstances.value['main-player'] = hls
+  if (Hls.isSupported()) {
+    const hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: true,
+      maxBufferSize: 30 * 1000, // 30 seconds
+    })
 
-      // Improved error handling
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        console.error('HLS Error:', data)
-        if (data.fatal) {
-          switch(data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad()
-              break
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError()
-              break
-            default:
-              destroyHlsInstance('main-player')
-              initializeHlsPlayer()
-              break
-          }
+    hlsInstances.value['main-player'] = hls
+
+    hls.on(Hls.Events.ERROR, (event, data) => {
+      if (data.fatal) {
+        switch(data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            hls.startLoad()
+            break
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            hls.recoverMediaError()
+            break
+          default:
+            if (hlsInstances.value['main-player']) {
+              hlsInstances.value['main-player'].destroy()
+              delete hlsInstances.value['main-player']
+              initializeMainPlayer()
+            }
+            break
         }
-      })
+      }
+    })
 
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-        hls.loadSource(selectedStream.value.video_url)
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          // Add play button for user interaction
-          videoPlayer.value.controls = true
-          videoPlayer.value.muted = false
-          videoPlayer.value.play().catch(error => {
-            console.log(error,'User interaction required for playback')
-          })
-        })
-      })
+    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+      hls.loadSource(selectedStream.value.video_url)
+    })
 
-      hls.attachMedia(videoPlayer.value)
-    } else if (videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS support
-      videoPlayer.value.src = selectedStream.value.video_url
-      videoPlayer.value.addEventListener('loadedmetadata', () => {
-        videoPlayer.value.controls = true
-        videoPlayer.value.play().catch(error => {
-          console.log('Native HLS play failed:', error)
-        })
-      })
-    }
+    hls.attachMedia(videoPlayer.value)
+  } else if (videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) {
+    // Native HLS support
+    videoPlayer.value.src = selectedStream.value.video_url
   }
 }
 
-const destroyHlsInstance = (key) => {
-  if (hlsInstances.value[key]) {
-    hlsInstances.value[key].destroy()
-    delete hlsInstances.value[key]
+const startPlayback = () => {
+  if (videoPlayer.value) {
+    videoPlayer.value.muted = false
+    videoPlayer.value.controls = true
+    videoPlayer.value.play().then(() => {
+      isPlaying.value = true
+    }).catch(error => {
+      console.log('Playback error:', error)
+    })
   }
 }
 
 const closePlayer = () => {
-  destroyHlsInstance('main-player')
+  if (hlsInstances.value['main-player']) {
+    hlsInstances.value['main-player'].destroy()
+    delete hlsInstances.value['main-player']
+  }
   selectedStream.value = null
+  isPlaying.value = false
 }
 
 const formatNumber = (num) => {
@@ -804,11 +608,12 @@ const formatStreamTime = (timestamp) => {
   }
 }
 
-// Watch for changes to selectedStream and refresh its status
-watch(selectedStream, async (newStream) => {
-  if (newStream) {
-    await checkStreamStatus(newStream)
-    await checkDetectionStatus(newStream)
+// Watch for view mode changes to initialize mini players when switching to grid
+watch(viewMode, (newMode) => {
+  if (newMode === 'grid') {
+    nextTick(() => {
+      initializeMiniPlayers()
+    })
   }
 })
 </script>

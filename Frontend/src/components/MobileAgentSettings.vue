@@ -241,6 +241,8 @@ const completeLogout = () => {
     complete: () => {
       showLogoutAnimation.value = false
       emit('logout')
+      // Redirect to home page
+          
     }
   })
 }
@@ -267,7 +269,9 @@ const handleLogout = async () => {
     // If successful, play the logout animation
     if (response.status === 200) {
       playLogoutAnimation()
+
     }
+
   } catch (error) {
     console.error('Logout failed:', error)
     emit('logout-error', error)

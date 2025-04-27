@@ -1,5 +1,16 @@
 <template>
-  <div class="mobile-forgot-password-container">
+  <div class="mobile-forgot-password-container" :data-theme="theme">
+    <!-- Theme toggle button for accessibility -->
+    <button 
+      class="theme-toggle" 
+      @click="toggleTheme" 
+      :aria-label="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+      role="switch"
+      :aria-checked="theme === 'dark'"
+    >
+      <font-awesome-icon :icon="theme === 'dark' ? 'sun' : 'moon'" />
+    </button>
+    
     <form @submit.prevent="handleSubmit" class="mobile-forgot-form" ref="forgotForm">
       <div class="back-button" @click="$emit('back')" ref="backButton">
         <font-awesome-icon icon="arrow-left" />
@@ -104,10 +115,7 @@
           </div>
           
           <div class="button-group">
-            <button type="button" class="secondary-button" @click="currentStep = 1" :disabled="loading">
-              <font-awesome-icon icon="arrow-left" class="mr-2" />
-              Back
-            </button>
+            
             
             <button type="submit" class="action-button" :disabled="loading || !canResetPassword">
               <template v-if="loading">
@@ -142,6 +150,7 @@
 <script>
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useToast } from 'vue-toastification'
+import { ref, onMounted } from 'vue'
 import "vue-toastification/dist/index.css"
 import { requestPasswordReset, verifyResetToken, resetPassword } from '@/services/api'
 
@@ -151,7 +160,34 @@ export default {
   emits: ['back'],
   setup() {
     const toast = useToast()
-    return { toast }
+    // Theme state management
+    const theme = ref('light')
+    
+    // Check system preference and localStorage on mount
+    onMounted(() => {
+      // Check localStorage first
+      const savedTheme = localStorage.getItem('preferred-theme')
+      if (savedTheme) {
+        theme.value = savedTheme
+        return
+      }
+      
+      // Check system preference as fallback
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        theme.value = 'dark'
+      }
+      
+      // Save initial theme
+      localStorage.setItem('preferred-theme', theme.value)
+    })
+    
+    // Toggle theme function
+    const toggleTheme = () => {
+      theme.value = theme.value === 'dark' ? 'light' : 'dark'
+      localStorage.setItem('preferred-theme', theme.value)
+    }
+    
+    return { toast, theme, toggleTheme }
   },
   data() {
     return {
@@ -368,6 +404,86 @@ export default {
 </script>
 
 <style scoped>
+/* CSS Variables for theming */
+/* Light theme (default) */
+:root {
+  /* Color scheme */
+  --color-background: #f8f9fa;
+  --color-form-bg: #ffffff;
+  --color-primary: #0d6efd;
+  --color-primary-hover: #0b5ed7;
+  --color-secondary: #6c757d;
+  --color-success: #198754;
+  --color-danger: #dc3545;
+  --color-warning: #ffc107;
+  --color-info: #0dcaf0;
+  --color-info-light: rgba(13, 202, 240, 0.1);
+  
+  /* Text colors */
+  --color-text: #212529;
+  --color-text-muted: #6c757d;
+  --color-text-light: #adb5bd;
+  
+  /* Border colors */
+  --color-border: #dee2e6;
+  --color-border-dark: #ced4da;
+  
+  /* Input fields */
+  --color-input-bg: #f8f9fa;
+  --color-input-border: #ced4da;
+  --color-input-text: #212529;
+  --color-input-placeholder: #6c757d;
+  --color-input-icon: #6c757d;
+  
+  /* Shadows */
+  --shadow-sm: 0 .125rem .25rem rgba(0,0,0,.075);
+  --shadow-md: 0 .5rem 1rem rgba(0,0,0,.15);
+  --shadow-lg: 0 1rem 3rem rgba(0,0,0,.175);
+  
+  /* Focus state */
+  --color-focus-ring: rgba(13, 110, 253, 0.25);
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+  /* Color scheme */
+  --color-background: #121212;
+  --color-form-bg: #343a40;
+  --color-primary: #0dcaf0;
+  --color-primary-hover: #0bb8da;
+  --color-secondary: #6c757d;
+  --color-success: #20c997;
+  --color-danger: #dc3545;
+  --color-warning: #ffc107;
+  --color-info: #0dcaf0; 
+  --color-info-light: rgba(13, 202, 240, 0.1);
+  
+  /* Text colors */
+  --color-text: #f8f9fa;
+  --color-text-muted: #adb5bd;
+  --color-text-light: #ced4da;
+  
+  /* Border colors */
+  --color-border: #495057;
+  --color-border-dark: #6c757d;
+  
+  /* Input fields */
+  --color-input-bg: #212529;
+  --color-input-border: #495057;
+  --color-input-text: #f8f9fa;
+  --color-input-placeholder: #adb5bd;
+  --color-input-icon: #adb5bd;
+  
+  /* Shadows remain the same, but adjusted for dark mode */
+  --shadow-sm: 0 .125rem .25rem rgba(0,0,0,.2);
+  --shadow-md: 0 .5rem 1rem rgba(0,0,0,.3);
+  --shadow-lg: 0 1rem 3rem rgba(0,0,0,.4);
+  
+  /* Focus state */
+  --color-focus-ring: rgba(13, 202, 240, 0.4);
+}
+
+/* Mobile-first responsive layout optimizations */
 .mobile-forgot-password-container {
   display: flex;
   align-items: center;
@@ -375,16 +491,51 @@ export default {
   min-height: 100vh;
   width: 100%;
   padding: 1rem;
-  background-color: var(--bs-dark);
+  background-color: var(--color-background);
+  position: relative;
+}
+
+/* Theme toggle button positioning for thumb accessibility */
+.theme-toggle {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  background-color: var(--color-form-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-primary);
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  z-index: 100;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: all 0.2s ease;
+}
+
+.theme-toggle:hover {
+  transform: scale(1.05);
+}
+
+.theme-toggle:focus-visible {
+  outline: 3px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+.theme-toggle:active {
+  transform: translateY(1px);
 }
 
 .mobile-forgot-form {
   width: 100%;
   max-width: 480px;
   padding: 1.5rem;
-  background: var(--bs-gray-800);
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  background: var(--color-background);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-md);
   position: relative;
 }
 
@@ -394,63 +545,72 @@ export default {
   left: 1rem;
   background: transparent;
   border: none;
-  color: var(--bs-gray-400);
+  color: var(--color-text-muted);
   cursor: pointer;
   transition: color 0.2s ease;
   font-size: 1.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 3rem; /* Increased for better touch target */
+  height: 3rem; /* Increased for better touch target */
   border-radius: 50%;
 }
 
-.back-button:hover {
-  color: var(--bs-info);
+.back-button:hover,
+.back-button:focus {
+  color: var(--color-primary);
+  background-color: grey;
+
+}
+
+.back-button:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 .logo-container {
   text-align: center;
-  margin-top: 1rem;
+  margin-top: 2rem; /* Increased for mobile spacing */
   margin-bottom: 1.5rem;
 }
 
 .logo-icon {
-  font-size: 2rem;
-  color: var(--bs-info);
-  padding: 1rem;
+  font-size: 2.5rem; /* Larger for mobile */
+  color: var(--color-primary);
+  padding: 1.25rem; /* Larger padding for mobile */
   border-radius: 50%;
-  background: rgba(13, 202, 240, 0.1);
+  background: var(--color-info-light);
 }
 
 .title-text {
-  color: white;
-  font-size: 1.5rem;
+  color: var(--color-text);
+  font-size: 1.75rem; /* Larger for mobile readability */
   text-align: center;
-  margin: 0 0 0.5rem 0;
+  margin: 0 0 0.75rem 0;
   font-weight: 600;
 }
 
 .subtitle {
-  color: var(--bs-gray-400);
+  color: var(--color-text-muted);
   text-align: center;
   margin-bottom: 1.5rem;
-  font-size: 0.9rem;
+  font-size: 1rem; /* Increased for readability */
 }
 
 .form-content {
-  margin-top: 1rem;
+  margin-top: 1.5rem; /* More breathing room */
 }
 
 .input-group {
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem; /* Increased spacing for mobile */
 }
 
 .input-container {
   position: relative;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .input-icon {
@@ -458,98 +618,138 @@ export default {
   left: 1rem;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--bs-gray-500);
-  font-size: 0.9rem;
+  color: var(--color-input-icon);
+  font-size: 1rem;
 }
 
 .input-field {
   width: 100%;
-  padding: 0.8rem 0.8rem 0.8rem 2.5rem;
-  border: 1px solid var(--bs-gray-700);
-  border-radius: 8px;
-  color: white;
-  font-size: 0.95rem;
-  background: var(--bs-gray-900);
+  height: 3rem; /* At least 48px for touch targets */
+  padding: 0.8rem 0.8rem 0.8rem 3rem; /* Increased horizontal padding */
+  border: 1px solid var(--color-input-border);
+  border-radius: 0.5rem;
+  color: var(--color-input-text);
+  font-size: 1rem;
+  background: var(--color-input-bg);
+}
+
+.input-field::placeholder {
+  color: var(--color-input-placeholder);
 }
 
 .input-field:focus {
-  border-color: var(--bs-info);
+  border-color: var(--color-primary);
   outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
 
 .input-hint {
-  margin-top: 0.25rem;
-  font-size: 0.75rem;
-  color: var(--bs-gray-500);
+  margin-top: 0.5rem;
+  font-size: 0.875rem; /* Larger for readability */
+  color: var(--color-text-muted);
 }
 
 .input-hint.error {
-  color: var(--bs-danger);
+  color: var(--color-danger);
 }
 
 .action-button {
   width: 100%;
+  min-height: 3rem; /* At least 48px for touch targets */
   padding: 0.8rem;
-  background: var(--bs-info);
+  background: green;
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   font-weight: 600;
   font-size: 1rem;
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.action-button:hover,
+.action-button:focus {
+  background: green;
+}
+
+.action-button:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+
 }
 
 .action-button:disabled {
   opacity: 0.7;
+  cursor: not-allowed;
+  background-color: grey;
 }
 
 .secondary-button {
   width: 45%;
+  min-height: 3rem; /* At least 48px for touch targets */
   padding: 0.8rem;
-  background: var(--bs-gray-700);
+  background: var(--color-secondary);
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   font-weight: 600;
   font-size: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.secondary-button:hover,
+.secondary-button:focus {
+  background: var(--color-secondary-dark, #5a6268);
+}
+
+.secondary-button:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.secondary-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .button-group {
   display: flex;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-top: 1rem;
+  gap: 1rem;
+  margin-top: 1.5rem; /* Increased for mobile */
 }
 
 .password-strength {
-  margin-top: 0.25rem;
-  font-size: 0.75rem;
+  margin-top: 0.5rem;
+  font-size: 0.875rem; /* Increased for readability */
   display: flex;
   align-items: center;
 }
 
 .pw-very-weak, .pw-weak {
-  color: var(--bs-danger);
+  color: var(--color-danger);
 }
 
 .pw-medium {
-  color: var(--bs-warning);
+  color: var(--color-warning);
 }
 
 .pw-strong {
-  color: var(--bs-success);
+  color: var(--color-success);
 }
 
 .pw-very-strong {
-  color: var(--bs-success);
+  color: var(--color-success);
 }
 
 .success-container {
@@ -562,29 +762,71 @@ export default {
 }
 
 .success-icon {
-  font-size: 3rem;
-  color: var(--bs-success);
-  margin-bottom: 1rem;
-}
-
-.success-title {
-  color: white;
-  font-size: 1.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.success-message {
-  color: var(--bs-gray-400);
+  font-size: 3.5rem; /* Larger for better visibility */
+  color: var(--color-success);
   margin-bottom: 1.5rem;
 }
 
+.success-title {
+  color: var(--color-text);
+  font-size: 1.75rem; /* Larger for mobile */
+  margin-bottom: 0.75rem;
+}
+
+.success-message {
+  color: var(--color-text-muted);
+  margin-bottom: 1.75rem;
+  font-size: 1rem; /* Increased for readability */
+}
+
+/* Media queries for different mobile sizes */
 @media (max-width: 480px) {
   .mobile-forgot-password-container {
-    padding: 0.5rem;
+    padding: 0.75rem;
   }
   
   .mobile-forgot-form {
     padding: 1.25rem;
   }
+  
+  .button-group {
+    flex-direction: column; /* Stack buttons on very small screens */
+    gap: 0.75rem;
+  }
+  
+  .secondary-button,
+  .action-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 320px) {
+  .logo-icon {
+    font-size: 2rem;
+    padding: 1rem;
+  }
+  
+  .title-text {
+    font-size: 1.5rem;
+  }
+  
+  .subtitle {
+    font-size: 0.9rem;
+  }
+}
+
+/* Enhance accessibility with focus indicators */
+:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* High-contrast text helper classes */
+.mr-1 {
+  margin-right: 0.25rem;
+}
+
+.mr-2 {
+  margin-right: 0.5rem;
 }
 </style>
