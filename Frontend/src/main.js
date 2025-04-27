@@ -29,6 +29,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import Toast from "vue-toastification"
 import "vue-toastification/dist/index.css"
 import { inject } from "@vercel/analytics"
+import { createPinia } from 'pinia'
 
 // Add all icons to the library
 library.add(
@@ -79,13 +80,14 @@ app.use(Toast, {
   rtl: false
 })
 
-app.config.globalProperties.$socket = io('http://54.86.99.85:5000', {
+app.config.globalProperties.$socket = io('https://54.86.99.85:5000', {
   path: '/ws',
   withCredentials: true,
   transports: ['websocket', 'polling'] // Recommended for fallback
 })
 
 app.use(inject())
+app.use(createPinia())
 
 // Initialize mobile detector
 mobileDetector.initialize(768)

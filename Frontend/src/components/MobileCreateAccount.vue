@@ -549,42 +549,49 @@ export default {
 
   /* Dark theme variables */
   [data-theme="dark"] {
-  /* Color scheme */
-  --color-background: #212529;
-  --color-form-bg: #343a40;
-  --color-primary: #0dcaf0;
-  --color-primary-hover: #0bb8da;
-  --color-secondary: #6c757d;
-  --color-success: #20c997;
-  --color-danger: #dc3545;
-  --color-warning: #ffc107;
-  --color-info: #0dcaf0; 
-  --color-info-light: rgba(13, 202, 240, 0.1);
-  
-  /* Text colors */
-  --color-text: #f8f9fa;
-  --color-text-muted: #adb5bd;
-  --color-text-light: #ced4da;
-  
-  /* Border colors */
-  --color-border: #495057;
-  --color-border-dark: #6c757d;
-  
-  /* Input fields */
-  --color-input-bg: #212529;
-  --color-input-border: #495057;
-  --color-input-text: #f8f9fa;
-  --color-input-placeholder: #adb5bd;
-  --color-input-icon: #adb5bd;
-  
-  /* Shadows remain the same, but adjusted for dark mode */
-  --shadow-sm: 0 .125rem .25rem rgba(0,0,0,.2);
-  --shadow-md: 0 .5rem 1rem rgba(0,0,0,.3);
-  --shadow-lg: 0 1rem 3rem rgba(0,0,0,.4);
-  
-  /* Focus state */
-  --color-focus-ring: rgba(13, 202, 240, 0.4);
-}
+    /* Color scheme */
+    --primary-color: #3498db;
+    --primary-dark: #2980b9;
+    --secondary-color: #7f8c8d;
+    --success-color: #2ecc71;
+    --danger-color: #e74c3c;
+    --warning-color: #f39c12;
+    
+    /* Backgrounds */
+    --bg-main: #121212;
+    --bg-card: #1e1e1e;
+    --bg-input: #252525;
+    --bg-button-secondary: #333333;
+    --bg-step: #2c2c2c;
+    --bg-step-active: var(--primary-color);
+    --bg-step-line: #2c2c2c;
+    --bg-step-line-active: var(--primary-color);
+    --bg-password-req: rgba(255, 255, 255, 0.03);
+    --bg-checkbox: rgba(255, 255, 255, 0.03);
+    
+    /* Text */
+    --text-primary: #ffffff;
+    --text-secondary: #b3b3b3;
+    --text-muted: #8a8a8a;
+    --text-contrast: #ffffff;
+    --text-success: #2ecc71;
+    --text-danger: #e74c3c;
+    --text-warning: #f39c12;
+    --text-link: var(--primary-color);
+    
+    /* Borders */
+    --border-color: #2c2c2c;
+    --border-color-focus: #3498db;
+    
+    /* Shadows */
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.3);
+    
+    /* Focus */
+    --focus-ring-color: rgba(52, 152, 219, 0.5);
+    --focus-ring-width: 3px;
+  }
 
   /* Theme Toggle Button - positioned for easy thumb access */
   .theme-toggle-button {

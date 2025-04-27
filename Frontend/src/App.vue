@@ -1,4 +1,5 @@
 <template>
+  <SpeedInsights />
   <div id="app" :data-theme="isDarkTheme ? 'dark' : 'light'" :class="{'mobile-view': isMobile}" ref="appContainer">
     <!-- Theme toggle - hidden on mobile -->
     <div class="header-controls">
@@ -139,6 +140,8 @@ import MobileDetectionNotification from './components/MobileDetectionNotificatio
 import { useToast } from 'vue-toastification'
 import 'vue-toastification/dist/index.css'
 import { useIsMobile } from './composables/useIsMobile'
+import { SpeedInsights } from '@vercel/speed-insights/vue';
+import { useAgentStore } from '@/stores/agent'
 
 // Icon setup
 const faIcons = [
@@ -169,6 +172,7 @@ const unreadNotificationCount = ref(0)
 
 // Composables
 const { isMobile } = useIsMobile()
+const agentStore = useAgentStore()
 
 // Animation configurations
 const animationConfig = {
@@ -390,11 +394,11 @@ const logout = (showAlert = true) => {
   userRole.value = null
   showAlert && toast.info("You have been logged out")
 }
-
+await agentStore.initializeAgent()
 // Lifecycle hooks
 onMounted(() => {
   isDarkTheme.value = localStorage.getItem('themePreference') === 'dark'
-  axios.defaults.baseURL = "http://54.86.99.85:5000"
+  axios.defaults.baseURL = "https://54.86.99.85:5000"
   axios.defaults.withCredentials = true
   document.documentElement.setAttribute('data-theme', isDarkTheme.value ? 'dark' : 'light')
   initSpinnerAnimation()
