@@ -119,8 +119,14 @@ def logout():
     session.clear()
     return jsonify({"message": "Logged out successfully"})
 
-@auth_bp.route('/api/session')
+# Update the check_session route in auth_routes.py
+
+@auth_bp.route('/api/session', methods=['GET', 'OPTIONS'])
 def check_session():
+    # Handle CORS preflight requests
+    if request.method == "OPTIONS":
+        return build_cors_preflight_response()
+    
     try:
         if "user_id" not in session:
             return jsonify({"isLoggedIn": False}), 401
@@ -159,7 +165,7 @@ def check_session():
 @auth_bp.route("/api/check-username", methods=["POST", "OPTIONS"])
 def check_username():
     if request.method == "OPTIONS":
-        return _build_cors_preflight_response()
+        return build_cors_preflight_response()
     
     data = request.get_json()
     username = data.get("username")
@@ -182,7 +188,7 @@ def check_username():
 @auth_bp.route("/api/check-email", methods=["POST", "OPTIONS"])
 def check_email():
     if request.method == "OPTIONS":
-        return _build_cors_preflight_response()
+        return build_cors_preflight_response()
     
     data = request.get_json()
     email = data.get("email")
@@ -202,7 +208,7 @@ def check_email():
 @auth_bp.route("/api/register", methods=["POST", "OPTIONS"])
 def register():
     if request.method == "OPTIONS":
-        return _build_cors_preflight_response()
+        return build_cors_preflight_response()
     
     data = request.get_json()
     username = data.get("username")
@@ -288,7 +294,7 @@ def register():
 @auth_bp.route("/api/forgot-password", methods=["POST", "OPTIONS"])
 def forgot_password():
     if request.method == "OPTIONS":
-        return _build_cors_preflight_response()
+        return build_cors_preflight_response()
     
     data = request.get_json()
     email = data.get("email")
@@ -376,7 +382,7 @@ def verify_reset_token():
 @auth_bp.route("/api/reset-password", methods=["POST", "OPTIONS"])
 def reset_password():
     if request.method == "OPTIONS":
-        return _build_cors_preflight_response()
+        return build_cors_preflight_response()
     
     data = request.get_json()
     token = data.get("token")

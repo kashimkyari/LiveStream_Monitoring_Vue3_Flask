@@ -39,16 +39,47 @@ else:
     logging.info(f"Socket.IO initialized with async_mode: {socketio.async_mode}")
 
 # === CORS Configuration ===
+# Add/modify this in main.py
+
+# === CORS Configuration ===
 @app.after_request
 def apply_cors(response):
-    origin = request.headers.get('Origin', 'https://live-stream-monitoring-vue3-flask.vercel.app')
-    if origin in os.getenv('ALLOWED_ORIGINS', '').split(','):
-        response.headers['Access-Control-Allow-Origin'] = origin
+    origin = request.headers.get('Origin')
+    allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',')
+    
+    # Always set Access-Control-Allow-Credentials to 'true'
     response.headers['Access-Control-Allow-Credentials'] = 'true'
-    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
+    
+    # Check if origin is in allowed list, or use dynamic origin
+    if origin in allowed_origins or not allowed_origins or '' in allowed_origins:
+        response.headers['Access-Control-Allow-Origin'] = origin
+    
+    # Set other CORS headers
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+    
     return response
 
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>', methods=['OPTIONS'])
+def handle_options(path):
+    """Handle OPTIONS requests for all routes to support CORS preflight requests"""
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        
+        # Set CORS headers
+        origin = request.headers.get('Origin')
+        allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',')
+        
+        if origin in allowed_origins or not allowed_origins or '' in allowed_origins:
+            response.headers['Access-Control-Allow-Origin'] = origin
+        
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        
+        return response
+        
 # In main.py
 @app.before_request
 def enforce_https():
