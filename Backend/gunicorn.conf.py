@@ -1,5 +1,4 @@
 import multiprocessing
-import ssl
 
 # Binding
 bind = "0.0.0.0:5000"
@@ -25,14 +24,11 @@ accesslog = "/var/log/gunicorn/access.log"
 errorlog = "/var/log/gunicorn/error.log"
 capture_output = True
 
-# SSL configuration - updated approach
+# SSL configuration
 certfile = "./fullchain.pem"
 keyfile = "./privkey.pem"
-
-# Create SSL context with modern protocols
-ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-ssl_context.load_cert_chain(certfile, keyfile)
-ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+# Note: Don't create the SSL context object here
+# Just specify the cert and key files
 
 # Process naming
 proc_name = "livestream-monitoring"
