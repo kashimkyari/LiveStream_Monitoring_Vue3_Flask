@@ -16,7 +16,7 @@ auth_bp = Blueprint('auth', __name__)
 def build_cors_preflight_response():
     response = make_response()
     # Instead of "*", specify your actual frontend domain
-    response.headers.add("Access-Control-Allow-Origin", request.headers.get("Origin", "https://live-stream-monitoring-vue3-flask.vercel.app"))
+    response.headers.add("Access-Control-Allow-Origin", request.headers.get("Origin", "http://live-stream-monitoring-vue3-flask.vercel.app"))
     response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
     response.headers.add("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
     response.headers.add("Access-Control-Allow-Credentials", "true")

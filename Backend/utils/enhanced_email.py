@@ -268,7 +268,7 @@ def send_welcome_email(user_email, username):
                 <h2>Hello {username}!</h2>
                 <p>Thank you for creating an account with us. We're excited to have you onboard!</p>                
                 <div style="text-align: center;">
-                    <a href="https://live-stream-monitoring-vue3-flask.vercel.app/login" class="button">GO TO DASHBOARD</a>
+                    <a href="http://live-stream-monitoring-vue3-flask.vercel.app/login" class="button">GO TO DASHBOARD</a>
                 </div>
                 <div class="divider"></div>
                 <h3>What Our App Does:</h3>
@@ -342,7 +342,7 @@ def send_password_reset_email(user_email, token):
                 <h2>Hello!</h2>                
                 <p>We received a request to reset your password for your JetCam Studio account. Use the code below to complete your password reset:</p>                
                 <div style=\"text-align: center;\">                    
-                    <a href=\"https://live-stream-monitoring-vue3-flask.vercel.app/reset-password\" class=\"button\">RESET YOUR PASSWORD</a>                
+                    <a href=\"http://live-stream-monitoring-vue3-flask.vercel.app/reset-password\" class=\"button\">RESET YOUR PASSWORD</a>                
                 </div>                
                 <div class=\"divider\"></div>                
                 <div style=\"font-size: 32px; letter-spacing: 8px; font-weight: bold; background-color: #f1f3f4; padding: 20px; border-radius: 6px; text-align: center; margin: 20px 0;\">                    

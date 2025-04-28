@@ -140,7 +140,7 @@ def send_password_reset_email(user_email, token):
         bool: True if email sent successfully
     """
     # Generate reset URL for the deployed application
-    reset_url = f"https://live-stream-monitoring-vue3-flask.vercel.app/reset-password?token={token}"
+    reset_url = f"http://live-stream-monitoring-vue3-flask.vercel.app/reset-password?token={token}"
     
     subject = "Password Reset Request"
     html_content = f"""
