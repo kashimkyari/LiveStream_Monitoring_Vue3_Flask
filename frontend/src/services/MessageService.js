@@ -30,7 +30,7 @@ class MessageService {
    * @private
    */
   _setupSocketConnection() {
-    this._socket = io('https://54.86.99.85:8080', { 
+    this._socket = io('https://54.86.99.85:5000', { 
       path: '/ws',
       transports: ['websocket', 'polling'] // Optional: match server config
     });
