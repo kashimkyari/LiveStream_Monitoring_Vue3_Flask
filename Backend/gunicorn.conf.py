@@ -26,8 +26,8 @@ errorlog = "/var/log/gunicorn/error.log"
 capture_output = True
 
 # SSL configuration - updated approach
-certfile = "fullchain.pem"
-keyfile = "privkey.pem"
+certfile = "./fullchain.pem"
+keyfile = "./privkey.pem"
 
 # Create SSL context with modern protocols
 ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
