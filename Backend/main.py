@@ -7,34 +7,36 @@ import logging
 import os
 import ssl
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect
 from werkzeug.security import generate_password_hash
 import secrets
 import string
 
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 # Import after Flask app creation
 from config import create_app
 from extensions import db
-from models import User, Stream
-from routes import *
-from cleanup import start_chat_cleanup_thread, start_detection_cleanup_thread
-from monitoring import start_notification_monitor
-from flask_socketio import SocketIO
+from models import User
 
-load_dotenv()
-
-# Initialize Flask app FIRST
+# Initialize Flask app
 app = create_app()
 
-# Configure Socket.IO ONCE
-socketio = SocketIO(
-    app,
-    cors_allowed_origins=os.getenv('ALLOWED_ORIGINS', '*').split(','),
-    path="/ws",
-    async_mode='gevent',  # ✅ Required for production
-    logger=True,
-    engineio_logger=False
-)
+# Get the socketio instance from utils
+from utils.notifications import get_socketio
+socketio = get_socketio()
+
+if not socketio:
+    logging.error("Socket.IO not properly initialized")
+    raise RuntimeError("Socket.IO initialization failed")
+else:
+    logging.info(f"Socket.IO initialized with async_mode: {socketio.async_mode}")
 
 # === CORS Configuration ===
 @app.after_request
@@ -99,18 +101,24 @@ with app.app_context():
     try:
         from socket_events import register_socket_events
         from utils.notifications import emit_notification
-    
+        from monitoring import start_notification_monitor
+        
+        # Register socket events
         register_socket_events(socketio)
+        
+        # Start background services
         start_notification_monitor()
-        start_detection_cleanup_thread()
-        emit_notification({'system': 'Server started successfully'})
+        
+        # Notify of server start
+        emit_notification({'system': 'Server started successfully', 'event_type': 'server_start'})
+        logging.info("Background services initialized")
     
     except Exception as e:
         logging.error(f"Background services error: {str(e)}")
 
 # === SSL Context Creation ===
 def create_ssl_context():
-    cert_dir = os.path.expanduser(os.getenv('CERT_DIR', '/home/ec2-user/certs'))
+    cert_dir = os.path.expanduser(os.getenv('CERT_DIR', './'))
     ssl_cert = os.path.join(cert_dir, 'fullchain.pem')
     ssl_key = os.path.join(cert_dir, 'privkey.pem')
     
@@ -123,12 +131,14 @@ def create_ssl_context():
 
 # === Main Execution ===
 if __name__ == "__main__":
-    ssl_ctx = create_ssl_context() if os.getenv('ENABLE_SSL', 'false').lower() == 'true' else None
+    ssl_ctx = create_ssl_context() if os.getenv('ENABLE_SSL', 'true').lower() == 'true' else None
+    
+    # Run with socketio
     socketio.run(
         app,
         host='0.0.0.0',
-        port=5000,
-        debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true',
+        port=int(os.getenv('PORT', 5000)),
+        debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'false',
         use_reloader=False,
         ssl_context=ssl_ctx
     )

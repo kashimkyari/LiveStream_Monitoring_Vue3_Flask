@@ -4,7 +4,6 @@ from extensions import db, migrate
 import os
 from dotenv import load_dotenv
 from flask_cors import CORS
-from utils.notifications import init_socketio
 
 load_dotenv()
 
@@ -22,6 +21,7 @@ def create_app():
     migrate.init_app(app, db)
     
     # Initialize Socket.IO with threading mode
+    from utils.notifications import init_socketio
     socketio = init_socketio(app)
 
     from routes.auth_routes import auth_bp
@@ -49,7 +49,6 @@ def create_app():
     app.register_blueprint(telegram_bp)
     
     # Set up Socket.IO event handlers
-    from socket_events import register_socket_events
-    register_socket_events(socketio)
-
+    # This is moved to main.py to avoid circular dependencies
+    
     return app
