@@ -20978,3 +20978,18 @@ AssertionError: write() before start_response
 2025-04-22 00:52:52,860 [INFO] 127.0.0.1 - - [22/Apr/2025 00:52:52] "GET /api/detection-status?stream_url=https://edge16-sof.live.mmcdn.com/live-hls/amlst:hiannaa-sd-2fca8e2934ae2614568cadf995476d70dcd1e0afcee097075ffa0f7d60ea9400_trns_h264/playlist.m3u8 HTTP/1.1" 200 -
 2025-04-22 00:52:53,875 [INFO] 127.0.0.1 - - [22/Apr/2025 00:52:53] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.live/hls/199402881/master/199402881_auto.m3u8 HTTP/1.1" 200 -
 2025-04-22 00:52:54,877 [INFO] 127.0.0.1 - - [22/Apr/2025 00:52:54] "GET /api/detection-status?stream_url=https://edge-hls.doppiocdn.media/hls/183254718/master/183254718_auto.m3u8 HTTP/1.1" 200 -
+2025-04-28 16:10:19,728 [INFO] [Background] Updated proxy list with 480 proxies at 2025-04-28 16:10:19.728441
+2025-04-28 16:10:35,978 [INFO] Database tables initialized
+2025-04-28 16:10:37,380 [INFO] Admin user already exists
+2025-04-28 16:10:38,134 [INFO] Starting notification monitoring system
+2025-04-28 16:10:38,135 [INFO] Notification monitor loop started
+2025-04-28 16:10:38,135 [INFO] Notification monitoring system started successfully
+2025-04-28 16:10:38,136 [ERROR] Background services failed: name 'notification_data' is not defined
+2025-04-28 16:10:38,136 [INFO] Running without SSL
+2025-04-28 16:10:38,699 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.85.39:5000
+2025-04-28 16:10:38,700 [INFO] [33mPress CTRL+C to quit[0m
+2025-04-28 16:10:38,700 [INFO]  * Restarting with stat
+2025-04-28 16:10:56,592 [INFO] [Background] Updated proxy list with 492 proxies at 2025-04-28 16:10:56.592720

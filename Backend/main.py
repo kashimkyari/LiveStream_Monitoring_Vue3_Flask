@@ -29,7 +29,7 @@ app, socketio = create_app()
 # Configure Socket.IO with better compatibility settings
 socketio.init_app(
     app, 
-    cors_allowed_origins="*",  # Allow all origins for WebSocket
+    cors_allowed_origins="https://live-stream-monitoring-vue3-flask.vercel.app",  # Allow all origins for WebSocket
     path="/ws",
     async_mode='threading',    # Use threading mode for better compatibility
     logger=True,               # Enable Socket.IO logging
@@ -39,14 +39,14 @@ socketio.init_app(
 # Allowed frontends (comma‑separated in .env)
 ALLOWED_ORIGINS = os.getenv(
     'ALLOWED_ORIGINS',
-    '*'
+    'https://live-stream-monitoring-vue3-flask.vercel.app'
 ).split(',')
 
 # === Dynamic CORS Handler ===
 @app.after_request
 def apply_cors(response):
     # Allow requests from all origins
-    response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*') 
+    response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', 'https://live-stream-monitoring-vue3-flask.vercel.app') 
     response.headers['Access-Control-Allow-Credentials'] = 'true'
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
@@ -140,8 +140,8 @@ except Exception as e:
     logging.error("Background services failed: %s", e)
 
 if __name__ == "__main__":
-    debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
-    if os.getenv('ENABLE_SSL', 'false').lower() == 'true':
+    debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'false'
+    if os.getenv('ENABLE_SSL', 'false').lower() == 'false':
         cert_dir = os.path.expanduser(os.getenv('CERT_DIR', '~/certs'))
         ssl_cert = os.path.join(cert_dir, 'fullchain.pem')
         ssl_key = os.path.join(cert_dir, 'privkey.pem')
