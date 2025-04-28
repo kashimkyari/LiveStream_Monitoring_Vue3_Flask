@@ -52,4 +52,4 @@ def create_app():
     from socket_events import register_socket_events
     register_socket_events(socketio)
 
-    return app, socketio
+    return app
