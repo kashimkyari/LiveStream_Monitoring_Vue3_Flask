@@ -1,4 +1,5 @@
 import multiprocessing
+import ssl
 
 # Binding
 bind = "0.0.0.0:5000"
@@ -6,10 +7,10 @@ bind = "0.0.0.0:5000"
 # Worker configuration
 worker_class = "threads"
 workers = multiprocessing.cpu_count() * 2 + 1
-threads = 4  # Increased from 2 to 4 for better threading
+threads = 4
 
 # Timeouts
-timeout = 120  # Increased from 60 to 120 seconds for longer operations
+timeout = 120
 graceful_timeout = 30
 keepalive = 5
 
@@ -24,10 +25,14 @@ accesslog = "/var/log/gunicorn/access.log"
 errorlog = "/var/log/gunicorn/error.log"
 capture_output = True
 
-# SSL configuration
-certfile = "./fullchain.pem"
-keyfile = "./privkey.pem"
-ssl_version = "TLSv1_2"
+# SSL configuration - updated approach
+certfile = "fullchain.pem"
+keyfile = "privkey.pem"
+
+# Create SSL context with modern protocols
+ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+ssl_context.load_cert_chain(certfile, keyfile)
+ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
 
 # Process naming
 proc_name = "livestream-monitoring"
