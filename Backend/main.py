@@ -29,7 +29,7 @@ app, socketio = create_app()
 # Configure Socket.IO with better compatibility settings
 socketio.init_app(
     app, 
-    cors_allowed_origins="http://live-stream-monitoring-vue3-flask.vercel.app",  # Allow all origins for WebSocket
+    cors_allowed_origins="https://live-stream-monitoring-vue3-flask.vercel.app",  # Allow all origins for WebSocket
     path="/ws",
     async_mode='threading',    # Use threading mode for better compatibility
     logger=True,               # Enable Socket.IO logging
@@ -39,14 +39,14 @@ socketio.init_app(
 # Allowed frontends (comma‑separated in .env)
 ALLOWED_ORIGINS = os.getenv(
     'ALLOWED_ORIGINS',
-    'http://live-stream-monitoring-vue3-flask.vercel.app'
+    'https://live-stream-monitoring-vue3-flask.vercel.app'
 ).split(',')
 
 # === Dynamic CORS Handler ===
 @app.after_request
 def apply_cors(response):
     # Allow requests from all origins
-    response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', 'http://live-stream-monitoring-vue3-flask.vercel.app') 
+    response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', 'https://live-stream-monitoring-vue3-flask.vercel.app') 
     response.headers['Access-Control-Allow-Credentials'] = 'true'
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
@@ -141,7 +141,8 @@ except Exception as e:
 
 if __name__ == "__main__":
     debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'false'
-    if os.getenv('ENABLE_SSL', 'false').lower() == 'false':
+    # Corrected SSL context setup in main.py
+    if os.getenv('ENABLE_SSL', 'false').lower() == 'true':  # Changed condition
         cert_dir = os.path.expanduser(os.getenv('CERT_DIR', '~/certs'))
         ssl_cert = os.path.join(cert_dir, 'fullchain.pem')
         ssl_key = os.path.join(cert_dir, 'privkey.pem')
@@ -154,14 +155,12 @@ if __name__ == "__main__":
         logging.info("Running without SSL")
     
     # Use socketio.run instead of app.run for Socket.IO support
-    socketio.run(
+    # Update Socket.IO initialization in main.py
+    socketio.init_app(
         app, 
-        host='0.0.0.0', 
-        port=5000, 
-        debug=debug,
-        ssl_context=ssl_ctx,
-        # For compatibility with Flask-SocketIO
-        use_reloader=debug,
-        # Allow unsafe werkzeug in development mode
-        allow_unsafe_werkzeug=debug
+        cors_allowed_origins=ALLOWED_ORIGINS,  # Use dynamic allowed origins
+        path="/ws",
+        async_mode='threading',
+        logger=True,
+        engineio_logger=True
     )
