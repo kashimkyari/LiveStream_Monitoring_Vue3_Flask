@@ -29,11 +29,11 @@ app = create_app()
 # Configure Socket.IO ONCE
 socketio = SocketIO(
     app,
-    cors_allowed_origins=os.getenv('ALLOWED_ORIGINS', 'https://live-stream-monitoring-vue3-flask.vercel.app').split(','),
+    cors_allowed_origins=os.getenv('ALLOWED_ORIGINS', '*').split(','),
     path="/ws",
-    async_mode='gevent',  # Changed to gevent for production
+    async_mode='gevent',  # ✅ Required for production
     logger=True,
-    engineio_logger=False  # Disable in production
+    engineio_logger=False
 )
 
 # === CORS Configuration ===
@@ -88,6 +88,7 @@ with app.app_context():
 
 
 # === Background Services ===
+with app.app_context():
 try:
     from socket_events import register_socket_events
     from utils.notifications import emit_notification
