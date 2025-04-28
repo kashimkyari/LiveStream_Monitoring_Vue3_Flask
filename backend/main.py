@@ -172,7 +172,7 @@ if __name__ == "__main__":
     socketio.run(
         app,
         host='0.0.0.0',
-        port=int(os.getenv('PORT', 443)),
+        port=int(os.getenv('PORT', 8080)),
         debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'false',
         use_reloader=False,
         ssl_context=ssl_ctx
