@@ -18,10 +18,8 @@ class Config:
 
     # ─── Database ────────────────────────────────────────────────────────
     # Prefer DATABASE_URL; fallback to SQLite for local development
-    SQLALCHEMY_DATABASE_URI = (
-        os.getenv('DATABASE_URL') or
-        f"sqlite:///{os.path.join(os.getcwd(), 'instance', 'app.db')}"
-    )
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL') 
+    
     SQLALCHEMY_TRACK_MODIFICATIONS = False   # Disable event system for performance
 
     # ─── CORS ────────────────────────────────────────────────────────────
