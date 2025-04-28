@@ -10,7 +10,7 @@ agent_bp = Blueprint('agent', __name__)
 # Agent Management Endpoints
 # --------------------------------------------------------------------
 @agent_bp.route("/api/agents", methods=["GET"])
-@login_required(role="admin")
+@login_required(role=["admin", "agent"])
 def get_agents():
     agents = User.query.filter_by(role="agent").all()
     return jsonify([agent.serialize() for agent in agents])
@@ -73,7 +73,7 @@ def delete_agent(agent_id):
 
 # Add a new endpoint to get streams assigned to an agent
 @agent_bp.route("/api/agents/<int:agent_id>/assignments", methods=["GET"])
-@login_required(role="admin")
+@login_required(role=["admin", "agent"])
 def get_agent_assignments(agent_id):
     agent = User.query.filter_by(id=agent_id, role="agent").first()
     if not agent:

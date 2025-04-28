@@ -70,7 +70,7 @@ def get_livestream():
 # Fix for detection_routes.py
 
 @detection_bp.route("/api/trigger-detection", methods=["POST"])
-@login_required()
+@login_required(role=["admin", "agent"])
 def trigger_detection():
     data = request.get_json()
     stream_url = data.get("stream_url")

@@ -6,11 +6,13 @@ from utils import login_required
 telegram_bp = Blueprint('telegram', __name__)
 
 @telegram_bp.route("/api/telegram_recipients", methods=["GET"])
+@login_required(role=["admin", "agent"])
 def get_telegram_recipients():
     recipients = TelegramRecipient.query.all()
     return jsonify([r.serialize() for r in recipients])
 
 @telegram_bp.route("/api/telegram_recipients", methods=["POST"])
+@login_required(role=["admin", "agent"])
 def create_telegram_recipient():
     data = request.get_json()
     username = data.get("telegram_username")

@@ -10,7 +10,7 @@ keyword_bp = Blueprint('keyword', __name__)
 # Keyword, Object, and Telegram Routes
 # --------------------------------------------------------------------
 @keyword_bp.route("/api/keywords", methods=["GET"])
-@login_required(role="admin")
+@login_required(role=["admin", "agent"])
 def get_keywords():
     keywords = ChatKeyword.query.all()
     return jsonify([kw.serialize() for kw in keywords])
@@ -69,7 +69,7 @@ def delete_keyword(keyword_id):
     return jsonify({"message": "Keyword deleted"})
 
 @keyword_bp.route("/api/objects", methods=["GET"])
-@login_required(role="admin")
+@login_required(role=["admin", "agent"])
 def get_objects():
     objects = FlaggedObject.query.all()
     return jsonify([obj.serialize() for obj in objects])
@@ -113,7 +113,7 @@ def delete_object(object_id):
     return jsonify({"message": "Object deleted"})
 
 @keyword_bp.route("/api/telegram_recipients", methods=["GET"])
-@login_required(role="admin")
+@login_required(role=["admin", "agent"])
 def get_telegram_recipients():
     recipients = TelegramRecipient.query.all()
     return jsonify([r.serialize() for r in recipients])
