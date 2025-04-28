@@ -47,6 +47,13 @@ def apply_cors(response):
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
     return response
 
+# In main.py
+@app.before_request
+def enforce_https():
+    if not request.is_secure and os.getenv('ENABLE_SSL') == 'true':
+        url = request.url.replace('http://', 'https://', 1)
+        return redirect(url, code=301)
+
 # === Database Initialization ===
 with app.app_context():
     try:
