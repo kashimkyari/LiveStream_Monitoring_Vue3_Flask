@@ -17,9 +17,11 @@ class Config:
     REMEMBER_COOKIE_SECURE = True            # Only over HTTPS
 
     # ─── Database ────────────────────────────────────────────────────────
-    # Prefer DATABASE_URL; fallback to SQLite for local development
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL') 
-    
+    # Enforce using DATABASE_URL exclusively; fail fast if missing
+    DATABASE_URL = os.getenv('DATABASE_URL')
+    if not DATABASE_URL:
+        raise RuntimeError('DATABASE_URL environment variable is required')
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL   # Use only DATABASE_URL  
     SQLALCHEMY_TRACK_MODIFICATIONS = False   # Disable event system for performance
 
     # ─── CORS ────────────────────────────────────────────────────────────
