@@ -12,7 +12,7 @@
           <div 
             class="toggle-switch" 
             :class="{ active: settings.emailNotifications }" 
-            @click="$emit('toggle-setting', 'emailNotifications')"
+            @click="toggleEmailNotifications"
           >
             <div class="toggle-switch-handle"></div>
           </div>
@@ -23,9 +23,31 @@
           <div 
             class="toggle-switch" 
             :class="{ active: settings.pushNotifications }" 
-            @click="$emit('toggle-setting', 'pushNotifications')"
+            @click="togglePushNotifications"
           >
             <div class="toggle-switch-handle"></div>
+          </div>
+        </div>
+        
+        <!-- Telegram connection status -->
+        <div class="telegram-status" v-if="settings.pushNotifications">
+          <div v-if="telegramConnected" class="status-connected">
+            <font-awesome-icon :icon="['fab', 'telegram']" class="telegram-icon" />
+            <div class="status-text">
+              <span class="status-label">Connected to Telegram</span>
+              <span class="status-username">@{{ telegramUsername }}</span>
+            </div>
+            <button class="btn-change" @click="showTelegramModal = true">
+              Change
+            </button>
+          </div>
+          <div v-else class="status-disconnected" @click="showTelegramModal = true">
+            <font-awesome-icon :icon="['fab', 'telegram']" class="telegram-icon" />
+            <div class="status-text">
+              <span class="status-label">Connect to Telegram</span>
+              <span class="status-description">Required for push notifications</span>
+            </div>
+            <font-awesome-icon icon="chevron-right" class="icon-right" />
           </div>
         </div>
       </div>
@@ -120,15 +142,23 @@
         </div>
       </div>
     </div>
+    
+    <!-- Telegram Setup Modal -->
+    <TelegramSetupModal 
+      :is-visible="showTelegramModal"
+      @close="showTelegramModal = false"
+      @telegram-connected="handleTelegramConnected"
+    />
   </div>
 </template>
 
 <script setup>
-import { defineProps, defineEmits, ref, watch, nextTick } from 'vue'
+import { defineProps, defineEmits, ref, watch, nextTick, onMounted } from 'vue'
 import axios from 'axios'
 import anime from 'animejs/lib/anime.es.js'
+import TelegramSetupModal from './TelegramSetupModal.vue'
 
-defineProps({
+const props = defineProps({
   settings: {
     type: Object,
     default: () => ({
@@ -153,6 +183,7 @@ const emit = defineEmits([
   'logout',
   'logout-start',
   'logout-error',
+  'update-settings'
 ])
 
 // Sheet and animation controls
@@ -163,6 +194,70 @@ const logoutAnimationContainer = ref(null)
 const logoutIcon = ref(null)
 const logoutMessage = ref(null)
 const logoutSpinner = ref(null)
+
+// Telegram related state
+const showTelegramModal = ref(false)
+const telegramConnected = ref(false)
+const telegramUsername = ref('')
+
+// Check if telegram is connected on component mount
+onMounted(async () => {
+  try {
+    // Get user settings from localStorage or API
+    const userSettings = localStorage.getItem('userSettings')
+    if (userSettings) {
+      const parsedSettings = JSON.parse(userSettings)
+      if (parsedSettings.telegramUsername) {
+        telegramConnected.value = true
+        telegramUsername.value = parsedSettings.telegramUsername
+      }
+    }
+  } catch (error) {
+    console.error('Error loading telegram settings:', error)
+  }
+})
+
+// Toggle notification settings
+const toggleEmailNotifications = () => {
+  emit('toggle-setting', 'emailNotifications')
+}
+
+const togglePushNotifications = () => {
+  // If turning on push notifications and telegram not connected, show the modal
+  if (!props.settings.pushNotifications && !telegramConnected.value) {
+    showTelegramModal.value = true
+  }
+  
+  emit('toggle-setting', 'pushNotifications')
+}
+
+// Handle telegram connection success
+const handleTelegramConnected = ({ username, chatId }) => {
+  telegramConnected.value = true
+  telegramUsername.value = username
+  
+  // Save to localStorage for persistence
+  try {
+    const currentSettings = localStorage.getItem('userSettings') 
+      ? JSON.parse(localStorage.getItem('userSettings')) 
+      : {}
+      
+    localStorage.setItem('userSettings', JSON.stringify({
+      ...currentSettings,
+      telegramUsername: username,
+      telegramChatId: chatId
+    }))
+    
+    // Update app settings
+    emit('update-settings', {
+      ...props.settings,
+      telegramUsername: username,
+      telegramChatId: chatId
+    })
+  } catch (error) {
+    console.error('Error saving telegram settings:', error)
+  }
+}
 
 // Run animation when the sheet shows
 const animateSheet = () => {
@@ -241,8 +336,8 @@ const completeLogout = () => {
     complete: () => {
       showLogoutAnimation.value = false
       emit('logout')
-      // Redirect to home page
-          
+      // Clear any stored settings on logout
+      localStorage.removeItem('userSettings')
     }
   })
 }
@@ -269,7 +364,6 @@ const handleLogout = async () => {
     // If successful, play the logout animation
     if (response.status === 200) {
       playLogoutAnimation()
-
     }
 
   } catch (error) {

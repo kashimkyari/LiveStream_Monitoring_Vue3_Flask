@@ -23,13 +23,15 @@ import {
   faHouse,
   faPlay,
   faStop,
-  faBinoculars 
+  faBinoculars ,
+  faLink
 } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import Toast from "vue-toastification"
 import "vue-toastification/dist/index.css"
 import { inject } from "@vercel/analytics"
 import { createPinia } from 'pinia'
+import { faTelegram } from '@fortawesome/free-brands-svg-icons';
 
 // Add all icons to the library
 library.add(
@@ -51,7 +53,9 @@ library.add(
   faHouse,
   faPlay,
   faStop,
-  faBinoculars
+  faBinoculars,
+  faLink,
+  faTelegram
 
 )
 
