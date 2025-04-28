@@ -11,40 +11,50 @@ import hashlib
 from datetime import datetime, timedelta
 import logging
 
-
 auth_bp = Blueprint('auth', __name__)
 
-def _build_cors_preflight_response():
+def build_cors_preflight_response():
     response = make_response()
-    response.headers.add("Access-Control-Allow-Origin", "*")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type")
-    response.headers.add("Access-Control-Allow-Methods", "POST")
+    # Instead of "*", specify your actual frontend domain
+    response.headers.add("Access-Control-Allow-Origin", request.headers.get("Origin", "https://live-stream-monitoring-vue3-flask.vercel.app"))
+    response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
+    response.headers.add("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
     response.headers.add("Access-Control-Allow-Credentials", "true")
     return response
 
 # --------------------------------------------------------------------
 # Authentication Endpoints
 # --------------------------------------------------------------------
-
 @auth_bp.route("/api/login", methods=["POST", "OPTIONS"])
 def login():
     if request.method == "OPTIONS":
-        return _build_cors_preflight_response()
+        return build_cors_preflight_response()
     
-    data = request.get_json()
-    username_or_email = data.get("username")
-    password = data.get("password")
-    
-    if not username_or_email or not password:
-        return jsonify({"message": "Username/email and password are required"}), 400
+    # Add debug logging for incoming requests
+    current_app.logger.debug(f"Login attempt from: {request.remote_addr}, User-Agent: {request.headers.get('User-Agent')}")
     
     try:
+        data = request.get_json()
+        if not data:
+            current_app.logger.warning("No JSON data received in request")
+            return jsonify({"message": "Invalid request format"}), 400
+            
+        username_or_email = data.get("username")
+        password = data.get("password")
+        
+        current_app.logger.debug(f"Login attempt for: {username_or_email}")
+        
+        if not username_or_email or not password:
+            return jsonify({"message": "Username/email and password are required"}), 400
+        
         user = None
         # Check if input is email format
         if '@' in username_or_email:
             try:
                 # Try to query by email
                 user = User.query.filter_by(email=username_or_email).first()
+                if user:
+                    current_app.logger.debug(f"User found by email: {username_or_email}")
             except Exception as e:
                 # If email column doesn't exist, log error but continue with username check
                 current_app.logger.warning(f"Email query failed, trying username: {str(e)}")
@@ -52,10 +62,18 @@ def login():
         # If not found by email, try username
         if not user:
             user = User.query.filter_by(username=username_or_email).first()
+            if user:
+                current_app.logger.debug(f"User found by username: {username_or_email}")
         
+        if not user:
+            current_app.logger.debug(f"No user found for: {username_or_email}")
+            return jsonify({"message": "Invalid credentials"}), 401
+            
         if user and check_password_hash(user.password, password):
             # Set session to permanent (30 days by default) or customizable
             session.permanent = True
+            
+            # Configure session for cross-browser compatibility
             session["user_id"] = user.id
             session["user_role"] = user.role
             
@@ -63,18 +81,38 @@ def login():
             user.last_active = datetime.utcnow()
             db.session.commit()
             
-            return jsonify({
-                "message": "Login successful", 
+            # Set secure cookies for better browser compatibility
+            response = jsonify({
+                "message": "Login successful",
                 "role": user.role,
                 "username": user.username
             })
+            
+            # Set SameSite policy based on environment
+            is_production = current_app.config.get('ENV') == 'production'
+            
+            # Set cookie attributes for better cross-browser security
+            response.set_cookie(
+                'session_active', 
+                'true',
+                max_age=30*24*60*60,  # 30 days in seconds
+                httponly=True,
+                secure=is_production,  # Only set secure in production
+                samesite='Lax'  # Use 'Strict' in production, 'Lax' for better compatibility
+            )
+            
+            current_app.logger.info(f"Login successful for: {username_or_email}")
+            return response
         
         # Use generic error message for security
+        current_app.logger.debug(f"Invalid password for: {username_or_email}")
         return jsonify({"message": "Invalid credentials"}), 401
-    
+        
     except Exception as e:
         current_app.logger.error(f"Login error: {str(e)}")
-        return jsonify({"message": "An error occurred during login"}), 500
+        return jsonify({"message": "An error occurred during login", "error": str(e) if current_app.debug else None}), 500
+
+# Additional authentication routes would go here
 
 @auth_bp.route("/api/logout", methods=["POST"])
 def logout():
