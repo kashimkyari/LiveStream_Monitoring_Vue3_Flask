@@ -19,3 +19,4 @@ ffmpeg
 vaderSentiment
 jsonify
 simple-websocket
+Flask-CORS==4.0.0

@@ -1,17 +1,55 @@
-// Centralized Axios instance for all API calls
+// api.js - Updated configuration with proper error handling
 import axios from 'axios'
 
+const API_BASE_URL = 'https://54.86.99.85:5000';
+
+// Create axios instance with better error handling
 const api = axios.create({
-  baseURL: 'https://54.86.99.85:5000',
+  baseURL: API_BASE_URL,
   withCredentials: true,               // Include cookies/credentials
   headers: {
     'Content-Type': 'application/json'
   }
-})
+});
 
-// services/api.js - Add these methods to your existing API service
+// Add request interceptor for additional headers if needed
+api.interceptors.request.use(
+  config => {
+    // You could add auth tokens here if using token-based auth
+    return config;
+  },
+  error => {
+    console.error('API Request Error:', error);
+    return Promise.reject(error);
+  }
+);
 
-// Request password reset (sends email with token)
+// Add response interceptor for better error handling
+api.interceptors.response.use(
+  response => {
+    return response;
+  },
+  error => {
+    // Handle CORS and network errors specifically
+    if (error.message === 'Network Error') {
+      console.error('Network Error - Possibly CORS related:', error);
+      // You might want to display a user-friendly message here
+    }
+    
+    // Log all API errors with details
+    console.error('API Error Response:', {
+      message: error.message,
+      endpoint: error.config?.url,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
+    
+    return Promise.reject(error);
+  }
+);
+
+// Password reset methods
 export const requestPasswordReset = (email) => {
   return api.post('/api/forgot-password', { email });
 };
@@ -26,4 +64,21 @@ export const resetPassword = (token, password) => {
   return api.post('/api/reset-password', { token, password });
 };
 
-export default api
+// General purpose API functions
+export const login = (username, password) => {
+  return api.post('/api/login', { username, password });
+};
+
+export const logout = () => {
+  return api.post('/api/logout');
+};
+
+export const register = (username, email, password, receiveUpdates = false) => {
+  return api.post('/api/register', { username, email, password, receiveUpdates });
+};
+
+export const checkSession = () => {
+  return api.get('/api/session');
+};
+
+export default api;
