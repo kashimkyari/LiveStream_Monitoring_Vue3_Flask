@@ -1,29 +1,69 @@
-# config.py
-from flask import Flask
-from extensions import db, migrate
 import os
-from dotenv import load_dotenv
+from flask import Flask
 from flask_cors import CORS
+from dotenv import load_dotenv
 
+from extensions import db, migrate
+from utils.notifications import init_socketio
+
+# Load .env into environment (must be in project root)
 load_dotenv()
 
-def create_app():
-    app = Flask(__name__)
-    CORS(app, supports_credentials=True)
-    
-    # Configuration
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.secret_key = os.getenv('FLASK_SECRET_KEY')
+class Config:
+    """Base configuration for all environments."""
+    # ─── Secret & Security ───────────────────────────────────────────────
+    SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'please-set-a-secure-key')
+    SESSION_COOKIE_SECURE = True             # Only over HTTPS
+    REMEMBER_COOKIE_SECURE = True            # Only over HTTPS
 
-    # Initialize extensions
-    db.init_app(app)
-    migrate.init_app(app, db)
-    
-    # Initialize Socket.IO with threading mode
-    from utils.notifications import init_socketio
+    # ─── Database ────────────────────────────────────────────────────────
+    # Prefer DATABASE_URL; fallback to SQLite for local development
+    SQLALCHEMY_DATABASE_URI = (
+        os.getenv('DATABASE_URL') or
+        f"sqlite:///{os.path.join(os.getcwd(), 'instance', 'app.db')}"
+    )
+    SQLALCHEMY_TRACK_MODIFICATIONS = False   # Disable event system for performance
+
+    # ─── CORS ────────────────────────────────────────────────────────────
+    # In production, set CORS_ORIGINS to a comma-separated list of allowed URLs
+    CORS_SUPPORTS_CREDENTIALS = True
+    CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
+
+def create_app(config_class=Config):
+    """
+    Application factory function.
+    Usage: app = create_app()
+    """
+    # Create app with instance folder for config & SQLite file
+    app = Flask(__name__, instance_relative_config=True)
+    app.config.from_object(config_class)
+
+    # Ensure instance folder exists
+    try:
+        os.makedirs(app.instance_path, exist_ok=True)
+    except OSError as e:
+        app.logger.warning(f"Could not create instance path: {e}")
+
+    # ─── CORS Setup ─────────────────────────────────────────────────────
+    CORS(
+        app,
+        supports_credentials=app.config['CORS_SUPPORTS_CREDENTIALS'],
+        origins=[u.strip() for u in app.config['CORS_ORIGINS'].split(',')]
+    )  # ⚠️ In prod, replace '*' with explicit domain list
+
+    # ─── Initialize Extensions ───────────────────────────────────────────
+    try:
+        db.init_app(app)                     # SQLAlchemy
+        migrate.init_app(app, db)            # Flask-Migrate
+    except Exception as e:
+        app.logger.error(f"Extension init failed: {e}")
+        raise
+
+    # ─── Initialize Socket.IO ───────────────────────────────────────────
+    # Uses threading by default; you may switch to eventlet/gevent for scale
     socketio = init_socketio(app)
 
+    # ─── Register Blueprints ─────────────────────────────────────────────
     from routes.auth_routes import auth_bp
     from routes.agent_routes import agent_bp
     from routes.stream_routes import stream_bp
@@ -35,20 +75,22 @@ def create_app():
     from routes.messaging_routes import messaging_bp
     from routes.notification_routes import notification_bp
     from routes.telegram_routes import telegram_bp
-    
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(agent_bp)
-    app.register_blueprint(stream_bp)
-    app.register_blueprint(assignment_bp)
-    app.register_blueprint(dashboard_bp)
-    app.register_blueprint(detection_bp)
-    app.register_blueprint(health_bp)
-    app.register_blueprint(keyword_bp)
-    app.register_blueprint(messaging_bp)
-    app.register_blueprint(notification_bp)
-    app.register_blueprint(telegram_bp)
-    
-    # Set up Socket.IO event handlers
-    # This is moved to main.py to avoid circular dependencies
-    
+
+    for bp in (
+        auth_bp, agent_bp, stream_bp, assignment_bp, dashboard_bp,
+        detection_bp, health_bp, keyword_bp, messaging_bp, notification_bp,
+        telegram_bp
+    ):
+        app.register_blueprint(bp)
+
+    # ─── Error Handlers ─────────────────────────────────────────────────
+    @app.errorhandler(404)
+    def not_found(err):
+        return {"error": "Not Found"}, 404
+
+    @app.errorhandler(500)
+    def server_error(err):
+        app.logger.exception(err)
+        return {"error": "Internal Server Error"}, 500
+
     return app
