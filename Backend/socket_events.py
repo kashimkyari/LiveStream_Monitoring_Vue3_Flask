@@ -4,6 +4,8 @@ from flask import session, current_app, request
 from models import db, User
 import datetime
 import logging
+from sqlalchemy import or_
+from models import Assignment, DetectionLog, Stream  # Added missing imports
 
 # Track online users
 online_users = {}
@@ -39,7 +41,7 @@ def register_socket_events(socketio):
             current_app.logger.info(f"Anonymous connection: {request.sid}")
 
     @socketio.on('disconnect')
-    def handle_disconnect():
+    def handle_disconnect(*args):  # Fixed: Accept variable arguments
         """Client disconnected"""
         sid = request.sid
         current_app.logger.info(f"Client disconnected: {sid}")
@@ -144,7 +146,7 @@ def register_socket_events(socketio):
                         current_app.logger.info(f"Agent {user.username} joined {stream_room} room")
     
     @socketio.on('disconnect', namespace='/notifications')
-    def handle_notification_disconnect():
+    def handle_notification_disconnect(*args):  # Fixed: Accept variable arguments
         """Client disconnected from notifications namespace"""
         current_app.logger.info(f"Client disconnected from notifications namespace: {request.sid}")
         

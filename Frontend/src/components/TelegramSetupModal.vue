@@ -185,10 +185,17 @@ const submitForm = async () => {
     // Remove @ if user included it
     const username = telegramUsername.value.trim().replace(/^@/, '')
     
-    const response = await axios.post('/api/telegram_recipients', {
-      telegram_username: username,
-      chat_id: chatId.value.trim()
-    })
+   const response = await axios.post(
+     '/api/telegram_recipients',
+     {
+       telegram_username: username,
+       chat_id: chatId.value.trim()
+     },
+     {
+       withCredentials: true // Critical: Ensures cookies (session, auth) are sent with the request
+     }
+   )
+
     
     if (response.status === 201) {
       isSubmitting.value = false

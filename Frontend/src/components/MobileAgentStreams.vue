@@ -180,86 +180,14 @@
       </div>
     </div>
 
-    <!-- Video Player Modal (displays when a stream is selected) -->
-    <div v-if="selectedStream" class="video-player-modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <div class="modal-title">
-            <h3>{{ selectedStream.streamer_username }}</h3>
-            <div class="stream-platform" :class="selectedStream.platform.toLowerCase()">
-              {{ selectedStream.platform }}
-            </div>
-            <div class="stream-status-badge">
-              LIVE
-            </div>
-          </div>
-          <button class="close-btn" @click="closePlayer">
-            <font-awesome-icon icon="times" />
-          </button>
-        </div>
-        <div class="video-container">
-          <div class="video-player">
-            <div class="full-player">
-              <video 
-                ref="videoPlayer"
-                class="full-video-player" 
-                id="main-video-player"
-                playsinline
-                autoplay 
-              ></video>
-              <button 
-                v-if="!isPlaying" 
-                class="play-overlay-btn"
-                @click="startPlayback"
-              >
-                <font-awesome-icon icon="play" size="3x" />
-              </button>
-            </div>
-          </div>
-        </div>
-        <div class="stream-metadata">
-          <div class="meta-row">
-            <div class="platform-badge" :class="selectedStream.platform.toLowerCase()">
-              {{ selectedStream.platform }}
-            </div>
-            <div class="viewer-count">
-              <font-awesome-icon icon="eye" /> {{ formatNumber(selectedStream.viewer_count || 0) }} viewers
-            </div>
-          </div>
-          <div class="meta-row">
-            <div class="stream-time">
-              <font-awesome-icon icon="clock" /> 
-              Streaming {{ formatStreamTime(selectedStream.stream_start_time) }}
-            </div>
-            <div class="status-group">
-              <div class="live-status">
-                <span class="live-dot"></span> LIVE
-              </div>
-              <div v-if="selectedStream.detection_status" class="detection-status">
-                {{ selectedStream.detection_status }}
-              </div>
-            </div>
-          </div>
-          <div class="detection-controls">
-            <button 
-              class="detection-trigger-btn" 
-              :class="{ 'active': selectedStream.detection_active }"
-              @click="toggleDetection(selectedStream)"
-            >
-              <font-awesome-icon :icon="selectedStream.detection_active ? 'stop' : 'play'" />
-              {{ selectedStream.detection_active ? 'Stop Detection' : 'Start Detection' }}
-            </button>
-            <button class="refresh-stream-btn" @click="refreshStreamUrl(selectedStream)">
-              <font-awesome-icon icon="sync" />
-              Refresh Stream
-            </button>
-          </div>
-          <div class="stream-url">
-            <p><strong>Room URL:</strong> <a :href="selectedStream.room_url" target="_blank">{{ selectedStream.room_url }}</a></p>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- Video Player Modal using the VideoPlayerModal component -->
+    <VideoPlayerModal
+      :show="!!selectedStream"
+      :stream="selectedStream || {}"
+      @close="closePlayer"
+      @toggle-detection="toggleDetection"
+      @refresh-stream="refreshStreamUrl"
+    />
   </div>
 </template>
 
@@ -269,6 +197,7 @@ import { formatDistance } from 'date-fns'
 import axios from 'axios'
 import Hls from 'hls.js'
 import { useToast } from 'vue-toastification'
+import VideoPlayerModal from './VideoPlayerModal.vue'
 
 const toast = useToast()
 
@@ -278,9 +207,7 @@ const selectedStream = ref(null)
 const assignments = ref([])
 const isLoading = ref(false)
 const currentAgentId = ref(null)
-const videoPlayer = ref(null)
 const hlsInstances = ref({})
-const isPlaying = ref(false)
 
 onMounted(() => {
   loadAssignments()
@@ -496,17 +423,6 @@ const refreshStreamUrl = async (stream) => {
         }
       }
       
-      // If this is the selected stream, update video player
-      if (selectedStream.value && selectedStream.value.id === stream.id) {
-        if (hlsInstances.value['main-player']) {
-          hlsInstances.value['main-player'].destroy()
-          delete hlsInstances.value['main-player']
-        }
-        
-        await nextTick()
-        initializeMainPlayer()
-      }
-      
       toast.success(`Stream refreshed for ${stream.streamer_username}`)
     } else {
       toast.error(`Failed to refresh stream for ${stream.streamer_username}`)
@@ -516,81 +432,12 @@ const refreshStreamUrl = async (stream) => {
   }
 }
 
-const selectStream = async (stream) => {
-  if (hlsInstances.value['main-player']) {
-    hlsInstances.value['main-player'].destroy()
-    delete hlsInstances.value['main-player']
-  }
-  
+const selectStream = (stream) => {
   selectedStream.value = stream
-  isPlaying.value = false
-  
-  await nextTick()
-  initializeMainPlayer()
-}
-
-const initializeMainPlayer = () => {
-  if (!selectedStream.value || !videoPlayer.value) return
-
-  if (Hls.isSupported()) {
-    const hls = new Hls({
-      enableWorker: true,
-      lowLatencyMode: true,
-      maxBufferSize: 30 * 1000, // 30 seconds
-    })
-
-    hlsInstances.value['main-player'] = hls
-
-    hls.on(Hls.Events.ERROR, (event, data) => {
-      if (data.fatal) {
-        switch(data.type) {
-          case Hls.ErrorTypes.NETWORK_ERROR:
-            hls.startLoad()
-            break
-          case Hls.ErrorTypes.MEDIA_ERROR:
-            hls.recoverMediaError()
-            break
-          default:
-            if (hlsInstances.value['main-player']) {
-              hlsInstances.value['main-player'].destroy()
-              delete hlsInstances.value['main-player']
-              initializeMainPlayer()
-            }
-            break
-        }
-      }
-    })
-
-    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-      hls.loadSource(selectedStream.value.video_url)
-    })
-
-    hls.attachMedia(videoPlayer.value)
-  } else if (videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) {
-    // Native HLS support
-    videoPlayer.value.src = selectedStream.value.video_url
-  }
-}
-
-const startPlayback = () => {
-  if (videoPlayer.value) {
-    videoPlayer.value.muted = false
-    videoPlayer.value.controls = true
-    videoPlayer.value.play().then(() => {
-      isPlaying.value = true
-    }).catch(error => {
-      console.log('Playback error:', error)
-    })
-  }
 }
 
 const closePlayer = () => {
-  if (hlsInstances.value['main-player']) {
-    hlsInstances.value['main-player'].destroy()
-    delete hlsInstances.value['main-player']
-  }
   selectedStream.value = null
-  isPlaying.value = false
 }
 
 const formatNumber = (num) => {

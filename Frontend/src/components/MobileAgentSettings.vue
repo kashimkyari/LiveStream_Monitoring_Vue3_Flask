@@ -270,60 +270,75 @@ const animateSheet = () => {
 }
 
 // Mobile-optimized logout animation
+// Mobile-optimized logout animation
 const playLogoutAnimation = () => {
   showLogoutAnimation.value = true
   
-  // Container animation
-  anime({
-    targets: logoutAnimationContainer.value,
-    opacity: [0, 1],
-    duration: 400,
-    easing: 'easeOutQuad'
-  })
-  
-  // Icon animation
-  anime({
-    targets: logoutIcon.value,
-    scale: [0, 1],
-    opacity: [0, 1],
-    duration: 500,
-    easing: 'easeOutBack'
-  })
-  
-  // Message animation
-  anime({
-    targets: logoutMessage.value,
-    opacity: [0, 1],
-    translateY: ['10px', '0px'],
-    delay: 200,
-    duration: 400,
-    easing: 'easeOutQuad'
-  })
-  
-  // Spinner circles animation
-  anime({
-    targets: logoutSpinner.value.querySelectorAll('.spinner-circle'),
-    scale: [0, 1],
-    opacity: [0, 1],
-    delay: anime.stagger(50),
-    duration: 400,
-    easing: 'easeOutExpo',
-    complete: () => {
-      // Rotate the entire spinner
+  // Wait for next tick to ensure refs are populated after showLogoutAnimation is set to true
+  nextTick(() => {
+    // Container animation
+    if (logoutAnimationContainer.value) {
       anime({
-        targets: logoutSpinner.value,
-        rotate: '360deg',
-        duration: 1500,
-        loop: true,
-        easing: 'linear'
+        targets: logoutAnimationContainer.value,
+        opacity: [0, 1],
+        duration: 400,
+        easing: 'easeOutQuad'
       })
     }
+    
+    // Icon animation
+    if (logoutIcon.value) {
+      anime({
+        targets: logoutIcon.value,
+        scale: [0, 1],
+        opacity: [0, 1],
+        duration: 500,
+        easing: 'easeOutBack'
+      })
+    }
+    
+    // Message animation
+    if (logoutMessage.value) {
+      anime({
+        targets: logoutMessage.value,
+        opacity: [0, 1],
+        translateY: ['10px', '0px'],
+        delay: 200,
+        duration: 400,
+        easing: 'easeOutQuad'
+      })
+    }
+    
+    // Spinner circles animation
+    if (logoutSpinner.value) {
+      const spinnerCircles = logoutSpinner.value.querySelectorAll('.spinner-circle')
+      anime({
+        targets: spinnerCircles,
+        scale: [0, 1],
+        opacity: [0, 1],
+        delay: anime.stagger(50),
+        duration: 400,
+        easing: 'easeOutExpo',
+        complete: () => {
+          // Rotate the entire spinner
+          if (logoutSpinner.value) {
+            anime({
+              targets: logoutSpinner.value,
+              rotate: '360deg',
+              duration: 1500,
+              loop: true,
+              easing: 'linear'
+            })
+          }
+        }
+      })
+    }
+    
+    // After a delay, fade out and complete logout
+    setTimeout(() => {
+      completeLogout()
+    }, 1800) // Slightly shorter for mobile
   })
-  
-  // After a delay, fade out and complete logout
-  setTimeout(() => {
-    completeLogout()
-  }, 1800) // Slightly shorter for mobile
 }
 
 // Fade out animation and complete logout
