@@ -41,6 +41,7 @@ else:
 
 # Parse ALLOWED_ORIGINS from environment
 allowed_origins = os.getenv('ALLOWED_ORIGINS', '*').split(',')
+vercel_domain = 'https://live-stream-monitoring-vue3-flask.vercel.app'
 logging.info(f"Configured allowed origins: {allowed_origins}")
 
 # === CORS Configuration for Flask ===
@@ -51,9 +52,13 @@ CORS(app,
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 # === CORS Configuration for Socket.IO ===
+if vercel_domain not in allowed_origins:
+    allowed_origins.append(vercel_domain)
+logging.info(f"Configured allowed origins: {allowed_origins}")
 # This is crucial for Socket.IO connections
 if '*' in allowed_origins:
-    socketio.cors_allowed_origins = '*'
+    socketio.cors_allowed_origins = allowed_origins + ['https://live-stream-monitoring-vue3-flask.vercel.app']
+    
 else:
     socketio.cors_allowed_origins = allowed_origins
     
