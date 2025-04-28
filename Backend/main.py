@@ -89,17 +89,17 @@ with app.app_context():
 
 # === Background Services ===
 with app.app_context():
-try:
-    from socket_events import register_socket_events
-    from utils.notifications import emit_notification
+    try:
+        from socket_events import register_socket_events
+        from utils.notifications import emit_notification
     
-    register_socket_events(socketio)
-    start_notification_monitor()
-    start_detection_cleanup_thread()
-    emit_notification({'system': 'Server started successfully'})
+        register_socket_events(socketio)
+        start_notification_monitor()
+        start_detection_cleanup_thread()
+        emit_notification({'system': 'Server started successfully'})
     
-except Exception as e:
-    logging.error(f"Background services error: {str(e)}")
+    except Exception as e:
+        logging.error(f"Background services error: {str(e)}")
 
 # === SSL Context Creation ===
 def create_ssl_context():
