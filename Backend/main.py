@@ -11,6 +11,7 @@ from flask import Flask, request, jsonify, redirect
 from werkzeug.security import generate_password_hash
 import secrets
 import string
+from flask_cors import CORS
 
 load_dotenv()
 
@@ -42,23 +43,11 @@ else:
 # Add/modify this in main.py
 
 # === CORS Configuration ===
-@app.after_request
-def apply_cors(response):
-    origin = request.headers.get('Origin')
-    allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',')
-    
-    # Always set Access-Control-Allow-Credentials to 'true'
-    response.headers['Access-Control-Allow-Credentials'] = 'true'
-    
-    # Check if origin is in allowed list, or use dynamic origin
-    if origin in allowed_origins or not allowed_origins or '' in allowed_origins:
-        response.headers['Access-Control-Allow-Origin'] = origin
-    
-    # Set other CORS headers
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
-    
-    return response
+CORS(app, 
+     origins=os.getenv('ALLOWED_ORIGINS', '*').split(','),
+     supports_credentials=True,
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>', methods=['OPTIONS'])
@@ -79,7 +68,7 @@ def handle_options(path):
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
         
         return response
-        
+
 # In main.py
 @app.before_request
 def enforce_https():
