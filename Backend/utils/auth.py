@@ -6,7 +6,7 @@ from flask import session, jsonify, request
 def login_required(f=None, role=None):
     """
     Decorator to restrict access to authenticated users with optional role check
-    Can be used as @login_required or @login_required(role="admin")
+    Can be used as @login_required or @login_required(role="admin") or @login_required(role=["admin", "agent"])
     """
     def decorator(f):
         @wraps(f)
@@ -14,8 +14,17 @@ def login_required(f=None, role=None):
             if "user_id" not in session:
                 return jsonify({"message": "Authentication required"}), 401
             
-            if role is not None and session.get("user_role") != role:
-                return jsonify({"message": f"{role.capitalize()} privileges required"}), 403
+            if role is not None:
+                user_role = session.get("user_role")
+                
+                # Handle both single role (string) and multiple roles (list)
+                if isinstance(role, list):
+                    if user_role not in role:
+                        allowed_roles = ", ".join(r.capitalize() for r in role)
+                        return jsonify({"message": f"{allowed_roles} privileges required"}), 403
+                else:
+                    if user_role != role:
+                        return jsonify({"message": f"{role.capitalize()} privileges required"}), 403
                 
             return f(*args, **kwargs)
         return decorated_function

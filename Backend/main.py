@@ -39,15 +39,25 @@ if not socketio:
 else:
     logging.info(f"Socket.IO initialized with async_mode: {socketio.async_mode}")
 
-# === CORS Configuration ===
-# Add/modify this in main.py
+# Parse ALLOWED_ORIGINS from environment
+allowed_origins = os.getenv('ALLOWED_ORIGINS', '*').split(',')
+logging.info(f"Configured allowed origins: {allowed_origins}")
 
-# === CORS Configuration ===
+# === CORS Configuration for Flask ===
 CORS(app, 
-     origins=os.getenv('ALLOWED_ORIGINS', '*').split(','),
+     origins=allowed_origins,
      supports_credentials=True,
      allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+
+# === CORS Configuration for Socket.IO ===
+# This is crucial for Socket.IO connections
+if '*' in allowed_origins:
+    socketio.cors_allowed_origins = '*'
+else:
+    socketio.cors_allowed_origins = allowed_origins
+    
+logging.info(f"Socket.IO CORS configured with: {socketio.cors_allowed_origins}")
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>', methods=['OPTIONS'])
@@ -58,9 +68,8 @@ def handle_options(path):
         
         # Set CORS headers
         origin = request.headers.get('Origin')
-        allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',')
         
-        if origin in allowed_origins or not allowed_origins or '' in allowed_origins:
+        if origin in allowed_origins or not allowed_origins or '' in allowed_origins or '*' in allowed_origins:
             response.headers['Access-Control-Allow-Origin'] = origin
         
         response.headers['Access-Control-Allow-Credentials'] = 'true'

@@ -11,7 +11,7 @@ dashboard_bp = Blueprint('dashboard', __name__)
 # Dashboard Endpoints
 # --------------------------------------------------------------------
 @dashboard_bp.route("/api/dashboard", methods=["GET"])
-@login_required(role=["admin", "agent"])
+@login_required
 def get_dashboard():
     try:
         streams = Stream.query.options(joinedload(Stream.assignments).joinedload(Assignment.agent)).all()
@@ -33,7 +33,7 @@ def get_dashboard():
         return jsonify({"message": "Error fetching dashboard data", "error": str(e)}), 500
 
 @dashboard_bp.route("/api/agent/dashboard", methods=["GET"])
-@login_required(role=["admin", "agent"])
+@login_required
 def get_agent_dashboard():
     agent_id = session["user_id"]
     assignments = Assignment.query.filter_by(agent_id=agent_id).all()
