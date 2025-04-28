@@ -89,7 +89,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useAgentStore } from '@/stores/agent'
-import { ClockIcon, VideoIcon, AlertCircleIcon, MessageSquareIcon } from 'vue-tabler-icons'
+import { ClockIcon, VideoIcon, AlertCircleIcon, MessageIcon, MusicIcon } from 'vue-tabler-icons'
 import apexchart from 'vue3-apexcharts'
 import io from 'socket.io-client'
 
@@ -243,8 +243,8 @@ const fetchInitialData = async () => {
 const getTypeIcon = (name) => {
   const icons = {
     'Object': VideoIcon,
-    'Audio': AlertCircleIcon,
-    'Chat': MessageSquareIcon,
+    'Audio': MusicIcon,
+    'Chat': MessageIcon,
     'Response': ClockIcon
   }
   return icons[name] || AlertCircleIcon
