@@ -1,7 +1,7 @@
 // api.js - Updated configuration with proper error handling
 import axios from 'axios'
 
-const API_BASE_URL = 'https://54.86.99.85:5000';
+const API_BASE_URL = 'https://54.86.99.85:8080';
 
 // Create axios instance with better error handling
 const api = axios.create({

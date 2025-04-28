@@ -397,7 +397,7 @@ const logout = (showAlert = true) => {
 // Lifecycle hooks
 onMounted(() => {
   isDarkTheme.value = localStorage.getItem('themePreference') === 'dark'
-  axios.defaults.baseURL = "https://54.86.99.85:5000"
+  axios.defaults.baseURL = "https://54.86.99.85:8080"
   axios.defaults.withCredentials = true
   document.documentElement.setAttribute('data-theme', isDarkTheme.value ? 'dark' : 'light')
   initSpinnerAnimation()

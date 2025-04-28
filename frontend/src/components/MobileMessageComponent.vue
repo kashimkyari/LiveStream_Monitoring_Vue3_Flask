@@ -415,13 +415,13 @@ export default {
     
     // Methods
     const initSocket = () => {
-      // Connect to the backend at 54.86.99.85:5000
-      socket.value = io('https://54.86.99.85:5000', { 
+      // Connect to the backend at 54.86.99.85:8080
+      socket.value = io('https://54.86.99.85:8080', { 
         path: '/ws',
         transports: ['websocket']
       });
       
-      const socketUrl = `https://54.86.99.85:5000/messages`;
+      const socketUrl = `https://54.86.99.85:8080/messages`;
       
       console.log('Connecting to WebSocket server:', socketUrl);
       socket.value = io(socketUrl, {
