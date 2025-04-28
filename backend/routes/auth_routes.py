@@ -13,49 +13,14 @@ import logging
 
 auth_bp = Blueprint('auth', __name__)
 
-# ---------------------------------------------------------------------
-# Improved CORS handling
-# ---------------------------------------------------------------------
-def add_cors_headers(response):
-    """Add CORS headers to all responses, not just preflight requests"""
-    origin = request.headers.get('Origin')
-    allowed_origins = [
-        'http://localhost:5173',                    # Local development
-        'http://localhost:3000',                    # Alternative local port
-        'http://live-stream-monitoring-vue3-flask.vercel.app',  # Production frontend
-        'https://live-stream-monitoring-vue3-flask.vercel.app'  # Production frontend (HTTPS)
-    ]
-    
-    # If the origin is in our allowed list, set the header
-    if origin in allowed_origins:
-        response.headers.add('Access-Control-Allow-Origin', origin)
-    # Otherwise, use a default secure origin
-    else:
-        response.headers.add('Access-Control-Allow-Origin', 'https://live-stream-monitoring-vue3-flask.vercel.app')
-    
-    # Add other required CORS headers
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    
-    return response
-
 def build_cors_preflight_response():
-    """Handle OPTIONS preflight requests"""
     response = make_response()
-    return add_cors_headers(response)
-
-# Function to wrap normal responses with CORS headers
-def cors_response(data, status_code=200):
-    """Create a Flask response with proper CORS headers"""
-    response = jsonify(data)
-    response.status_code = status_code
-    return add_cors_headers(response)
-
-# Register a function to run after each request to add CORS headers
-@auth_bp.after_request
-def after_request(response):
-    return add_cors_headers(response)
+    # Instead of "*", specify your actual frontend domain
+    response.headers.add("Access-Control-Allow-Origin", request.headers.get("Origin", "http://live-stream-monitoring-vue3-flask.vercel.app"))
+    response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
+    response.headers.add("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+    response.headers.add("Access-Control-Allow-Credentials", "true")
+    return response
 
 # --------------------------------------------------------------------
 # Authentication Endpoints
@@ -72,7 +37,7 @@ def login():
         data = request.get_json()
         if not data:
             current_app.logger.warning("No JSON data received in request")
-            return cors_response({"message": "Invalid request format"}, 400)
+            return jsonify({"message": "Invalid request format"}), 400
             
         username_or_email = data.get("username")
         password = data.get("password")
@@ -80,7 +45,7 @@ def login():
         current_app.logger.debug(f"Login attempt for: {username_or_email}")
         
         if not username_or_email or not password:
-            return cors_response({"message": "Username/email and password are required"}, 400)
+            return jsonify({"message": "Username/email and password are required"}), 400
         
         user = None
         # Check if input is email format
@@ -102,7 +67,7 @@ def login():
         
         if not user:
             current_app.logger.debug(f"No user found for: {username_or_email}")
-            return cors_response({"message": "Invalid credentials"}, 401)
+            return jsonify({"message": "Invalid credentials"}), 401
             
         if user and check_password_hash(user.password, password):
             # Set session to permanent (30 days by default) or customizable
@@ -116,21 +81,14 @@ def login():
             user.last_active = datetime.utcnow()
             db.session.commit()
             
-            # Create the response data
-            response_data = {
-                "success": True,
-                "message": "Login successful",
-                "user": {
-                    "id": user.id,
-                    "role": user.role,
-                    "username": user.username
-                }
-            }
-            
-            # Create response object
-            response = jsonify(response_data)
-            
             # Set secure cookies for better browser compatibility
+            response = jsonify({
+                "message": "Login successful",
+                "role": user.role,
+                "username": user.username
+            })
+            
+            # Set SameSite policy based on environment
             is_production = current_app.config.get('ENV') == 'production'
             
             # Set cookie attributes for better cross-browser security
@@ -143,29 +101,25 @@ def login():
                 samesite='Lax'  # Use 'Strict' in production, 'Lax' for better compatibility
             )
             
-            # Add CORS headers
-            response = add_cors_headers(response)
-            
             current_app.logger.info(f"Login successful for: {username_or_email}")
             return response
         
         # Use generic error message for security
         current_app.logger.debug(f"Invalid password for: {username_or_email}")
-        return cors_response({"message": "Invalid credentials"}, 401)
+        return jsonify({"message": "Invalid credentials"}), 401
         
     except Exception as e:
         current_app.logger.error(f"Login error: {str(e)}")
-        error_msg = str(e) if current_app.debug else None
-        return cors_response({"message": "An error occurred during login", "error": error_msg}, 500)
+        return jsonify({"message": "An error occurred during login", "error": str(e) if current_app.debug else None}), 500
 
 # Additional authentication routes would go here
-@auth_bp.route("/api/logout", methods=["POST", "OPTIONS"])
+
+@auth_bp.route("/api/logout", methods=["POST"])
 def logout():
-    if request.method == "OPTIONS":
-        return build_cors_preflight_response()
-        
     session.clear()
-    return cors_response({"message": "Logged out successfully"})
+    return jsonify({"message": "Logged out successfully"})
+
+# Update the check_session route in auth_routes.py
 
 @auth_bp.route('/api/session', methods=['GET', 'OPTIONS'])
 def check_session():
@@ -175,7 +129,7 @@ def check_session():
     
     try:
         if "user_id" not in session:
-            return cors_response({"isLoggedIn": False}, 401)
+            return jsonify({"isLoggedIn": False}), 401
         
         user_id = session.get("user_id")
         user = User.query.get(user_id)
@@ -183,13 +137,13 @@ def check_session():
         if user is None:
             # User not found, clear the invalid session
             session.clear()
-            return cors_response({"isLoggedIn": False, "message": "User not found"}, 401)
+            return jsonify({"isLoggedIn": False, "message": "User not found"}), 401
             
         # Update last active timestamp
         user.last_active = datetime.utcnow()
         db.session.commit()
         
-        return cors_response({
+        return jsonify({
             "isLoggedIn": True,
             "user": {
                 "id": user.id,
@@ -202,12 +156,12 @@ def check_session():
         logging.error(f"Session check error: {str(e)}")
         # Rollback any failed transaction
         db.session.rollback()
-        return cors_response({"isLoggedIn": False, "message": "Server error"}, 500)
+        return jsonify({"isLoggedIn": False, "message": "Server error"}), 500
 
 # --------------------------------------------------------------------
 # Registration and Account Management Endpoints
 # --------------------------------------------------------------------
-# Note: All remaining routes should use cors_response() function
+
 @auth_bp.route("/api/check-username", methods=["POST", "OPTIONS"])
 def check_username():
     if request.method == "OPTIONS":
@@ -217,19 +171,19 @@ def check_username():
     username = data.get("username")
     
     if not username:
-        return cors_response({"available": False, "message": "Username is required"}, 400)
+        return jsonify({"available": False, "message": "Username is required"}), 400
     
     # Validate username format
     if not re.match(r'^[a-zA-Z0-9_]{3,20}$', username):
-        return cors_response({
+        return jsonify({
             "available": False, 
             "message": "Username must be 3-20 characters and contain only letters, numbers, and underscores"
-        }, 400)
+        }), 400
     
     # Check if username exists
     exists = User.query.filter_by(username=username).first() is not None
     
-    return cors_response({"available": not exists})
+    return jsonify({"available": not exists})
 
 @auth_bp.route("/api/check-email", methods=["POST", "OPTIONS"])
 def check_email():
@@ -240,16 +194,16 @@ def check_email():
     email = data.get("email")
     
     if not email:
-        return cors_response({"available": False, "message": "Email is required"}, 400)
+        return jsonify({"available": False, "message": "Email is required"}), 400
     
     # Validate email format
     if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
-        return cors_response({"available": False, "message": "Invalid email format"}, 400)
+        return jsonify({"available": False, "message": "Invalid email format"}), 400
     
     # Check if email exists
     exists = User.query.filter_by(email=email).first() is not None
     
-    return cors_response({"available": not exists})
+    return jsonify({"available": not exists})
 
 @auth_bp.route("/api/register", methods=["POST", "OPTIONS"])
 def register():
@@ -264,37 +218,37 @@ def register():
     
     # Validate inputs
     if not username or not email or not password:
-        return cors_response({"message": "All fields are required"}, 400)
+        return jsonify({"message": "All fields are required"}), 400
     
     # Check username format and length
     if not re.match(r'^[a-zA-Z0-9_]{3,20}$', username):
-        return cors_response({
+        return jsonify({
             "message": "Username must be 3-20 characters and contain only letters, numbers, and underscores"
-        }, 400)
+        }), 400
     
     # Check email format
     if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
-        return cors_response({"message": "Invalid email format"}, 400)
+        return jsonify({"message": "Invalid email format"}), 400
     
     # Check password strength
     if len(password) < 8:
-        return cors_response({"message": "Password must be at least 8 characters"}, 400)
+        return jsonify({"message": "Password must be at least 8 characters"}), 400
     
     if not re.search(r'[A-Z]', password):
-        return cors_response({"message": "Password must contain at least one uppercase letter"}, 400)
+        return jsonify({"message": "Password must contain at least one uppercase letter"}), 400
     
     if not re.search(r'[0-9]', password):
-        return cors_response({"message": "Password must contain at least one number"}, 400)
+        return jsonify({"message": "Password must contain at least one number"}), 400
     
     if not re.search(r'[^A-Za-z0-9]', password):
-        return cors_response({"message": "Password must contain at least one special character"}, 400)
+        return jsonify({"message": "Password must contain at least one special character"}), 400
     
     # Check if username or email already exists
     if User.query.filter_by(username=username).first():
-        return cors_response({"message": "Username already taken"}, 400)
+        return jsonify({"message": "Username already taken"}), 400
     
     if User.query.filter_by(email=email).first():
-        return cors_response({"message": "Email already registered"}, 400)
+        return jsonify({"message": "Email already registered"}), 400
     
     # Create new user
     hashed_password = generate_password_hash(password)
@@ -325,16 +279,18 @@ def register():
             # Log the error but don't stop the registration process
             current_app.logger.error(f"Failed to send welcome email: {str(e)}")
         
-        return cors_response({
+        return jsonify({
             "message": "Account created successfully",
             "user": new_user.serialize()
-        }, 201)
+        }), 201
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Registration error: {str(e)}")
-        return cors_response({"message": f"Error creating account: {str(e)}"}, 500)
+        return jsonify({"message": f"Error creating account: {str(e)}"}), 500
 
-# Password reset routes
+# routes/auth_routes.py
+
+# Update the forgot_password function to use a more secure token generation method
 @auth_bp.route("/api/forgot-password", methods=["POST", "OPTIONS"])
 def forgot_password():
     if request.method == "OPTIONS":
@@ -345,13 +301,13 @@ def forgot_password():
     
     # Validate email
     if not email or not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
-        return cors_response({"message": "Valid email is required"}, 400)
+        return jsonify({"message": "Valid email is required"}), 400
     
     # Check if email exists
     user = User.query.filter_by(email=email).first()
     if not user:
         # Don't reveal whether email exists for security
-        return cors_response({"success": True, "message": "If your email is registered, you will receive a password reset link"}, 200)
+        return jsonify({"message": "If your email is registered, you will receive a password reset link"}), 200
     
     # Generate a more secure token
     # First, create a random base token
@@ -393,39 +349,35 @@ def forgot_password():
             # Log error and inform user that there was an issue
             current_app.logger.error(f"Failed to send password reset email: {str(e)}")
             db.session.rollback()  # Roll back the token creation
-            return cors_response({"message": "Unable to send password reset email. Please try again later."}, 500)
+            return jsonify({"message": "Unable to send password reset email. Please try again later."}), 500
         
-        return cors_response({
-            "success": true,
+        return jsonify({
             "message": "If your email is registered, you will receive a password reset link"
-        }, 200)
+        }), 200
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Password reset error: {str(e)}")
-        return cors_response({"message": "An error occurred processing your request"}, 500)
+        return jsonify({"message": "An error occurred processing your request"}), 500
 
-@auth_bp.route("/api/verify-reset-token", methods=["POST", "OPTIONS"])
+@auth_bp.route("/api/verify-reset-token", methods=["POST"])
 def verify_reset_token():
-    if request.method == "OPTIONS":
-        return build_cors_preflight_response()
-        
     data = request.get_json()
     token = data.get("token")
     
     if not token:
-        return cors_response({"valid": False, "message": "Token is required"}, 400)
+        return jsonify({"valid": False, "message": "Token is required"}), 400
     
     # Find the token in the database
     reset_entry = PasswordReset.query.filter_by(token=token).first()
     
     if not reset_entry:
-        return cors_response({"valid": False, "message": "Invalid or expired token"}, 400)
+        return jsonify({"valid": False, "message": "Invalid or expired token"}), 400
     
     # Check if token is expired
     if reset_entry.expires_at < datetime.utcnow():
-        return cors_response({"valid": False, "message": "Token has expired"}, 400)
+        return jsonify({"valid": False, "message": "Token has expired"}), 400
     
-    return cors_response({"valid": True})
+    return jsonify({"valid": True})
 
 @auth_bp.route("/api/reset-password", methods=["POST", "OPTIONS"])
 def reset_password():
@@ -437,36 +389,36 @@ def reset_password():
     new_password = data.get("password")
     
     if not token or not new_password:
-        return cors_response({"message": "Token and new password are required"}, 400)
+        return jsonify({"message": "Token and new password are required"}), 400
     
     # Validate password strength
     if len(new_password) < 8:
-        return cors_response({"message": "Password must be at least 8 characters"}, 400)
+        return jsonify({"message": "Password must be at least 8 characters"}), 400
     
     if not re.search(r'[A-Z]', new_password):
-        return cors_response({"message": "Password must contain at least one uppercase letter"}, 400)
+        return jsonify({"message": "Password must contain at least one uppercase letter"}), 400
     
     if not re.search(r'[0-9]', new_password):
-        return cors_response({"message": "Password must contain at least one number"}, 400)
+        return jsonify({"message": "Password must contain at least one number"}), 400
     
     if not re.search(r'[^A-Za-z0-9]', new_password):
-        return cors_response({"message": "Password must contain at least one special character"}, 400)
+        return jsonify({"message": "Password must contain at least one special character"}), 400
     
     # Find the token in the database
     reset_entry = PasswordReset.query.filter_by(token=token).first()
     
     if not reset_entry:
-        return cors_response({"message": "Invalid or expired token"}, 400)
+        return jsonify({"message": "Invalid or expired token"}), 400
     
     # Check if token is expired
     if reset_entry.expires_at < datetime.utcnow():
-        return cors_response({"message": "Token has expired"}, 400)
+        return jsonify({"message": "Token has expired"}), 400
     
     try:
         # Get user and update password
         user = db.session.get(User, reset_entry.user_id)
         if not user:
-            return cors_response({"message": "User not found"}, 404)
+            return jsonify({"message": "User not found"}), 404
         
         user.password = generate_password_hash(new_password)
         
@@ -515,15 +467,13 @@ def reset_password():
         except Exception as e:
             current_app.logger.error(f"Failed to send password reset confirmation email: {str(e)}")
         
-        return cors_response({
-            "success": True,
+        return jsonify({
             "message": "Password has been reset successfully. You can now log in with your new password."
-        }, 200)
+        }), 200
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Password reset error: {str(e)}")
-        return cors_response({"message": "An error occurred processing your request"}, 500)
-
+        return jsonify({"message": "An error occurred processing your request"}), 500
 
 
 @auth_bp.route("/api/change-password", methods=["POST"])
@@ -534,29 +484,29 @@ def change_password():
     new_password = data.get("newPassword")
     
     if not current_password or not new_password:
-        return cors_response({"message": "Current and new passwords are required"}), 400
+        return jsonify({"message": "Current and new passwords are required"}), 400
     
     # Get current user
     user = db.session.get(User, session["user_id"])
     if not user:
-        return cors_response({"message": "User not found"}), 404
+        return jsonify({"message": "User not found"}), 404
     
     # Verify current password
     if not check_password_hash(user.password, current_password):
-        return cors_response({"message": "Current password is incorrect"}), 400
+        return jsonify({"message": "Current password is incorrect"}), 400
     
     # Validate new password strength
     if len(new_password) < 8:
-        return cors_response({"message": "Password must be at least 8 characters"}), 400
+        return jsonify({"message": "Password must be at least 8 characters"}), 400
     
     if not re.search(r'[A-Z]', new_password):
-        return cors_response({"message": "Password must contain at least one uppercase letter"}), 400
+        return jsonify({"message": "Password must contain at least one uppercase letter"}), 400
     
     if not re.search(r'[0-9]', new_password):
-        return cors_response({"message": "Password must contain at least one number"}), 400
+        return jsonify({"message": "Password must contain at least one number"}), 400
     
     if not re.search(r'[^A-Za-z0-9]', new_password):
-        return cors_response({"message": "Password must contain at least one special character"}), 400
+        return jsonify({"message": "Password must contain at least one special character"}), 400
     
     try:
         # Update password
@@ -601,11 +551,11 @@ def change_password():
         except Exception as e:
             current_app.logger.error(f"Failed to send password change confirmation email: {str(e)}")
         
-        return cors_response({"message": "Password changed successfully"}), 200
+        return jsonify({"message": "Password changed successfully"}), 200
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Password change error: {str(e)}")
-        return cors_response({"message": "An error occurred processing your request"}), 500
+        return jsonify({"message": "An error occurred processing your request"}), 500
 
 @auth_bp.route("/api/update-profile", methods=["POST"])
 @login_required
@@ -615,7 +565,7 @@ def update_profile():
     # Get current user
     user = db.session.get(User, session["user_id"])
     if not user:
-        return cors_response({"message": "User not found"}), 404
+        return jsonify({"message": "User not found"}), 404
     
     # Fields that can be updated
     if "name" in data:
@@ -629,11 +579,11 @@ def update_profile():
     
     try:
         db.session.commit()
-        return cors_response({
+        return jsonify({
             "message": "Profile updated successfully",
             "user": user.serialize()
         }), 200
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Profile update error: {str(e)}")
-        return cors_response({"message": "An error occurred updating your profile"}), 500
+        return jsonify({"message": "An error occurred updating your profile"}), 500

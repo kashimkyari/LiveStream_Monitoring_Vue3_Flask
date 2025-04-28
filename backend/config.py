@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from extensions import db, migrate
 from utils.notifications import init_socketio
 
-# ─── Load environment variables ───────────────────────────────────────
+# Load .env into environment (must be in project root)
 load_dotenv()
 
 class Config:
@@ -17,53 +17,50 @@ class Config:
     REMEMBER_COOKIE_SECURE = True            # Only over HTTPS
 
     # ─── Database ────────────────────────────────────────────────────────
-    DATABASE_URL = os.getenv('DATABASE_URL')
-    if not DATABASE_URL:
-        raise RuntimeError('DATABASE_URL environment variable is required')
-    SQLALCHEMY_DATABASE_URI = DATABASE_URL   # Use only DATABASE_URL  
+    # Prefer DATABASE_URL; fallback to SQLite for local development
+    SQLALCHEMY_DATABASE_URI = (
+        os.getenv('DATABASE_URL') or
+        f"sqlite:///{os.path.join(os.getcwd(), 'instance', 'app.db')}"
+    )
     SQLALCHEMY_TRACK_MODIFICATIONS = False   # Disable event system for performance
 
     # ─── CORS ────────────────────────────────────────────────────────────
+    # In production, set CORS_ORIGINS to a comma-separated list of allowed URLs
     CORS_SUPPORTS_CREDENTIALS = True
-    CORS_ORIGINS = os.getenv(
-        'CORS_ORIGINS',
-        'http://localhost:5173,'
-        'http://localhost:3000,'
-        'https://live-stream-monitoring-vue3-flask.vercel.app'
-    )  # ⚠️ In prod, override with explicit list via env var
+    CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
 
 def create_app(config_class=Config):
     """
-    Application factory.
+    Application factory function.
     Usage: app = create_app()
     """
+    # Create app with instance folder for config & SQLite file
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class)
 
-    # ─── Ensure instance folder exists ───────────────────────────────────
+    # Ensure instance folder exists
     try:
         os.makedirs(app.instance_path, exist_ok=True)
     except OSError as e:
-        app.logger.warning(f"Could not create instance path: {e}")  # Non-fatal
+        app.logger.warning(f"Could not create instance path: {e}")
 
     # ─── CORS Setup ─────────────────────────────────────────────────────
     CORS(
         app,
         supports_credentials=app.config['CORS_SUPPORTS_CREDENTIALS'],
-        origins=[origin.strip() for origin in app.config['CORS_ORIGINS'].split(',')]
-    )
+        origins=[u.strip() for u in app.config['CORS_ORIGINS'].split(',')]
+    )  # ⚠️ In prod, replace '*' with explicit domain list
 
     # ─── Initialize Extensions ───────────────────────────────────────────
     try:
-        db.init_app(app)         # SQLAlchemy
-        migrate.init_app(app, db)  # Flask-Migrate
-        
+        db.init_app(app)                     # SQLAlchemy
+        migrate.init_app(app, db)            # Flask-Migrate
     except Exception as e:
         app.logger.error(f"Extension init failed: {e}")
         raise
 
     # ─── Initialize Socket.IO ───────────────────────────────────────────
-    # Uses threading by default; swap to eventlet/gevent for scale
+    # Uses threading by default; you may switch to eventlet/gevent for scale
     socketio = init_socketio(app)
 
     # ─── Register Blueprints ─────────────────────────────────────────────
@@ -88,31 +85,12 @@ def create_app(config_class=Config):
 
     # ─── Error Handlers ─────────────────────────────────────────────────
     @app.errorhandler(404)
-    def not_found(error):
+    def not_found(err):
         return {"error": "Not Found"}, 404
 
     @app.errorhandler(500)
-    def internal_error(error):
-        app.logger.exception(error)
+    def server_error(err):
+        app.logger.exception(err)
         return {"error": "Internal Server Error"}, 500
-
-    # ─── Logging ─────────────────────────────────────────────────────────
-    if not app.debug:
-        import logging
-        from logging.handlers import RotatingFileHandler
-
-        if not os.path.isdir('logs'):
-            os.mkdir('logs')
-        file_handler = RotatingFileHandler(
-            'logs/app.log', maxBytes=10240, backupCount=10
-        )
-        file_handler.setFormatter(logging.Formatter(
-            '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
-        ))
-        file_handler.setLevel(logging.INFO)
-        app.logger.addHandler(file_handler)
-
-        app.logger.setLevel(logging.INFO)
-        app.logger.info('Application startup')
 
     return app
