@@ -1,37 +1,22 @@
 import multiprocessing
 
-# Binding
+# Binding & Protocol
 bind = "0.0.0.0:5000"
+protocol = "gevent"  # Explicit protocol declaration
 
-# Worker configuration
-worker_class = "threads"
-workers = multiprocessing.cpu_count() * 2 + 1
-threads = 4
+# Worker Configuration 
+worker_class = "gevent"
+# For I/O-bound apps, better formula:
+workers = min(multiprocessing.cpu_count() * 2, 16) + 1  # Cap at 16 CPU cores
+threads = 2  # Lower for gevent (since we're async)
+worker_connections = 2000  # Increase for high concurrent connections
 
 # Timeouts
-timeout = 120
-graceful_timeout = 30
-keepalive = 5
+timeout = 90  # Slightly shorter for faster recovery
+graceful_timeout = 45  # Give more time for graceful shutdown
+keepalive = 10  # Slightly higher for persistent connections
 
-# Performance tuning
-worker_connections = 1000
-max_requests = 1000
-max_requests_jitter = 50
-
-# Logging
-loglevel = "info"
-accesslog = "/var/log/gunicorn/access.log"
-errorlog = "/var/log/gunicorn/error.log"
-capture_output = True
-
-# SSL configuration
-certfile = "./fullchain.pem"
-keyfile = "./privkey.pem"
-# Note: Don't create the SSL context object here
-# Just specify the cert and key files
-
-# Process naming
-proc_name = "livestream-monitoring"
-
-# Preload app for better performance
-preload_app = True
+# Security Headers (add this section)
+forwarded_allow_ips = "*"
+proxy_protocol = True
+limit_request_line = 8190  # Max size of HTTP request line

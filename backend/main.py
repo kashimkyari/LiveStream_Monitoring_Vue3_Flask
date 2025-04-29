@@ -2,7 +2,8 @@
 """
 main.py - Flask application entry point with SSL support and Socket.IO integration
 """
-
+from gevent import monkey
+monkey.patch_all()
 import logging
 import os
 import ssl
