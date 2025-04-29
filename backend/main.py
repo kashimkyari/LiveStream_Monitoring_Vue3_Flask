@@ -31,7 +31,7 @@ from models import User
 app = create_app()
 
 # Parse ALLOWED_ORIGINS from environment
-allowed_origins = os.getenv('ALLOWED_ORIGINS', '*').split(',')
+allowed_origins = os.getenv('ALLOWED_ORIGINS', 'https://live-stream-monitoring-vue3-flask.vercel.app,http://localhost:8080,https://jetcamstudios-git-main-kashimkyaris-projects.vercel.app,https://jetcamstudios-kashimkyaris-projects.vercel.app').split(',')
 vercel_domain = 'https://live-stream-monitoring-vue3-flask.vercel.app'
 
 # Add the production domain if not already in the list
