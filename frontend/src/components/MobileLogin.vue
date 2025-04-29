@@ -186,12 +186,13 @@ export default {
         
         if (result.success) {
           // Save username in localStorage if remember me is checked
-           window.location.href = '/';
+           
           if (rememberMe.value) {
             localStorage.setItem('rememberedUsername', username.value);
           } else {
             localStorage.removeItem('rememberedUsername');
           }
+
           
           toast.success('Login successful!');
           emit('login-success', result.user);
@@ -199,6 +200,7 @@ export default {
           
           
         }
+
          else {
           const errorMsg = result.message || 'Login failed. Please try again.';
           errorMessage.value = errorMsg;
@@ -231,6 +233,7 @@ export default {
       } finally {
         isLoading.value = false;
         // Redirect to home page
+        // window.location.href = '/';
          
       }
     };

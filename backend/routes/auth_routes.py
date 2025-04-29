@@ -102,6 +102,9 @@ def login():
             # Set SameSite policy based on environment
             is_production = current_app.config.get('ENV') == 'production'
             
+            # FIXED: Ensure we set domain parameter appropriately for cookie sharing
+            domain = None  # Let browser determine domain
+            
             # Set cookie attributes for better cross-browser security
             response.set_cookie(
                 'session_active', 
@@ -109,7 +112,20 @@ def login():
                 max_age=30*24*60*60,  # 30 days in seconds
                 httponly=True,
                 secure=is_production,  # Only set secure in production
-                samesite='Lax'  # Use 'Strict' in production, 'Lax' for better compatibility
+                samesite='Lax',  # Use 'Strict' in production, 'Lax' for better compatibility
+                domain=domain
+            )
+            
+            # FIXED: Set the Flask default session cookie with the correct attributes
+            session_cookie_name = current_app.config.get('SESSION_COOKIE_NAME', 'session')
+            response.set_cookie(
+                session_cookie_name,
+                request.cookies.get(session_cookie_name, ''),  # Keep existing value
+                max_age=30*24*60*60,  # 30 days
+                httponly=True,
+                secure=is_production,
+                samesite='Lax',
+                domain=domain
             )
             
             # Set CORS headers for the response
@@ -137,9 +153,15 @@ def login():
 def logout():
     if request.method == "OPTIONS":
         return build_cors_preflight_response()
-        
+    
+    # FIXED: Properly clear session
     session.clear()
     response = jsonify({"message": "Logged out successfully"})
+    
+    # FIXED: Clear session cookies
+    session_cookie_name = current_app.config.get('SESSION_COOKIE_NAME', 'session')
+    response.set_cookie(session_cookie_name, '', expires=0)
+    response.set_cookie('session_active', '', expires=0)
     
     # Set CORS headers for the response
     origin = request.headers.get("Origin", "*")
@@ -160,7 +182,12 @@ def check_session():
         return build_cors_preflight_response()
     
     try:
+        # FIXED: Debug information to help troubleshoot session issues
+        current_app.logger.debug(f"Session check - Session contents: {dict(session)}")
+        current_app.logger.debug(f"Session check - Cookies received: {request.cookies}")
+        
         if "user_id" not in session:
+            current_app.logger.debug("No user_id in session")
             response = jsonify({"isLoggedIn": False})
             
             # Set CORS headers for the response
@@ -171,13 +198,16 @@ def check_session():
                 response.headers.add("Access-Control-Allow-Origin", origin)
                 response.headers.add("Access-Control-Allow-Credentials", "true")
                 
-            return response, 401
+            return response
         
         user_id = session.get("user_id")
+        current_app.logger.debug(f"Found user_id in session: {user_id}")
+        
         user = User.query.get(user_id)
         
         if user is None:
             # User not found, clear the invalid session
+            current_app.logger.debug(f"User with ID {user_id} not found in database")
             session.clear()
             response = jsonify({"isLoggedIn": False, "message": "User not found"})
             
@@ -189,11 +219,13 @@ def check_session():
                 response.headers.add("Access-Control-Allow-Origin", origin)
                 response.headers.add("Access-Control-Allow-Credentials", "true")
                 
-            return response, 401
+            return response
             
         # Update last active timestamp
         user.last_active = datetime.utcnow()
         db.session.commit()
+        
+        current_app.logger.debug(f"Session check successful for user: {user.username}, role: {user.role}")
         
         response = jsonify({
             "isLoggedIn": True,
