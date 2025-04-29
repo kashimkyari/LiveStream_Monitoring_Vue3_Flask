@@ -12,7 +12,7 @@ def get_telegram_recipients():
     return jsonify([r.serialize() for r in recipients])
 
 @telegram_bp.route("/api/telegram_recipients", methods=["POST"])
-@login_required
+@login_required()
 def create_telegram_recipient():
     data = request.get_json()
     username = data.get("telegram_username")

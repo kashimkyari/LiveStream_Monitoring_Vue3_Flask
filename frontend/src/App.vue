@@ -316,9 +316,32 @@ const handleAuthSuccess = (user) => {
 
 const checkAuthentication = async () => {
   try {
+    // Enable debug logging for session check
+    console.log("Checking authentication status")
+    
     const { data } = await axios.get('/api/session')
-    data.isLoggedIn ? handleAuthSuccess(data.user) : logout(false)
+    console.log("Session check response:", data)
+    
+    if (data.isLoggedIn) {
+      console.log("User is logged in:", data.user)
+      handleAuthSuccess(data.user)
+    } else {
+      console.log("User is not logged in, checking localStorage fallback")
+      // Try fallback to local storage if session cookie might be missing
+      const storedRole = localStorage.getItem('userRole')
+      if (storedRole) {
+        console.log("Found role in localStorage:", storedRole)
+        // Verify the stored role by making an additional API call or use a token if available
+        // For now, we'll just clear it as it may be stale
+        localStorage.removeItem('userRole')
+      }
+      logout(false)
+    }
   } catch (error) {
+    console.error("Auth check error:", error)
+    if (error.response) {
+      console.error("Error response:", error.response.data)
+    }
     toast.warning("Authentication check failed. Please log in again.")
     logout(false)
   } finally {
@@ -376,9 +399,15 @@ const handleDetectionClick = (detection) => {
 }
 
 const handleLoginSuccess = (userData) => {
+  console.log("Login success:", userData)
   isLoggedIn.value = true
   userRole.value = userData.role
   localStorage.setItem('userRole', userData.role)
+  
+  // Refresh session info from the server to ensure proper sync
+  setTimeout(() => {
+    checkAuthentication()
+  }, 300)
 }
 
 const handleAccountCreated = (username) => {
@@ -397,11 +426,45 @@ const logout = (showAlert = true) => {
 // Lifecycle hooks
 onMounted(() => {
   isDarkTheme.value = localStorage.getItem('themePreference') === 'dark'
-  axios.defaults.baseURL = "http://54.86.99.85:5000"
+  
+  // Configure axios
+  axios.defaults.baseURL = "54.86.99.85:5000"
   axios.defaults.withCredentials = true
+  
+  // Add request/response interceptors for debugging
+  axios.interceptors.request.use(config => {
+    console.log(`Making ${config.method.toUpperCase()} request to ${config.url}`)
+    return config
+  })
+  
+  axios.interceptors.response.use(
+    response => {
+      console.log(`Response from ${response.config.url}:`, response.status)
+      return response
+    },
+    error => {
+      console.error(`Error response from ${error.config?.url}:`, error.response?.status)
+      return Promise.reject(error)
+    }
+  )
+  
   document.documentElement.setAttribute('data-theme', isDarkTheme.value ? 'dark' : 'light')
   initSpinnerAnimation()
-  setTimeout(checkAuthentication, 200)
+  
+  // Set debug flag based on query parameter
+  const urlParams = new URLSearchParams(window.location.search)
+  showDebugInfo.value = urlParams.get('debug') === 'true'
+  
+  // Enable debug info when holding Shift+Alt+D
+  window.addEventListener('keydown', (e) => {
+    if (e.shiftKey && e.altKey && e.code === 'KeyD') {
+      showDebugInfo.value = !showDebugInfo.value
+      toast.info(showDebugInfo.value ? 'Debug mode activated' : 'Debug mode deactivated')
+    }
+  })
+  
+  // Delay checking authentication slightly to allow spinner animation
+  setTimeout(checkAuthentication, 800)
 })
 </script>
 

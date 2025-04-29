@@ -233,7 +233,6 @@ export default {
       } finally {
         isLoading.value = false;
         // Redirect to home page
-        // window.location.href = '/';
          
       }
     };

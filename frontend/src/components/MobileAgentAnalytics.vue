@@ -94,7 +94,7 @@ import apexchart from 'vue3-apexcharts'
 import io from 'socket.io-client'
 
 const agentStore = useAgentStore()
-const socket = io('http://54.86.99.85:5000/notifications', {
+const socket = io('54.86.99.85:5000/notifications', {
   path: '/ws'
 });
 
