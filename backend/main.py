@@ -29,6 +29,30 @@ from models import User
 # Initialize Flask app
 app = create_app()
 
+# Parse ALLOWED_ORIGINS from environment
+allowed_origins = os.getenv('ALLOWED_ORIGINS', '*').split(',')
+vercel_domain = 'https://live-stream-monitoring-vue3-flask.vercel.app'
+
+# Add the production domain if not already in the list
+if vercel_domain not in allowed_origins and vercel_domain.strip():
+    allowed_origins.append(vercel_domain)
+
+# Store allowed origins in app config for consistent access across blueprints
+app.config['CORS_ALLOWED_ORIGINS'] = allowed_origins
+
+# Log configured allowed origins
+logging.info(f"Configured allowed origins: {allowed_origins}")
+
+# === CORS Configuration for Flask ===
+# Use a wider set of allowed headers
+CORS(app, 
+     origins=allowed_origins,
+     supports_credentials=True,
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Cache-Control"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     expose_headers=["Content-Length", "X-JSON"],
+     max_age=600)  # 10 minutes cache for preflight requests
+
 # Get the socketio instance from utils
 from utils.notifications import get_socketio
 socketio = get_socketio()
@@ -39,48 +63,33 @@ if not socketio:
 else:
     logging.info(f"Socket.IO initialized with async_mode: {socketio.async_mode}")
 
-# Parse ALLOWED_ORIGINS from environment
-allowed_origins = os.getenv('ALLOWED_ORIGINS', '*').split(',')
-vercel_domain = 'https://live-stream-monitoring-vue3-flask.vercel.app'
-
-
-# === CORS Configuration for Flask ===
-CORS(app, 
-     origins=allowed_origins,
-     supports_credentials=True,
-     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
-
 # === CORS Configuration for Socket.IO ===
-if vercel_domain not in allowed_origins:
-    allowed_origins.append(vercel_domain)
-logging.info(f"Configured allowed origins: {allowed_origins}")
-
-# This is crucial for Socket.IO connections
 if '*' in allowed_origins:
-    socketio.cors_allowed_origins = allowed_origins + ['https://live-stream-monitoring-vue3-flask.vercel.app']
-    
+    socketio.cors_allowed_origins = "*"  # Accept all origins
 else:
     socketio.cors_allowed_origins = allowed_origins
-    
 
-
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>', methods=['OPTIONS'])
-def handle_options(path):
-    """Handle OPTIONS requests for all routes to support CORS preflight requests"""
+# Register a before_request handler for CORS
+@app.before_request
+def handle_preflight():
+    """Special handling for CORS preflight requests"""
     if request.method == 'OPTIONS':
         response = app.make_default_options_response()
         
-        # Set CORS headers
+        # Get origin from the request headers
         origin = request.headers.get('Origin')
         
-        if origin in allowed_origins or not allowed_origins or '' in allowed_origins or '*' in allowed_origins:
+        # Check if the origin is allowed
+        if origin in allowed_origins or '*' in allowed_origins:
             response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            # Default to the first allowed origin if specific ones are configured
+            response.headers['Access-Control-Allow-Origin'] = allowed_origins[0] if allowed_origins and allowed_origins[0] != '*' else '*'
         
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control'
+        response.headers['Access-Control-Max-Age'] = '600'  # Cache preflight response for 10 minutes
         
         return response
 
@@ -90,6 +99,20 @@ def enforce_https():
     if not request.is_secure and os.getenv('ENABLE_SSL') == 'true':
         url = request.url.replace('http://', 'https://', 1)
         return redirect(url, code=301)
+
+# Add a specific route to debug CORS issues
+@app.route('/cors-test', methods=['GET', 'OPTIONS'])
+def cors_test():
+    """Test endpoint for CORS configuration"""
+    if request.method == 'OPTIONS':
+        # Let the before_request handler handle this
+        return app.make_default_options_response()
+    
+    return jsonify({
+        "message": "CORS test successful",
+        "your_origin": request.headers.get('Origin', 'No origin header'),
+        "allowed_origins": allowed_origins
+    })
 
 # === Database Initialization ===
 with app.app_context():
@@ -130,7 +153,6 @@ with app.app_context():
         logging.error(f"DB init failed: {str(e)}")
         raise
 
-
 # === Background Services ===
 with app.app_context():
     try:
@@ -158,7 +180,8 @@ def create_ssl_context():
     ssl_key = os.path.join(cert_dir, 'privkey.pem')
     
     if not all([os.path.exists(ssl_cert), os.path.exists(ssl_key)]):
-        raise FileNotFoundError(f"Missing SSL certs in {cert_dir}")
+        logging.warning(f"SSL certificates not found in {cert_dir}, running without SSL")
+        return None
     
     context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(ssl_cert, ssl_key)
@@ -173,7 +196,7 @@ if __name__ == "__main__":
         app,
         host='0.0.0.0',
         port=int(os.getenv('PORT', 5000)),
-        debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'false',
+        debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true',
         use_reloader=False,
         ssl_context=ssl_ctx
     )

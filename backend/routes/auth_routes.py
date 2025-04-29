@@ -1,4 +1,3 @@
-# routes/auth_routes.py
 from flask import Blueprint, request, jsonify, session, make_response, url_for, current_app
 from extensions import db
 from models import User, PasswordReset
@@ -15,8 +14,20 @@ auth_bp = Blueprint('auth', __name__)
 
 def build_cors_preflight_response():
     response = make_response()
-    # Instead of "*", specify your actual frontend domain
-    response.headers.add("Access-Control-Allow-Origin", request.headers.get("Origin", "http://live-stream-monitoring-vue3-flask.vercel.app"))
+    
+    # Get the origin from the request headers
+    origin = request.headers.get("Origin", "*")
+    
+    # Get allowed origins from the app config
+    allowed_origins = current_app.config.get('CORS_ALLOWED_ORIGINS', ['*'])
+    
+    # Check if the origin is allowed
+    if origin in allowed_origins or '*' in allowed_origins:
+        response.headers.add("Access-Control-Allow-Origin", origin)
+    else:
+        # Default to the first allowed origin
+        response.headers.add("Access-Control-Allow-Origin", allowed_origins[0] if allowed_origins else "*")
+    
     response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
     response.headers.add("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
     response.headers.add("Access-Control-Allow-Credentials", "true")
@@ -101,6 +112,14 @@ def login():
                 samesite='Lax'  # Use 'Strict' in production, 'Lax' for better compatibility
             )
             
+            # Set CORS headers for the response
+            origin = request.headers.get("Origin", "*")
+            allowed_origins = current_app.config.get('CORS_ALLOWED_ORIGINS', ['*'])
+            
+            if origin in allowed_origins or '*' in allowed_origins:
+                response.headers.add("Access-Control-Allow-Origin", origin)
+                response.headers.add("Access-Control-Allow-Credentials", "true")
+            
             current_app.logger.info(f"Login successful for: {username_or_email}")
             return response
         
@@ -114,10 +133,23 @@ def login():
 
 # Additional authentication routes would go here
 
-@auth_bp.route("/api/logout", methods=["POST"])
+@auth_bp.route("/api/logout", methods=["POST", "OPTIONS"])
 def logout():
+    if request.method == "OPTIONS":
+        return build_cors_preflight_response()
+        
     session.clear()
-    return jsonify({"message": "Logged out successfully"})
+    response = jsonify({"message": "Logged out successfully"})
+    
+    # Set CORS headers for the response
+    origin = request.headers.get("Origin", "*")
+    allowed_origins = current_app.config.get('CORS_ALLOWED_ORIGINS', ['*'])
+    
+    if origin in allowed_origins or '*' in allowed_origins:
+        response.headers.add("Access-Control-Allow-Origin", origin)
+        response.headers.add("Access-Control-Allow-Credentials", "true")
+        
+    return response
 
 # Update the check_session route in auth_routes.py
 
@@ -129,7 +161,17 @@ def check_session():
     
     try:
         if "user_id" not in session:
-            return jsonify({"isLoggedIn": False}), 401
+            response = jsonify({"isLoggedIn": False})
+            
+            # Set CORS headers for the response
+            origin = request.headers.get("Origin", "*")
+            allowed_origins = current_app.config.get('CORS_ALLOWED_ORIGINS', ['*'])
+            
+            if origin in allowed_origins or '*' in allowed_origins:
+                response.headers.add("Access-Control-Allow-Origin", origin)
+                response.headers.add("Access-Control-Allow-Credentials", "true")
+                
+            return response, 401
         
         user_id = session.get("user_id")
         user = User.query.get(user_id)
@@ -137,13 +179,23 @@ def check_session():
         if user is None:
             # User not found, clear the invalid session
             session.clear()
-            return jsonify({"isLoggedIn": False, "message": "User not found"}), 401
+            response = jsonify({"isLoggedIn": False, "message": "User not found"})
+            
+            # Set CORS headers for the response
+            origin = request.headers.get("Origin", "*")
+            allowed_origins = current_app.config.get('CORS_ALLOWED_ORIGINS', ['*'])
+            
+            if origin in allowed_origins or '*' in allowed_origins:
+                response.headers.add("Access-Control-Allow-Origin", origin)
+                response.headers.add("Access-Control-Allow-Credentials", "true")
+                
+            return response, 401
             
         # Update last active timestamp
         user.last_active = datetime.utcnow()
         db.session.commit()
         
-        return jsonify({
+        response = jsonify({
             "isLoggedIn": True,
             "user": {
                 "id": user.id,
@@ -151,13 +203,33 @@ def check_session():
                 "role": user.role
             }
         })
+        
+        # Set CORS headers for the response
+        origin = request.headers.get("Origin", "*")
+        allowed_origins = current_app.config.get('CORS_ALLOWED_ORIGINS', ['*'])
+        
+        if origin in allowed_origins or '*' in allowed_origins:
+            response.headers.add("Access-Control-Allow-Origin", origin)
+            response.headers.add("Access-Control-Allow-Credentials", "true")
+            
+        return response
     except Exception as e:
         # Log the error
         logging.error(f"Session check error: {str(e)}")
         # Rollback any failed transaction
         db.session.rollback()
-        return jsonify({"isLoggedIn": False, "message": "Server error"}), 500
-
+        
+        response = jsonify({"isLoggedIn": False, "message": "Server error"})
+        
+        # Set CORS headers for the response
+        origin = request.headers.get("Origin", "*")
+        allowed_origins = current_app.config.get('CORS_ALLOWED_ORIGINS', ['*'])
+        
+        if origin in allowed_origins or '*' in allowed_origins:
+            response.headers.add("Access-Control-Allow-Origin", origin)
+            response.headers.add("Access-Control-Allow-Credentials", "true")
+            
+        return response, 500
 # --------------------------------------------------------------------
 # Registration and Account Management Endpoints
 # --------------------------------------------------------------------
@@ -183,7 +255,17 @@ def check_username():
     # Check if username exists
     exists = User.query.filter_by(username=username).first() is not None
     
-    return jsonify({"available": not exists})
+    response = jsonify({"available": not exists})
+    
+    # Set CORS headers for the response
+    origin = request.headers.get("Origin", "*")
+    allowed_origins = current_app.config.get('CORS_ALLOWED_ORIGINS', ['*'])
+    
+    if origin in allowed_origins or '*' in allowed_origins:
+        response.headers.add("Access-Control-Allow-Origin", origin)
+        response.headers.add("Access-Control-Allow-Credentials", "true")
+        
+    return response
 
 @auth_bp.route("/api/check-email", methods=["POST", "OPTIONS"])
 def check_email():
