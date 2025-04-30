@@ -418,7 +418,7 @@ onMounted(() => {
   isDarkTheme.value = localStorage.getItem('themePreference') === 'dark'
   
   // Configure axios
-  axios.defaults.baseURL = "http://54.86.99.85:5000"
+  axios.defaults.baseURL = "http://localhost:5000"
   axios.defaults.withCredentials = true
   
   // Add request/response interceptors for debugging

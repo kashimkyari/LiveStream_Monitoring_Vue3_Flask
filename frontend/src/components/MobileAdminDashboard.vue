@@ -1,6 +1,5 @@
 <template>
   <div class="mobile-admin-dashboard" :data-theme="isDarkTheme ? 'dark' : 'light'">
-    <!-- Header section -->
     <div class="mobile-header">
       <div class="header-title">
         <h1>Admin Dashboard</h1>
@@ -12,24 +11,10 @@
         </button>
       </div>
     </div>
-    
-    <!-- Stats section -->
-    <div class="stats-container">
-      <div class="stat-card" v-for="(stat, index) in displayStats" :key="index">
-        <div class="stat-icon">
-          <font-awesome-icon :icon="stat.icon" />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{{ stat.value }}</div>
-          <div class="stat-label">{{ stat.label }}</div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Tabs navigation -->
+
     <div class="mobile-tabs">
-      <div 
-        v-for="(tab, index) in tabs" 
+      <div
+        v-for="(tab, index) in tabs"
         :key="index"
         class="tab-item"
         :class="{ active: activeTab === index }"
@@ -42,10 +27,8 @@
         <span class="tab-label">{{ tab.label }}</span>
       </div>
     </div>
-    
-    <!-- Tab content -->
+
     <div class="tab-content">
-      <!-- Home Tab -->
       <MobileAdminHome
         v-if="activeTab === 0"
         :user="user"
@@ -62,20 +45,17 @@
         @add-stream="openAddStreamModal"
         @add-agent="openAddAgentModal"
       />
-
-      <!-- Streams Tab -->
       <MobileAdminStreams
         v-else-if="activeTab === 1"
         :loading="loading"
         :refreshing-streams="refreshingStreams"
         :all-streams="allStreams"
         :agents="agents"
+        :is-dark-theme="isDarkTheme"
         @refresh="refreshStream"
         @stream-selected="openStreamDetails"
         @add-stream="openAddStreamModal"
       />
-
-      <!-- Agents Tab -->
       <MobileAdminAgents
         v-else-if="activeTab === 2"
         :loading="loading"
@@ -83,8 +63,6 @@
         @agent-selected="openAgentDetails"
         @add-agent="openAddAgentModal"
       />
-
-            <!-- Notifications Tab -->
       <MobileAdminNotifications
         v-else-if="activeTab === 3"
         :notifications="notifications"
@@ -99,8 +77,6 @@
         @toggle-group-by-stream="toggleGroupByStream"
         @refresh="fetchDashboardData"
       />
-
-      <!-- Settings Tab -->
       <MobileAdminSettings
         v-else-if="activeTab === 4"
         :is-dark-theme="isDarkTheme"
@@ -119,7 +95,6 @@
       />
     </div>
 
-    <!-- Modals -->
     <MobileStreamDetailsModal
       v-if="showStreamDetailsModal"
       :stream="selectedStream"
@@ -128,13 +103,15 @@
       @stream-updated="handleStreamUpdated"
       @stream-deleted="handleStreamDeleted"
     />
-    
     <MobileAddStreamModal
       v-if="showAddStreamModal"
+      :is-visible="showAddStreamModal"
+      :is-dark-theme="isDarkTheme"
+      :job-id="jobId"
       @close="showAddStreamModal = false"
+      @start-stream-creation="handleStartStreamCreation"
       @stream-created="handleStreamCreated"
     />
-    
     <MobileAgentDetailsModal
       v-if="showAgentDetailsModal"
       :agent="selectedAgent"
@@ -142,7 +119,6 @@
       @agent-updated="handleAgentUpdated"
       @agent-deleted="handleAgentDeleted"
     />
-    
     <MobileAddAgentModal
       v-if="showAddAgentModal"
       @close="showAddAgentModal = false"
@@ -156,21 +132,15 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import axios from 'axios'
-
-// Import components
 import MobileAdminHome from './MobileAdminHome.vue'
 import MobileAdminStreams from './MobileAdminStreams.vue'
 import MobileAdminAgents from './MobileAdminAgents.vue'
 import MobileAdminNotifications from './MobileAdminNotifications.vue'
 import MobileAdminSettings from './MobileAdminSettings.vue'
-
-// Import subcomponents
 import MobileStreamDetailsModal from './MobileStreamDetailsModal.vue'
 import MobileAddStreamModal from './MobileAddStreamModal.vue'
 import MobileAgentDetailsModal from './MobileAgentDetailsModal.vue'
 import MobileAddAgentModal from './MobileAddAgentModal.vue'
-
-// Import helpers
 import { useMobileDashboardData } from '../composables/useMobileDashboardData'
 import { useMobileNotifications } from '../composables/useMobileNotifications'
 
@@ -190,41 +160,9 @@ export default {
   setup() {
     const router = useRouter()
     const toast = useToast()
-    
-    // Theme state
     const isDarkTheme = ref(localStorage.getItem('themePreference') === 'dark' || false)
-    
-    // Notification composable
-    const {
-      notifications,
-      loading: notificationsLoading,
-      unreadCount,
-      groupedNotifications,
-      isGroupedByType,
-      isGroupedByStream,
-      markAsRead,
-      markAllAsRead,
-      toggleGroupByType,
-      toggleGroupByStream
-    } = useMobileNotifications()
-    
-    // Dashboard data composable
-    const {
-      loading,
-      refreshing,
-      user,
-      dashboardStats,
-      allStreams,
-      agents,
-      detections,
-      refreshingStreams,
-      fetchDashboardData,
-      refreshStream,
-      registerUserActivity,
-      settings
-    } = useMobileDashboardData(router, toast)
-    
-    // Component state
+    const { notifications, loading: notificationsLoading, unreadCount, groupedNotifications, isGroupedByType, isGroupedByStream, markAsRead, markAllAsRead, toggleGroupByType, toggleGroupByStream, fetchNotifications } = useMobileNotifications()
+    const { loading, refreshing, user, dashboardStats, allStreams, agents, detections, refreshingStreams, fetchDashboardData, refreshStream, registerUserActivity, settings } = useMobileDashboardData()
     const activeTab = ref(0)
     const showStreamDetailsModal = ref(false)
     const showAddStreamModal = ref(false)
@@ -232,160 +170,155 @@ export default {
     const showAddAgentModal = ref(false)
     const selectedStream = ref(null)
     const selectedAgent = ref(null)
-    const refreshIntervalMinutes = ref(
-      Math.round(settings.baseRefreshInterval / (60 * 1000))
-    )
-    
-    // Tab configuration
+    const jobId = ref(null)
+    const refreshIntervalMinutes = ref(Math.round(settings.baseRefreshInterval / (60 * 1000)))
+
     const tabs = [
       { label: 'Home', icon: 'house' },
       { label: 'Streams', icon: 'video' },
       { label: 'Agents', icon: 'users' },
-      { label: 'Detections', icon: 'eye' },
       { label: 'Notifications', icon: 'bell' },
       { label: 'Settings', icon: 'cog' }
     ]
-    
+
     const openAddStreamModal = () => {
       showAddStreamModal.value = true
       registerUserActivity()
     }
-
     const openAddAgentModal = () => {
       showAddAgentModal.value = true
       registerUserActivity()
     }
-    
-    // Computed properties
+
     const displayStats = computed(() => [
-      {
-        label: 'Active Streams',
-        value: dashboardStats.value.ongoing_streams || 0,
-        icon: 'video'
-      },
-      {
-        label: 'Active Agents',
-        value: agents.value.length || 0,
-        icon: 'users'
-      },
-      {
-        label: 'Detections',
-        value: notifications.value.length || 0,
-        icon: 'eye'
-      }
+      { label: 'Active Streams', value: dashboardStats.value.ongoing_streams || 0, icon: 'video' },
+      { label: 'Active Agents', value: agents.value.filter(a => a.status === 'active').length || 0, icon: 'users' },
+      { label: 'Detections', value: notifications.value.length || 0, icon: 'eye' }
     ])
-    
-    // Get recent detections across all streams
+
     const recentDetections = computed(() => {
-      const allDetections = []
-      Object.values(detections.value).forEach(streamDetections => {
-        allDetections.push(...streamDetections)
-      })
-      
-      return allDetections
+      return notifications.value
+        .filter(n => n.event_type === 'object_detection')
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
         .slice(0, 20)
     })
-    
-    // Event handlers
+
     const handleDarkThemeChange = (value) => {
       isDarkTheme.value = value
       localStorage.setItem('themePreference', value ? 'dark' : 'light')
     }
-    
+
     const handleBackgroundRefreshChange = (value) => {
       settings.enableBackgroundRefresh = value
     }
-    
+
     const handleRefreshIntervalChange = (value) => {
       refreshIntervalMinutes.value = value
       settings.baseRefreshInterval = parseInt(value) * 60 * 1000
     }
-    
-    const handleGroupByTypeChange = (value) => {
-      isGroupedByType.value = value
-    }
-    
-    const handleGroupByStreamChange = (value) => {
-      isGroupedByStream.value = value
-    }
-    
-    // Stream modal handlers
+
     const openStreamDetails = (stream) => {
       selectedStream.value = stream
       showStreamDetailsModal.value = true
       registerUserActivity()
     }
-    
+
+    const handleStartStreamCreation = async ({ platform, room_url, agent_id }) => {
+      try {
+        const token = localStorage.getItem('token')
+        if (!token) throw new Error('No authentication token found')
+        const payload = { platform, room_url, agent_id: agent_id || null }
+        const response = await axios.post('/api/streams/interactive', payload, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        jobId.value = response.data.job_id
+      } catch (error) {
+        console.error('Error starting stream creation:', error)
+        const message = error.response?.data?.message || 'Failed to start stream creation'
+        if (error.response?.status === 400) {
+          toast.error(`Invalid input: ${message}`)
+        } else if (error.response?.status === 401) {
+          toast.error('Unauthorized: Please log in again')
+          router.push('/')
+        } else if (error.response?.status === 409) {
+          toast.error('Stream already exists')
+        } else {
+          toast.error('Server error. Please try again.')
+        }
+        showAddStreamModal.value = false
+      }
+    }
+
+    const handleStreamCreated = () => {
+      fetchDashboardData(false)
+      showAddStreamModal.value = false
+      jobId.value = null
+      toast.success('Stream created')
+    }
+
     const handleStreamUpdated = () => {
       fetchDashboardData(false)
       showStreamDetailsModal.value = false
       toast.success('Stream updated')
     }
-    
+
     const handleStreamDeleted = () => {
       fetchDashboardData(false)
       showStreamDetailsModal.value = false
       toast.success('Stream deleted')
     }
-    
-    const handleStreamCreated = () => {
-      fetchDashboardData(false)
-      showAddStreamModal.value = false
-      toast.success('Stream created')
-    }
-    
-    // Agent modal handlers
+
     const openAgentDetails = (agent) => {
       selectedAgent.value = agent
       showAgentDetailsModal.value = true
       registerUserActivity()
     }
-    
+
     const handleAgentUpdated = () => {
       fetchDashboardData(false)
       showAgentDetailsModal.value = false
       toast.success('Agent updated')
     }
-    
+
     const handleAgentDeleted = () => {
       fetchDashboardData(false)
       showAgentDetailsModal.value = false
       toast.success('Agent deleted')
     }
-    
+
     const handleAgentCreated = () => {
       fetchDashboardData(false)
       showAddAgentModal.value = false
       toast.success('Agent created')
     }
-    
-    // Logout handler
+
     const logout = async () => {
       try {
-        await axios.post('/api/logout')
+        const token = localStorage.getItem('token')
+        if (!token) throw new Error('No authentication token found')
+        await axios.post('/api/logout', {}, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        localStorage.removeItem('token')
         toast.info('Logged out successfully')
-        window.location.href = '/'
+        router.push('/')
       } catch (error) {
         console.error('Logout failed:', error)
-        toast.error('Logout failed')
+        toast.error(error.response?.data?.message || 'Logout failed')
       }
     }
-    
-    // Initial data fetch
+
     onMounted(async () => {
       await fetchDashboardData()
       document.addEventListener('click', registerUserActivity)
       document.addEventListener('touchstart', registerUserActivity)
     })
-    
-    // Watchers
+
     watch(refreshIntervalMinutes, (newValue) => {
       settings.baseRefreshInterval = parseInt(newValue) * 60 * 1000
     })
-    
+
     return {
-      // State
       activeTab,
       tabs,
       isDarkTheme,
@@ -396,8 +329,7 @@ export default {
       selectedStream,
       selectedAgent,
       refreshIntervalMinutes,
-      
-      // Data
+      jobId,
       loading,
       refreshing,
       user,
@@ -413,45 +345,36 @@ export default {
       isGroupedByType,
       isGroupedByStream,
       settings,
-      
-      // Computed
       displayStats,
       recentDetections,
-      
-      // Methods
       refreshData: fetchDashboardData,
       refreshStream,
       openStreamDetails,
       openAgentDetails,
       openAddStreamModal,
       openAddAgentModal,
+      handleStartStreamCreation,
+      handleStreamCreated,
       handleStreamUpdated,
       handleStreamDeleted,
-      handleStreamCreated,
       handleAgentUpdated,
       handleAgentDeleted,
       handleAgentCreated,
       logout,
-      
-      // Notification methods
       markAsRead,
       markAllAsRead,
       toggleGroupByType,
       toggleGroupByStream,
-      
-      // Settings handlers
       handleDarkThemeChange,
       handleBackgroundRefreshChange,
       handleRefreshIntervalChange,
-      handleGroupByTypeChange,
-      handleGroupByStreamChange
+      fetchNotifications
     }
   }
 }
 </script>
 
 <style scoped>
-/* Base styling for the entire dashboard */
 .mobile-admin-dashboard {
   font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   height: 100vh;
@@ -477,10 +400,9 @@ export default {
   --border-radius-sm: 8px;
   background-color: var(--background-color);
   color: var(--text-color);
-  padding-bottom: 80px; /* Space for bottom tabs */
+  padding-bottom: 80px;
 }
 
-/* Dark theme variables */
 .mobile-admin-dashboard[data-theme="dark"] {
   --primary-color: #4cc9f0;
   --primary-light: #4cc9f020;
@@ -494,7 +416,6 @@ export default {
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
 }
 
-/* Header styling */
 .mobile-header {
   padding: 16px;
   display: flex;
@@ -509,235 +430,47 @@ export default {
   transition: var(--transition);
 }
 
-.header-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+.header-title { display: flex; align-items: center; gap: 10px; }
+.header-title h1 { font-size: 1.5rem; font-weight: 600; margin: 0; color: var(--text-color); }
+.mobile-tag { background-color: var(--primary-light); color: var(--primary-color); font-size: 0.7rem; font-weight: 500; padding: 2px 8px; border-radius: 12px; text-transform: uppercase; }
+.refresh-button { background-color: var(--primary-color); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: var(--transition); box-shadow: var(--shadow-sm); }
+.refresh-button:hover { background-color: var(--secondary-color); }
+.refresh-button:disabled { background-color: var(--text-light); cursor: not-allowed; }
 
-.header-title h1 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin: 0;
-  color: var(--text-color);
-}
+.stats-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 16px; margin-bottom: 16px; }
+.stat-card { background-color: var(--card-bg); border-radius: var(--border-radius); padding: 14px; display: flex; flex-direction: column; align-items: center; box-shadow: var(--shadow-sm); transition: var(--transition); border: 1px solid var(--border-color); }
+.stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.stat-icon { background-color: var(--primary-light); color: var(--primary-color); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; font-size: 1.2rem; }
+.stat-content { text-align: center; }
+.stat-value { font-weight: 700; font-size: 1.4rem; margin-bottom: 2px; color: var(--text-color); }
+.stat-label { font-size: 0.75rem; color: var(--text-light); white-space: nowrap; }
 
-.mobile-tag {
-  background-color: var(--primary-light);
-  color: var(--primary-color);
-  font-size: 0.7rem;
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 12px;
-  text-transform: uppercase;
-}
+.mobile-tabs { display: flex; justify-content: space-between; align-items: center; position: fixed; bottom: 0; left: 0; right: 0; background-color: var(--card-bg); padding: 6px 12px; box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1); z-index: 20; border-top: 1px solid var(--border-color); transition: var(--transition); }
+.tab-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 0; cursor: pointer; transition: var(--transition); position: relative; color: var(--text-light); }
+.tab-item.active { color: var(--primary-color); }
+.tab-item:hover { color: var(--secondary-color); }
+.tab-icon-container { position: relative; margin-bottom: 4px; }
+.tab-icon { font-size: 1.2rem; }
+.notification-badge { position: absolute; top: -8px; right: -8px; background-color: var(--danger-color); color: white; font-size: 0.6rem; font-weight: 600; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+.tab-label { font-size: 0.7rem; font-weight: 500; }
 
-.refresh-button {
-  background-color: var(--primary-color);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: var(--transition);
-  box-shadow: var(--shadow-sm);
-}
+.tab-content { flex: 1; overflow-y: auto; padding: 0 12px; -webkit-overflow-scrolling: touch; }
 
-.refresh-button:hover {
-  background-color: var(--secondary-color);
-}
-
-.refresh-button:disabled {
-  background-color: var(--text-light);
-  cursor: not-allowed;
-}
-
-/* Stats container styling */
-.stats-container {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  padding: 16px;
-  margin-bottom: 16px;
-}
-
-.stat-card {
-  background-color: var(--card-bg);
-  border-radius: var(--border-radius);
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  box-shadow: var(--shadow-sm);
-  transition: var(--transition);
-  border: 1px solid var(--border-color);
-}
-
-.stat-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-
-.stat-icon {
-  background-color: var(--primary-light);
-  color: var(--primary-color);
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 8px;
-  font-size: 1.2rem;
-}
-
-.stat-content {
-  text-align: center;
-}
-
-.stat-value {
-  font-weight: 700;
-  font-size: 1.4rem;
-  margin-bottom: 2px;
-  color: var(--text-color);
-}
-
-.stat-label {
-  font-size: 0.75rem;
-  color: var(--text-light);
-  white-space: nowrap;
-}
-
-/* Tab navigation styling */
-.mobile-tabs {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background-color: var(--card-bg);
-  padding: 6px 12px;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-  z-index: 20;
-  border-top: 1px solid var(--border-color);
-  transition: var(--transition);
-}
-
-.tab-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 0;
-  cursor: pointer;
-  transition: var(--transition);
-  position: relative;
-  color: var(--text-light);
-}
-
-.tab-item.active {
-  color: var(--primary-color);
-}
-
-.tab-item:hover {
-  color: var(--secondary-color);
-}
-
-.tab-icon-container {
-  position: relative;
-  margin-bottom: 4px;
-}
-
-.tab-icon {
-  font-size: 1.2rem;
-}
-
-.notification-badge {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  background-color: var(--danger-color);
-  color: white;
-  font-size: 0.6rem;
-  font-weight: 600;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
-}
-
-.tab-label {
-  font-size: 0.7rem;
-  font-weight: 500;
-}
-
-/* Tab content styling */
-.tab-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 12px;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Responsive adjustments */
 @media (max-width: 340px) {
-  .stats-container {
-    grid-template-columns: repeat(1, 1fr);
-  }
-
-  .tab-label {
-    font-size: 0.65rem;
-  }
+  .stats-container { grid-template-columns: repeat(1, 1fr); }
+  .tab-label { font-size: 0.65rem; }
 }
 
 @media (min-width: 341px) and (max-width: 480px) {
-  .stats-container {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-  }
-
-  .stat-icon {
-    width: 30px;
-    height: 30px;
-    font-size: 1rem;
-  }
-
-  .stat-value {
-    font-size: 1.2rem;
-  }
+  .stats-container { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stat-icon { width: 30px; height: 30px; font-size: 1rem; }
+  .stat-value { font-size: 1.2rem; }
 }
 
-/* Animation keyframes */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideIn {
-  from { transform: translateY(10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-/* Animations for components */
-.tab-content > * {
-  animation: fadeIn 0.3s ease;
-}
-
-.stat-card {
-  animation: slideIn 0.3s ease;
-  animation-fill-mode: both;
-}
-
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.tab-content > * { animation: fadeIn 0.3s ease; }
+.stat-card { animation: slideIn 0.3s ease; animation-fill-mode: both; }
 .stat-card:nth-child(1) { animation-delay: 0.1s; }
 .stat-card:nth-child(2) { animation-delay: 0.2s; }
 .stat-card:nth-child(3) { animation-delay: 0.3s; }

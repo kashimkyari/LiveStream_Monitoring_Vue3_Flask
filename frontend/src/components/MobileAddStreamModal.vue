@@ -1,386 +1,453 @@
 <template>
-  <div class="mobile-modal-overlay" @click.self="closeModal">
-    <div class="mobile-modal-content">
-      <div class="mobile-modal-header">
-        <h3>Add Stream</h3>
-        <button class="mobile-modal-close" @click="closeModal">×</button>
-      </div>
-      
-      <div class="mobile-modal-body">
-        <!-- Error/Success Messages -->
-        <div v-if="error" class="error-message">
-          <span class="error-icon">⚠️</span>
-          <span>{{ error }}</span>
-        </div>
-        
-        <div v-if="message && !error" class="success-message">
-          <span class="success-icon">✓</span>
-          <span>{{ message }}</span>
-        </div>
-        
-        <!-- Form -->
-        <form @submit.prevent="submitForm" class="mobile-form">
-          <div class="form-group">
-            <label for="roomUrl">Stream URL</label>
-            <input
-              id="roomUrl"
-              v-model="formData.room_url"
-              type="url"
-              class="form-control"
-              placeholder="Enter complete URL (e.g., https://chaturbate.com/username)"
-              required
-              :disabled="isSubmitting || jobStatus === 'processing'"
-            />
-            <small class="form-hint">Enter the complete URL including https://</small>
+  <transition name="sheet-slide">
+    <div v-if="isVisible" class="bottom-sheet-overlay" @click="$emit('close')">
+      <div class="bottom-sheet-container" @click.stop>
+        <div class="bottom-sheet-handle"></div>
+        <div class="sheet-content">
+          <div class="sheet-header">
+            <font-awesome-icon icon="plus" class="sheet-icon" />
+            <h3>Add New Stream</h3>
           </div>
-          
-          <div class="form-group">
-            <label for="platform">Platform</label>
-            <select
-              id="platform"
-              v-model="formData.platform"
-              class="form-control"
-              required
-              :disabled="isSubmitting || jobStatus === 'processing'"
-            >
-              <option value="">Select Platform</option>
-              <option value="chaturbate">Chaturbate</option>
-              <option value="stripchat">Stripchat</option>
-            </select>
-          </div>
-          
-          <!-- Job Status Section -->
-          <div v-if="jobStatus" class="job-status-section">
-            <div class="job-status-header">
-              <span class="job-status-title">Stream Creation Status</span>
-              <span 
-                class="job-status-badge"
-                :class="{
-                  'status-pending': jobStatus === 'pending',
-                  'status-processing': jobStatus === 'processing',
-                  'status-completed': jobStatus === 'completed',
-                  'status-failed': jobStatus === 'failed'
-                }"
+          <div v-if="isProcessing" class="progress-section">
+            <div class="progress-bar-container" :class="{ 'error': hasError }">
+              <div
+                class="progress-bar"
+                :style="progressBarStyle"
+                :title="`Progress: ${progress}%`"
+                @mouseenter="showTooltip = true"
+                @mouseleave="showTooltip = false"
               >
-                {{ formatJobStatus(jobStatus) }}
-              </span>
+                <div class="progress-bar-inner"></div>
+              </div>
+              <span v-if="showTooltip" class="progress-tooltip">{{ progress }}%</span>
             </div>
-            
-            <div v-if="jobStatus === 'processing'" class="progress-container">
-              <div class="progress-bar" :style="{ width: `${progress}%` }"></div>
-            </div>
-            
-            <div v-if="jobProgress" class="job-progress-message">
-              {{ jobProgress }}
-            </div>
-          </div>
-          
-          <div class="form-actions">
-            <button
-              type="button"
-              @click="closeModal"
-              class="cancel-button"
-              :disabled="isSubmitting || jobStatus === 'processing'"
+            <p
+              class="progress-message"
+              :class="{ 'error-message': hasError, 'fade-in': messageChanged }"
+              @animationend="messageChanged = false"
             >
-              Cancel
-            </button>
-            
-            <button
-              type="submit"
-              class="submit-button"
-              :disabled="!formData.room_url || !formData.platform || isSubmitting || jobStatus === 'processing'"
-            >
-              <span v-if="isSubmitting || jobStatus === 'processing'">
-                <strong>Processing...</strong>
-              </span>
-              <span v-else><strong>Add Stream</strong></span>
-            </button>
+              {{ progressMessage }}
+            </p>
+            <div v-if="hasError" class="error-details">
+              <font-awesome-icon icon="exclamation-triangle" />
+              <span>{{ errorDetails }}</span>
+            </div>
+            <transition name="confetti">
+              <div v-if="isComplete" class="confetti-container">
+                <font-awesome-icon icon="check-circle" class="completion-icon" />
+                <span>Stream Created!</span>
+              </div>
+            </transition>
           </div>
-        </form>
+          <form v-else @submit.prevent="handleSubmit" class="stream-form">
+            <div class="form-group">
+              <label for="platform">Platform</label>
+              <select
+                id="platform"
+                v-model="form.platform"
+                required
+                class="form-control"
+                :disabled="isSubmitting"
+              >
+                <option value="" disabled>Select Platform</option>
+                <option value="chaturbate">Chaturbate</option>
+                <option value="stripchat">Stripchat</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="room_url">Room URL</label>
+              <input
+                id="room_url"
+                v-model="form.room_url"
+                type="url"
+                placeholder="https://example.com/username"
+                required
+                class="form-control"
+                :disabled="isSubmitting"
+              />
+            </div>
+            <div class="form-group">
+              <label for="agent_id">Assign Agent (Optional)</label>
+              <select
+                id="agent_id"
+                v-model="form.agent_id"
+                class="form-control"
+                :disabled="isSubmitting || loadingAgents"
+              >
+                <option value="">Unassigned</option>
+                <option v-for="agent in agentsList" :key="agent.id" :value="agent.id">
+                  {{ agent.username }}
+                </option>
+              </select>
+              <div v-if="loadingAgents" class="loading-indicator">
+                <font-awesome-icon icon="spinner" spin />
+                <span>Loading agents...</span>
+              </div>
+              <div v-if="errorLoadingAgents" class="error-indicator">
+                <font-awesome-icon icon="exclamation-triangle" />
+                <span>{{ errorMessage }} <a href="#" @click.prevent="retryFetchAgents">Retry</a></span>
+              </div>
+            </div>
+            <div class="sheet-actions">
+              <button
+                type="submit"
+                class="btn btn-primary"
+                :disabled="isSubmitting || loadingAgents"
+              >
+                <font-awesome-icon
+                  :icon="isSubmitting ? 'spinner' : 'plus'"
+                  :spin="isSubmitting"
+                  class="icon-left"
+                />
+                {{ isSubmitting ? 'Submitting...' : 'Add Stream' }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-secondary"
+                @click="$emit('close')"
+                :disabled="isSubmitting"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
-  </div>
+  </transition>
 </template>
 
 <script>
-/* eslint-disable */
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { faPlus, faSpinner, faExclamationTriangle, faCheckCircle } from '@fortawesome/free-solid-svg-icons'
+import { library } from '@fortawesome/fontawesome-svg-core'
+import { useToast } from 'vue-toastification'
 import axios from 'axios'
+
+library.add(faPlus, faSpinner, faExclamationTriangle, faCheckCircle)
 
 export default {
   name: 'MobileAddStreamModal',
-  
+  components: { FontAwesomeIcon },
+  props: {
+    isVisible: { type: Boolean, default: false },
+    isDarkTheme: { type: Boolean, default: false }
+  },
   emits: ['close', 'stream-created'],
-  
   setup(props, { emit }) {
-    // Form data
-    const formData = ref({
-      room_url: '',
-      platform: '',
-      agent_id: ''
-    })
-    
-    // UI states
+    const form = ref({ platform: '', room_url: '', agent_id: '' })
     const isSubmitting = ref(false)
-    const error = ref('')
-    const message = ref('')
-    
-    // Job tracking
-    const jobId = ref(null)
-    const jobStatus = ref('')
-    const jobProgress = ref('')
+    const isProcessing = ref(false)
     const progress = ref(0)
-    const statusCheckInterval = ref(null)
-    
-    // Submit form handler
-    const submitForm = async () => {
+    const progressMessage = ref('Initializing...')
+    const eventSource = ref(null)
+    const toast = useToast()
+    const agentsList = ref([])
+    const loadingAgents = ref(false)
+    const errorLoadingAgents = ref(false)
+    const errorMessage = ref('')
+    const retryCount = ref(0)
+    const maxRetries = 3
+    const showTooltip = ref(false)
+    const hasError = ref(false)
+    const errorDetails = ref('')
+    const isComplete = ref(false)
+    const messageChanged = ref(false)
+    const lastMessage = ref('')
+
+    const fetchAgents = async () => {
+      if (retryCount.value >= maxRetries) {
+        console.error('Max retries reached for fetching agents')
+        errorLoadingAgents.value = true
+        errorMessage.value = 'Unable to load agents after multiple attempts.'
+        loadingAgents.value = false
+        return
+      }
+
+      loadingAgents.value = true
+      errorLoadingAgents.value = false
+      errorMessage.value = ''
       try {
-        isSubmitting.value = true
-        error.value = ''
-        message.value = ''
-        
-        // Mobile optimization: Add mobile parameter to reduce data usage
-        const response = await axios.post('/api/streams', {
-          ...formData.value
+        console.debug('Fetching agents from http://localhost:5000/api/agents')
+        const response = await axios.get('http://localhost:5000/api/agents', {
+          headers: {
+            'Accept': 'application/json'
+          },
+          withCredentials: true,
+          timeout: 10000
         })
-        
-        if (response.data.job_id) {
-          // Handle job-based response
-          jobId.value = response.data.job_id
-          jobStatus.value = 'pending'
-          message.value = 'Stream creation started. Please wait while we process your request.'
-          startJobStatusCheck()
+        console.debug('API response:', response.data)
+        let agentsData = response.data
+        if (!Array.isArray(agentsData)) {
+          agentsData = Object.values(agentsData || {})
+        }
+        agentsList.value = agentsData.map(agent => ({
+          id: agent.id,
+          username: agent.username || 'Unknown',
+          email: agent.email || '',
+          role: agent.role || ''
+        }))
+        retryCount.value = 0
+        if (agentsList.value.length === 0) {
+          console.warn('No agents returned from API')
+          toast.warning('No agents available')
+        }
+      } catch (error) {
+        console.error('Error fetching agents:', error)
+        errorLoadingAgents.value = true
+        retryCount.value += 1
+        if (error.code === 'ECONNABORTED') {
+          errorMessage.value = 'Request timed out. Please check your network.'
+        } else if (error.response) {
+          const status = error.response.status
+          const message = error.response.data?.message || 'Unknown error'
+          errorMessage.value = `Failed to load agents: ${message} (Status: ${status})`
+        } else if (error.request) {
+          errorMessage.value = 'No response from server. Check if the server is running.'
         } else {
-          // Handle immediate response
-          message.value = response.data.message || 'Stream added successfully'
-          emit('stream-created')
-          setTimeout(() => {
-            closeModal()
-          }, 1500)
+          errorMessage.value = `Error: ${error.message}`
         }
-      } catch (err) {
-        console.error('Error creating stream:', err)
-        error.value = err.response?.data?.message || 'Failed to add stream'
-        isSubmitting.value = false
+        console.error('Retry count:', retryCount.value)
+        toast.error(errorMessage.value)
+      } finally {
+        loadingAgents.value = false
       }
     }
-    
-    // Format job status for display
-    const formatJobStatus = (status) => {
-      switch (status) {
-        case 'pending':
-          return 'Pending'
-        case 'processing':
-          return 'Processing'
-        case 'completed':
-          return 'Completed'
-        case 'failed':
-          return 'Failed'
-        default:
-          return 'Unknown'
-      }
+
+    const retryFetchAgents = async () => {
+      console.debug('Retrying fetch agents, attempt:', retryCount.value + 1)
+      const delay = Math.pow(2, retryCount.value) * 1000
+      await new Promise(resolve => setTimeout(resolve, delay))
+      fetchAgents()
     }
-    
-    // Job status polling
-    const startJobStatusCheck = () => {
-      // Clear any existing interval
-      if (statusCheckInterval.value) {
-        clearInterval(statusCheckInterval.value)
-      }
-      
-      // Set progress to initial state
-      progress.value = 5
-      
-      // Check status immediately
-      checkJobStatus()
-      
-      // Then check every 2 seconds
-      statusCheckInterval.value = setInterval(checkJobStatus, 2000)
-    }
-    
-    const checkJobStatus = async () => {
-      if (!jobId.value) return
-      
-      try {
-        // Mobile optimization: Add mobile parameter to reduce data usage
-        const response = await axios.get(`/api/streams/interactive/sse?job_id=${jobId.value}`)
-        
-        jobStatus.value = response.data.status
-        jobProgress.value = response.data.progress_message || ''
-        
-        // Update progress bar
-        if (jobStatus.value === 'pending') {
-          progress.value = 5
-        } else if (jobStatus.value === 'processing') {
-          // Increment progress by 10% each check, max 90%
-          progress.value = Math.min(progress.value + 10, 90)
-        } else if (jobStatus.value === 'completed') {
-          progress.value = 100
-          message.value = 'Stream added successfully'
-          error.value = ''
-          stopJobStatusCheck()
-          emit('stream-created')
-          setTimeout(() => {
-            closeModal()
-          }, 1500)
-        } else if (jobStatus.value === 'failed') {
-          progress.value = 100
-          error.value = response.data.error || 'Failed to add stream'
-          message.value = ''
-          stopJobStatusCheck()
-          isSubmitting.value = false
+
+    const connectSSE = (jobId) => {
+      if (eventSource.value) eventSource.value.close()
+      const sseUrl = `http://localhost:5000/api/streams/interactive/sse?job_id=${jobId}`
+      eventSource.value = new EventSource(sseUrl, { withCredentials: true })
+
+      eventSource.value.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          console.debug('SSE message:', data)
+          progress.value = data.progress || 0
+          if (data.message && data.message !== lastMessage.value) {
+            lastMessage.value = data.message
+            progressMessage.value = data.message
+            messageChanged.value = true
+          }
+          if (data.error) {
+            hasError.value = true
+            errorDetails.value = data.error
+            progressMessage.value = 'Error occurred'
+            toast.error(data.error)
+            setTimeout(resetState, 3000)
+          }
+        } catch (error) {
+          console.error('SSE message parse error:', error)
+          hasError.value = true
+          errorDetails.value = 'Error processing stream creation updates'
+          toast.error('Error processing stream creation updates')
         }
-      } catch (err) {
-        console.error('Error checking job status:', err)
-        error.value = 'Failed to check job status'
-        stopJobStatusCheck()
-        isSubmitting.value = false
       }
+
+      eventSource.value.addEventListener('error', () => {
+        console.error('SSE connection error for job:', jobId)
+        hasError.value = true
+        errorDetails.value = 'Lost connection to stream creation server'
+        toast.error('Lost connection to stream creation server')
+        setTimeout(resetState, 3000)
+      })
+
+      eventSource.value.addEventListener('completed', (event) => {
+        try {
+          const streamData = JSON.parse(event.data)
+          console.debug('SSE completed:', streamData)
+          isComplete.value = true
+          toast.success('Stream created successfully')
+          setTimeout(() => {
+            emit('stream-created', streamData)
+            resetState()
+          }, 2000)
+        } catch (error) {
+          console.error('SSE completed event parse error:', error)
+          hasError.value = true
+          errorDetails.value = 'Error processing stream creation completion'
+          toast.error('Error processing stream creation completion')
+          setTimeout(resetState, 3000)
+        }
+      })
     }
-    
-    const stopJobStatusCheck = () => {
-      if (statusCheckInterval.value) {
-        clearInterval(statusCheckInterval.value)
-        statusCheckInterval.value = null
+
+    const resetState = () => {
+      if (eventSource.value) {
+        eventSource.value.close()
+        eventSource.value = null
       }
-    }
-    
-    const closeModal = () => {
-      // Stop any ongoing requests
-      stopJobStatusCheck()
-      
-      // Reset form state
+      progress.value = 0
+      progressMessage.value = 'Initializing...'
+      lastMessage.value = ''
       isSubmitting.value = false
-      
-      // Emit close event
-      emit('close')
+      isProcessing.value = false
+      hasError.value = false
+      errorDetails.value = ''
+      isComplete.value = false
+      messageChanged.value = false
+      showTooltip.value = false
+      form.value = { platform: '', room_url: '', agent_id: '' }
+      errorLoadingAgents.value = false
+      errorMessage.value = ''
     }
-    
-    // Clean up on unmount
-    onBeforeUnmount(() => {
-      stopJobStatusCheck()
+
+    const handleSubmit = async () => {
+      if (isSubmitting.value) return
+      isSubmitting.value = true
+      try {
+        console.debug('Submitting stream creation:', form.value)
+        const response = await axios.post('http://localhost:5000/api/streams/interactive', form.value, {
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          withCredentials: true,
+          timeout: 10000
+        })
+        console.debug('Stream creation response:', response.data)
+        isSubmitting.value = false
+        isProcessing.value = true
+        connectSSE(response.data.job_id)
+      } catch (error) {
+        console.error('Error starting stream creation:', error)
+        isSubmitting.value = false
+        let message = 'Failed to start stream creation'
+        if (error.response) {
+          message = error.response.data?.message || `Error: ${error.response.status}`
+        } else if (error.request) {
+          message = 'No response from server. Check if the server is running.'
+        } else {
+          message = error.message
+        }
+        toast.error(message)
+      }
+    }
+
+    const progressBarStyle = computed(() => {
+      let backgroundColor = '#4361ee' // Default blue
+      if (hasError.value) {
+        backgroundColor = '#e5383b' // Red for errors
+      } else if (progress.value < 30) {
+        backgroundColor = '#f4a261' // Yellow for early progress
+      } else if (progress.value >= 100) {
+        backgroundColor = '#2a9d8f' // Green for completion
+      }
+      return {
+        width: `${progress.value}%`,
+        backgroundColor
+      }
     })
-    
+
+    watch(() => props.isVisible, (newVisible) => {
+      if (newVisible) {
+        retryCount.value = 0
+        fetchAgents()
+      } else {
+        resetState()
+      }
+    })
+
+    onMounted(() => {
+      if (props.isVisible) fetchAgents()
+    })
+
+    onUnmounted(() => {
+      if (eventSource.value) {
+        eventSource.value.close()
+        eventSource.value = null
+      }
+    })
+
     return {
-      formData,
+      form,
       isSubmitting,
-      error,
-      message,
-      jobStatus,
-      jobProgress,
+      isProcessing,
       progress,
-      submitForm,
-      closeModal,
-      formatJobStatus
+      progressMessage,
+      handleSubmit,
+      agentsList,
+      loadingAgents,
+      errorLoadingAgents,
+      errorMessage,
+      retryFetchAgents,
+      showTooltip,
+      hasError,
+      errorDetails,
+      isComplete,
+      messageChanged,
+      progressBarStyle
     }
   }
 }
 </script>
 
 <style scoped>
-.mobile-modal-overlay {
+.bottom-sheet-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.8);
+  background-color: rgba(0, 0, 0, 0.5);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1500;
-  padding: 0 16px;
+  flex-direction: column;
+  justify-content: flex-end;
+  z-index: 1000;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
-.mobile-modal-content {
-  background-color: var(--light-bg, #ffffff);
-  border-radius: 12px;
+.bottom-sheet-container {
   width: 100%;
-  max-width: 480px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-  visibility: visible !important;
-  opacity: 1 !important;
+  background-color: var(--card-bg);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  overflow: hidden;
+  transform: translateY(0);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
 }
 
-[data-theme='dark'] .mobile-modal-content {
-  background-color: var(--dark-bg, #1a1a1a);
-  color: var(--dark-text, #f0f0f0);
+.bottom-sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background-color: var(--border-color);
+  margin: 12px auto;
 }
 
-.mobile-modal-header {
+.sheet-content {
+  padding: 0 20px 24px;
+}
+
+.sheet-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 16px;
-  border-bottom: 1px solid var(--light-border, rgba(0, 0, 0, 0.1));
+  margin-bottom: 16px;
 }
 
-[data-theme='dark'] .mobile-modal-header {
-  border-bottom: 1px solid var(--dark-border, rgba(255, 255, 255, 0.1));
+.sheet-icon {
+  font-size: 1.4rem;
+  color: var(--primary-color);
+  margin-right: 12px;
 }
 
-.mobile-modal-header h3 {
+.sheet-header h3 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.3rem;
   font-weight: 600;
-  color: var(--light-text, #333333);
+  color: var(--text-color);
 }
 
-[data-theme='dark'] .mobile-modal-header h3 {
-  color: var(--dark-text, #ffffff);
-}
-
-.mobile-modal-close {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 1.2rem;
-  padding: 8px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.mobile-modal-body {
-  padding: 16px;
-}
-
-.error-message {
-  padding: 12px;
-  background-color: rgba(244, 67, 54, 0.1);
-  border-left: 3px solid #f44336;
-  border-radius: 4px;
-  margin-bottom: 20px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #f44336;
-}
-
-.error-icon {
-  color: #f44336;
-}
-
-.success-message {
-  padding: 12px;
-  background-color: rgba(76, 175, 80, 0.1);
-  border-left: 3px solid #4caf50;
-  border-radius: 4px;
-  margin-bottom: 20px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #4caf50;
-}
-
-.success-icon {
-  color: #4caf50;
-}
-
-.mobile-form {
+.stream-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -389,203 +456,276 @@ export default {
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
 .form-group label {
-  font-weight: 600;
-  color: var(--light-text, #333333);
-  font-size: 1rem;
-  margin-bottom: 4px;
-}
-
-[data-theme='dark'] .form-group label {
-  color: var(--dark-text, #ffffff);
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: 6px;
 }
 
 .form-control {
-  padding: 14px;
-  border: 1px solid var(--light-border, rgba(0, 0, 0, 0.15));
-  border-radius: 8px;
-  background-color: var(--light-input-bg, #ffffff);
-  color: var(--light-text, #333333);
-  font-size: 1rem;
-  width: 100%;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.95rem;
+  color: var(--text-color);
+  background-color: var(--card-bg);
 }
 
-[data-theme='dark'] .form-control {
-  background-color: var(--dark-input-bg, #2a2a2a);
-  border-color: var(--dark-border, rgba(255, 255, 255, 0.15));
-  color: var(--dark-text, #ffffff);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+.form-control::placeholder {
+  color: var(--text-light);
 }
 
-.form-control:focus {
-  border-color: var(--primary-color, #4361ee);
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
-}
-
-.form-control:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.form-hint {
-  font-size: 0.85rem;
-  color: var(--light-text-muted, #666666);
-  margin-top: 6px;
-}
-
-[data-theme='dark'] .form-hint {
-  color: var(--dark-text-muted, #aaaaaa);
-}
-
-.form-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 20px;
-}
-
-.cancel-button,
-.submit-button {
-  flex: 1;
+.loading-indicator,
+.error-indicator {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 15px;
-  border-radius: 8px;
-  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--text-light);
+  margin-top: 4px;
+  gap: 6px;
+}
+
+.error-indicator {
+  color: var(--danger-color);
+}
+
+.error-indicator a {
+  color: var(--primary-color);
+  text-decoration: underline;
   cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 1rem;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
-.cancel-button {
-  background-color: var(--light-button-bg, #f5f5f5);
-  border: 1px solid var(--light-border, rgba(0, 0, 0, 0.1));
-  color: var(--light-text, #333333);
+.sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-[data-theme='dark'] .cancel-button {
-  background-color: var(--dark-button-bg, #2d2d2d);
-  border-color: var(--dark-border, rgba(255, 255, 255, 0.1));
-  color: var(--dark-text, #ffffff);
+.btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--border-radius-sm);
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
 }
 
-.cancel-button:hover {
-  background-color: var(--light-button-hover-bg, #eeeeee);
+.btn:active {
+  transform: scale(0.98);
 }
 
-[data-theme='dark'] .cancel-button:hover {
-  background-color: var(--dark-button-hover-bg, #3a3a3a);
+.btn .icon-left {
+  margin-right: 8px;
 }
 
-.submit-button {
-  background-color: var(--primary-color, #4361ee);
+.btn-primary {
+  background-color: var(--primary-color);
   border: none;
   color: white;
-  position: relative;
-  overflow: hidden;
 }
 
-.submit-button:hover {
-  background-color: var(--primary-hover-color, #3a56e4);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-
-.submit-button:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-}
-
-.submit-button:disabled {
-  opacity: 0.7;
+.btn-primary:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
 }
 
-/* Job Status Section */
-.job-status-section {
-  background-color: var(--muted-bg);
-  border-radius: 8px;
-  padding: 12px;
-  margin-top: 8px;
-}
-
-.job-status-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.job-status-title {
-  font-weight: 600;
+.btn-outline-secondary {
+  background-color: transparent;
+  border: 1.5px solid var(--border-color);
   color: var(--text-color);
 }
 
-.job-status-badge {
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 0.8rem;
-  font-weight: 500;
+.progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
-.status-pending {
-  background-color: rgba(255, 152, 0, 0.2);
-  color: #ff9800;
-}
-
-.status-processing {
-  background-color: rgba(33, 150, 243, 0.2);
-  color: #2196f3;
-}
-
-.status-completed {
-  background-color: rgba(76, 175, 80, 0.2);
-  color: #4caf50;
-}
-
-.status-failed {
-  background-color: rgba(244, 67, 54, 0.2);
-  color: #f44336;
-}
-
-.progress-container {
-  height: 8px;
-  background-color: rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
+.progress-bar-container {
+  width: 100%;
+  height: 12px;
+  background-color: var(--border-color);
+  border-radius: var(--border-radius-sm);
   overflow: hidden;
-  margin-bottom: 12px;
+  position: relative;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.progress-bar-container.error {
+  animation: shake 0.5s ease-in-out;
 }
 
 .progress-bar {
   height: 100%;
-  background-color: var(--primary-color);
-  border-radius: 4px;
-  transition: width 0.3s ease;
+  position: relative;
+  transition: width 0.5s ease, background-color 0.3s ease;
+  overflow: hidden;
 }
 
-.job-progress-message {
-  font-size: 0.9rem;
-  color: var(--text-muted);
+.progress-bar-inner {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.2) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.2) 50%,
+    rgba(255, 255, 255, 0.2) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 30px 30px;
+  animation: move-stripes 1s linear infinite;
 }
 
-/* Improve touch targets for mobile */
-@media (max-width: 480px) {
-  .cancel-button,
-  .submit-button {
-    padding: 16px;
-  }
-  
-  .form-control {
-    padding: 14px;
-  }
+.progress-bar:not(.error) .progress-bar-inner {
+  animation: move-stripes 1s linear infinite, pulse 2s ease-in-out infinite;
+}
+
+.progress-tooltip {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--text-color);
+  color: var(--card-bg);
+  padding: 4px 8px;
+  border-radius: var(--border-radius-sm);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  z-index: 10;
+  animation: fade-in 0.3s ease;
+}
+
+.progress-message {
+  font-size: 0.95rem;
+  color: var(--text-color);
+  text-align: center;
+  margin: 0;
+  transition: opacity 0.3s ease;
+}
+
+.progress-message.fade-in {
+  animation: fade-in 0.5s ease;
+}
+
+.progress-message.error-message {
+  color: var(--danger-color);
+  font-weight: 500;
+}
+
+.error-details {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger-color);
+  font-size: 0.85rem;
+  text-align: center;
+  margin-top: 8px;
+}
+
+.confetti-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--success-color);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 12px;
+  animation: bounce 0.5s ease;
+}
+
+.completion-icon {
+  font-size: 1.5rem;
+}
+
+.confetti-enter-active {
+  animation: bounce 0.5s ease;
+}
+
+.confetti-leave-active {
+  animation: fade-out 0.3s ease;
+}
+
+.sheet-slide-enter-active,
+.sheet-slide-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.sheet-slide-enter-from,
+.sheet-slide-leave-to {
+  opacity: 0;
+}
+
+@keyframes move-stripes {
+  0% { background-position: 0 0; }
+  100% { background-position: 30px 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+:where([data-theme="light"]) {
+  --primary-color: #4361ee;
+  --secondary-color: #3f37c9;
+  --background-color: #f8f9fa;
+  --card-bg: #ffffff;
+  --text-color: #333333;
+  --text-light: #777777;
+  --border-color: #e0e0e0;
+  --danger-color: #e5383b;
+  --success-color: #2a9d8f;
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --transition: all 0.3s ease;
+  --border-radius: 12px;
+  --border-radius-sm: 8px;
+}
+
+:where([data-theme="dark"]) {
+  --primary-color: #4cc9f0;
+  --secondary-color: #4895ef;
+  --background-color: #121212;
+  --card-bg: #1e1e1e;
+  --text-color: #f8f9fa;
+  --text-light: #b0b0b0;
+  --border-color: #333333;
+  --danger-color: #e5383b;
+  --success-color: #2a9d8f;
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
 }
 </style>

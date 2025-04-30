@@ -186,6 +186,7 @@ export default {
         
         if (result.success) {
           // Save username in localStorage if remember me is checked
+
            
           if (rememberMe.value) {
             localStorage.setItem('rememberedUsername', username.value);
@@ -196,6 +197,7 @@ export default {
           
           toast.success('Login successful!');
           emit('login-success', result.user);
+          window.location.href = '/';
 
           
           

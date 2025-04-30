@@ -777,12 +777,15 @@ const showToast = (message, type = 'info') => {
 
 const setupSocketConnection = () => {
   // Connect to socket server with namespace
-  socket.value = io('/notifications', {
-    transports: ['websocket'],
-    reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000
-  });
+  socket.value = io('http://localhost:5000/notifications', {
+          path: '/ws',
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          withCredentials: true,
+          autoConnect: true
+        });
   
   // Socket event handlers
   socket.value.on('connect', () => {

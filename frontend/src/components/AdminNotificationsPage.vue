@@ -521,7 +521,7 @@ export default {
     // Socket setup and handlers
     const setupSocketConnection = () => {
       try {
-        socket.value = io('http://54.86.99.85:5000notifications', {
+        socket.value = io('http://localhost:5000/notifications', {
           path: '/ws',
           transports: ['websocket', 'polling'],
           reconnection: true,
