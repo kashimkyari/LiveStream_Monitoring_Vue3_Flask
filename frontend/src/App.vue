@@ -99,12 +99,7 @@
             </button>
           </div>
           
-          <!-- Mobile notification system for both admin and agent -->
-          <MobileDetectionNotification 
-            v-if="isMobile"
-            :auto-hide-time="7000"
-            @click="handleDetectionClick"
-          />
+          
         </div>
       </div>
     </transition>
@@ -134,7 +129,6 @@ import MobileAgentDashboard from './components/MobileAgentDashboard.vue'
 import MobileLoginComponent from './components/MobileLogin.vue'
 import MobileCreateAccount from './components/MobileCreateAccount.vue'
 import MobileForgotPassword from './components/MobileForgotPassword.vue'
-import MobileDetectionNotification from './components/MobileDetectionNotification.vue'
 
 // Toasts & utilities
 import { useToast } from 'vue-toastification'
@@ -392,11 +386,7 @@ const animateControls = () => {
 }
 
 // Event handlers
-const handleDetectionClick = (detection) => {
-  if (!detection?.room_url) return
-  toast.info(`Navigating to stream: ${detection.streamer || 'Unknown'}`)
-  // Stream navigation logic...
-}
+
 
 const handleLoginSuccess = (userData) => {
   console.log("Login success:", userData)
@@ -428,7 +418,7 @@ onMounted(() => {
   isDarkTheme.value = localStorage.getItem('themePreference') === 'dark'
   
   // Configure axios
-  axios.defaults.baseURL = "54.86.99.85:5000"
+  axios.defaults.baseURL = "http://54.86.99.85:5000"
   axios.defaults.withCredentials = true
   
   // Add request/response interceptors for debugging

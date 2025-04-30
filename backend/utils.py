@@ -39,13 +39,16 @@ def login_required(roles: Optional[Union[str, List[str]]] = None) -> Callable:
 
             # Authorization check (if roles were specified)
             if allowed_roles and user_role not in allowed_roles:
-                    logger.warning(...)
-                    resp = jsonify({
-                        "error": "Forbidden",
-                        "message": "You do not have permission to perform this action."  # <- Updated message
-                    })
-                    resp.status_code = 403
-                    return resp
+                logger.warning(
+                    "Permission denied for user %s with role %s (requires one of: %s) for %s",
+                    user_id, user_role, ", ".join(allowed_roles), f.__name__
+                )
+                resp = jsonify({
+                    "error": "Forbidden",
+                    "message": "You do not have permission to perform this action."
+                })
+                resp.status_code = 403
+                return resp
 
             # Passed all checks — proceed to the view function
             return f(*args, **kwargs)

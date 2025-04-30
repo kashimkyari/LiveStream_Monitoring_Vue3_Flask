@@ -1,15 +1,14 @@
 # socket_events.py
 from flask_socketio import emit, join_room, leave_room
 from flask import session, current_app, request
-from models import db, User
+from models import db, User, Assignment, DetectionLog, Stream, ChatMessage, MessageAttachment
 import datetime
 import logging
 from sqlalchemy import or_
-from models import Assignment, DetectionLog, Stream  # Added missing imports
 
 # Track online users
-online_users = {}
-connected_sids = {}
+online_users = {}  # {user_id: sid}
+connected_sids = {}  # {sid: user_id}
 
 def register_socket_events(socketio):
     @socketio.on('connect')
@@ -41,7 +40,7 @@ def register_socket_events(socketio):
             current_app.logger.info(f"Anonymous connection: {request.sid}")
 
     @socketio.on('disconnect')
-    def handle_disconnect(*args):  # Fixed: Accept variable arguments
+    def handle_disconnect():
         """Client disconnected"""
         sid = request.sid
         current_app.logger.info(f"Client disconnected: {sid}")
@@ -81,7 +80,16 @@ def register_socket_events(socketio):
             current_app.logger.info(f"Client {request.sid} left room: {room}")
             emit('room_left', {'room': room, 'success': True}, room=request.sid)
             
-    # Add any other socket events needed for real-time messaging
+    @socketio.on('user_activity')
+    def handle_activity():
+        """Update user's last active timestamp"""
+        user_id = session.get('user_id')
+        if user_id:
+            user = User.query.get(user_id)
+            if user:
+                user.last_active = datetime.datetime.now()
+                db.session.commit()
+
     @socketio.on('typing')
     def handle_typing(data):
         """Handle typing indicators"""
@@ -111,6 +119,148 @@ def register_socket_events(socketio):
                 'sender_username': sender.username,
                 'typing': is_typing
             }, room=receiver_sid)
+
+    @socketio.on('send_message')
+    def handle_send_message(data):
+        """
+        Expected data:
+        {
+            "receiver_username": "<str>",
+            "message": "<message text>",
+            "attachment": {
+                "id": "<int>",
+                "url": "<str>",
+                "name": "<str>",
+                "type": "<str>",
+                "size": "<int>"
+            }
+        }
+        """
+        sender_id = session.get('user_id')
+        if not sender_id:
+            emit('error', {'error': 'User not authenticated.'})
+            return
+
+        receiver_username = data.get('receiver_username')
+        message_text = data.get('message', '')
+        attachment = data.get('attachment')
+
+        if not receiver_username:
+            emit('error', {'error': 'Missing receiver_username.'})
+            return
+            
+        if not message_text and not attachment:
+            emit('error', {'error': 'Message or attachment required.'})
+            return
+
+        # Look up the receiver by username
+        receiver = User.query.filter_by(username=receiver_username).first()
+        if not receiver:
+            emit('error', {'error': f'User {receiver_username} not found.'})
+            return
+
+        try:
+            # Create and save the chat message in the database
+            new_message = ChatMessage(
+                sender_id=sender_id,
+                receiver_id=receiver.id,
+                message=message_text,
+                timestamp=datetime.datetime.utcnow(),
+                read=False,
+                is_system=False
+            )
+            
+            # Link attachment if provided
+            if attachment and 'id' in attachment:
+                attachment_record = MessageAttachment.query.get(attachment['id'])
+                if attachment_record and attachment_record.user_id == sender_id:
+                    new_message.attachment_id = attachment_record.id
+                    
+            db.session.add(new_message)
+            db.session.commit()
+
+            # Get the serialized message with attachment
+            message_data = {
+                "id": new_message.id,
+                "sender_id": new_message.sender_id,
+                "receiver_id": new_message.receiver_id,
+                "message": new_message.message,
+                "timestamp": new_message.timestamp.isoformat(),
+                "is_system": new_message.is_system,
+                "read": new_message.read
+            }
+            
+            # Add attachment information if present
+            if hasattr(new_message, 'attachment_id') and new_message.attachment_id:
+                attachment_record = MessageAttachment.query.get(new_message.attachment_id)
+                if attachment_record:
+                    message_data["attachment"] = {
+                        "id": attachment_record.id,
+                        "url": attachment_record.url,
+                        "name": attachment_record.filename,
+                        "type": attachment_record.mime_type,
+                        "size": attachment_record.size
+                    }
+            
+            # Find receiver's socket ID
+            receiver_sid = online_users.get(receiver.id)
+            
+            # If receiver is online, send the message directly
+            if receiver_sid:
+                emit('receive_message', message_data, room=receiver_sid)
+                
+            # Also send the message back to the sender to confirm
+            emit('receive_message', message_data)
+            
+            # Emit message notification through regular channels too
+            if hasattr(socketio, 'emit_notification'):
+                socketio.emit_notification(message_data)
+            
+        except Exception as e:
+            db.session.rollback()
+            emit('error', {'error': str(e)})
+
+    @socketio.on('message_status_update')
+    def handle_message_status_update(data):
+        """
+        Expected data:
+        {
+            "message_id": "<int>",
+            "status": "<str>" (e.g., "read", "delivered")
+        }
+        """
+        user_id = session.get('user_id')
+        if not user_id:
+            return
+            
+        message_id = data.get('message_id')
+        status = data.get('status')
+        
+        if not message_id or not status:
+            return
+            
+        try:
+            message = ChatMessage.query.get(message_id)
+            
+            if not message:
+                return
+                
+            # Only allow the receiver to mark messages as read
+            if message.receiver_id != user_id:
+                return
+                
+            if status == 'read':
+                message.read = True
+                db.session.commit()
+                
+                # Notify the sender if they're online
+                if message.sender_id in online_users:
+                    emit('message_status_update', {
+                        'message_id': message_id,
+                        'status': 'read'
+                    }, room=online_users[message.sender_id])
+        except Exception as e:
+            current_app.logger.error(f"Error updating message status: {e}")
 
     @socketio.on_error()
     def handle_error(e):
@@ -146,7 +296,7 @@ def register_socket_events(socketio):
                         current_app.logger.info(f"Agent {user.username} joined {stream_room} room")
     
     @socketio.on('disconnect', namespace='/notifications')
-    def handle_notification_disconnect(*args):  # Fixed: Accept variable arguments
+    def handle_notification_disconnect():
         """Client disconnected from notifications namespace"""
         current_app.logger.info(f"Client disconnected from notifications namespace: {request.sid}")
         

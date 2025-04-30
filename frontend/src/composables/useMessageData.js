@@ -148,7 +148,7 @@ export function useMessageData(user) {
   
   // Initialize socket connection
   const initSocket = () => {
-    socket.value = io('54.86.99.85:5000/messages', { 
+    socket.value = io('http://54.86.99.85:5000messages', { 
         path: '/ws',
         transports: ['websocket']
       })

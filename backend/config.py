@@ -74,12 +74,11 @@ def create_app(config_class=Config):
     from routes.keyword_object_routes import keyword_bp
     from routes.messaging_routes import messaging_bp
     from routes.notification_routes import notification_bp
-    from routes.telegram_routes import telegram_bp
+    
 
     for bp in (
         auth_bp, agent_bp, stream_bp, assignment_bp, dashboard_bp,
-        detection_bp, health_bp, keyword_bp, messaging_bp, notification_bp,
-        telegram_bp
+        detection_bp, health_bp, keyword_bp, messaging_bp, notification_bp
     ):
         app.register_blueprint(bp)
 

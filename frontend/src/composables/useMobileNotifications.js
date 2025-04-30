@@ -57,7 +57,7 @@ export function useMobileNotifications() {
   
   // Connect to Socket.IO for real-time notifications
   const connectSocket = () => {
-  socket.value = io('54.86.99.85:5000', {
+  socket.value = io('http://54.86.99.85:5000', {
     path: '/ws',
     transports: ['websocket', 'polling'],
     secure: true

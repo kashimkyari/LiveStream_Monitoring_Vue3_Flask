@@ -28,7 +28,7 @@ export function useRealTimeDetection() {
    * @param {Object} options.preferences - Notification preferences
    */
   const initialize = ({ 
-    serverUrl = '54.86.99.85:5000', 
+    serverUrl = 'http://54.86.99.85:5000', 
     autoConnect = true,
     preferences = {}
   } = {}) => {

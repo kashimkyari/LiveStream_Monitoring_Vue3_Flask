@@ -5,7 +5,7 @@ import logging
 import random
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.utils import formataddr
+from email.utils import formataddr, formatdate
 from datetime import datetime
 from flask import current_app
 from dotenv import load_dotenv
@@ -17,6 +17,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Email service class remains unchanged
 class EmailService:
     """Enhanced email service with retry capability and better error handling"""
     
@@ -138,6 +139,8 @@ class EmailService:
         message['Subject'] = subject
         message['From'] = formatted_sender
         message['To'] = to_email
+        message['Date'] = formatdate(localtime=True)
+        message['Message-ID'] = f"<{int(time.time())}@{sender_email.split('@')[1]}>"
         
         # Add Reply-To header if different from sender
         if from_email and from_email != self.default_sender:
@@ -225,72 +228,95 @@ class EmailService:
         
         return text.strip()
 
-# Email templates with the enhanced email service
+# OPTIMIZED EMAIL TEMPLATES
 
 def send_welcome_email(user_email, username):
     """Send welcome email to newly registered user"""
     email_service = EmailService()
     current_year = datetime.now().year
     subject = "Welcome to JetCam Studio"
+    
     html_content = f"""
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="x-apple-disable-message-reformatting">
+        <meta name="color-scheme" content="light dark">
+        <meta name="supported-color-schemes" content="light dark">
         <title>Welcome to JetCam Studio</title>
-        <style>
-            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }}
-            .container {{ max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); }}
-            .header {{ background-color: #1a73e8; color: white; padding: 20px; text-align: center; }}
-            .logo-container {{ padding: 20px; text-align: center; background-color: #ffffff; }}
-            .logo {{ max-width: 250px; height: auto; }}
-            .content {{ padding: 30px; background-color: #ffffff; }}
-            .button {{ display: inline-block; padding: 12px 24px; background-color: #1a73e8; 
-                     color: white; text-decoration: none; border-radius: 4px; margin: 25px 0; 
-                     font-weight: bold; text-align: center; transition: background-color 0.3s; }}
-            .button:hover {{ background-color: #0d62c7; }}
-            .feature-box {{ background-color: #f1f3f4; padding: 15px; border-radius: 4px; margin: 20px 0; }}
-            .feature-title {{ color: #1a73e8; font-weight: bold; margin-bottom: 10px; }}
-            .footer {{ font-size: 12px; text-align: center; margin-top: 30px; padding: 20px; color: #777; background-color: #f5f5f5; }}
-            .divider {{ height: 1px; background-color: #eeeeee; margin: 20px 0; }}
-        </style>
     </head>
-    <body>
-        <div class="container">
-            <div class="logo-container">
-                <img src="https://jetcamstudio.com/wp-content/uploads/2023/04/Untitled-9-1-2.png" alt="JetCam Studio Logo" class="logo">
+    <body style="margin:0;padding:0;word-spacing:normal;background-color:#f7f7f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;line-height:1.5;color:#333333;">
+        <!--[if mso]>
+        <table role="presentation" width="100%" style="background-color:#f7f7f7;">
+        <tr><td align="center" style="font-family: Arial, sans-serif;">
+        <![endif]-->
+        
+        <div style="max-width:600px;margin:0 auto;background-color:#ffffff;border-radius:6px;overflow:hidden;">
+            <!-- Header -->
+            <div style="background-color:#1a73e8;padding:20px;text-align:center;">
+                <img src="https://jetcamstudio.com/wp-content/uploads/2023/04/Untitled-9-1-2.png" alt="JetCam Studio Logo" style="max-width:180px;height:auto;border:0;">
             </div>
-            <div class="header">
-                <h1>Welcome to JetCam Studio!</h1>
+            
+            <!-- Content -->
+            <div style="padding:25px;">
+                <h1 style="margin-top:0;margin-bottom:16px;font-size:24px;line-height:32px;font-weight:bold;letter-spacing:-0.02em;">Welcome, {username}!</h1>
+                <p style="margin:0 0 16px;">Your JetCam Studio account is ready to use. Access your dashboard now to start monitoring your streams.</p>
+                
+                <!-- CTA Button -->
+                <div style="text-align:center;margin:30px 0;">
+                    <a href="http://live-stream-monitoring-vue3-flask.vercel.app/login" style="display:inline-block;padding:12px 24px;background-color:#1a73e8;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:500;text-align:center;min-width:180px;font-size:16px;">Go to Dashboard</a>
+                </div>
+                
+                <!-- Features -->
+                <div style="margin:25px 0;">
+                    <div style="display:block;margin-bottom:15px;">
+                        <table role="presentation" style="border-collapse:collapse;border:0;width:100%;">
+                            <tr>
+                                <td style="width:30px;vertical-align:top;padding-right:10px;color:#1a73e8;font-size:18px;">🔍</td>
+                                <td style="vertical-align:top;">
+                                    <strong>Stream Monitoring:</strong> Detect policy violations to prevent channel bans
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div style="display:block;margin-bottom:15px;">
+                        <table role="presentation" style="border-collapse:collapse;border:0;width:100%;">
+                            <tr>
+                                <td style="width:30px;vertical-align:top;padding-right:10px;color:#1a73e8;font-size:18px;">💬</td>
+                                <td style="vertical-align:top;">
+                                    <strong>Chat Analysis:</strong> Filter inappropriate content in real-time
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div style="display:block;">
+                        <table role="presentation" style="border-collapse:collapse;border:0;width:100%;">
+                            <tr>
+                                <td style="width:30px;vertical-align:top;padding-right:10px;color:#1a73e8;font-size:18px;">🚨</td>
+                                <td style="vertical-align:top;">
+                                    <strong>Instant Alerts:</strong> Get notifications when issues are detected
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <p style="margin:20px 0 0;">Need help? Contact us at <a href="mailto:support@jetcamstudio.com" style="color:#1a73e8;text-decoration:underline;">support@jetcamstudio.com</a></p>
             </div>
-            <div class="content">
-                <h2>Hello {username}!</h2>
-                <p>Thank you for creating an account with us. We're excited to have you onboard!</p>                
-                <div style="text-align: center;">
-                    <a href="http://live-stream-monitoring-vue3-flask.vercel.app/login" class="button">GO TO DASHBOARD</a>
-                </div>
-                <div class="divider"></div>
-                <h3>What Our App Does:</h3>
-                <div class="feature-box">
-                    <div class="feature-title">🔍 Stream Monitoring</div>
-                    <p>We monitor your livestreams for potentially dangerous objects or policy violations, helping keep your channel safe from bans.</p>
-                </div>
-                <div class="feature-box">
-                    <div class="feature-title">💬 Chat Analysis</div>
-                    <p>Our system detects foul language or inappropriate content in chats, allowing you to moderate effectively.</p>
-                </div>
-                <div class="feature-box">
-                    <div class="feature-title">🚨 Real-time Alerts</div>
-                    <p>Get instant notifications when potential issues are detected so you can take immediate action.</p>
-                </div>
-                <p style="margin-top: 25px;">If you have any questions or need assistance, feel free to contact our support team at <a href="mailto:support@jetcamstudio.com">support@jetcamstudio.com</a>.</p>
-            </div>
-            <div class="footer">
-                <p>© {current_year} JetCam Studio. All rights reserved.</p>
-                <p>This is an automated message. Please do not reply to this email.</p>
+            
+            <!-- Footer -->
+            <div style="font-size:13px;color:#777777;text-align:center;padding:20px;background-color:#f7f7f7;">
+                <p style="margin:0 0 8px;">© {current_year} JetCam Studio. All rights reserved.</p>
+                <p style="margin:0;">This is an automated message. Please do not reply.</p>
             </div>
         </div>
+        
+        <!--[if mso]>
+        </td></tr>
+        </table>
+        <![endif]-->
     </body>
     </html>
     """
@@ -300,65 +326,69 @@ def generate_six_digit_token():
     """Generate a secure 6-digit token"""
     return str(random.randint(100000, 999999))
 
-# Updated password reset email to match welcome style with pink accents
-
 def send_password_reset_email(user_email, token):
     """Send password reset email with 6-digit token"""
     email_service = EmailService()
     current_year = datetime.now().year
     subject = "Password Reset Code - JetCam Studio"
+    
     html_content = f"""
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
-        <meta charset=\"utf-8\">
-        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="x-apple-disable-message-reformatting">
+        <meta name="color-scheme" content="light dark">
+        <meta name="supported-color-schemes" content="light dark">
         <title>Password Reset Code</title>
-        <style>
-            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }}
-            .container {{ max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); }}
-            .header {{ background-color: #e91e63; color: white; padding: 20px; text-align: center; }}
-            .logo-container {{ padding: 20px; text-align: center; background-color: #ffffff; }}
-            .logo {{ max-width: 250px; height: auto; }}
-            .content {{ padding: 30px; background-color: #ffffff; }}
-            .button {{ display: inline-block; padding: 12px 24px; background-color: #e91e63;
-                      color: white; text-decoration: none; border-radius: 4px; margin: 25px 0;
-                      font-weight: bold; text-align: center; transition: background-color 0.3s; }}
-            .button:hover {{ background-color: #c2185b; }}
-            .feature-box {{ background-color: #f1f3f4; padding: 15px; border-radius: 4px; margin: 20px 0; }}
-            .footer {{ font-size: 12px; text-align: center; margin-top: 30px; padding: 20px; color: #777; background-color: #f5f5f5; }}
-            .divider {{ height: 1px; background-color: #eeeeee; margin: 20px 0; }}
-        </style>
     </head>
-    <body>
-        <div class=\"container\">            
-            <div class=\"logo-container\">                
-                <img src=\"https://jetcamstudio.com/wp-content/uploads/2023/04/Untitled-9-1-2.png\" alt=\"JetCam Studio Logo\" class=\"logo\">            
-            </div>            
-            <div class=\"header\">                
-                <h1>Password Reset Code</h1>            
-            </div>            
-            <div class=\"content\">                
-                <h2>Hello!</h2>                
-                <p>We received a request to reset your password for your JetCam Studio account. Use the code below to complete your password reset:</p>                
-                <div style=\"text-align: center;\">                    
-                    <a href=\"http://live-stream-monitoring-vue3-flask.vercel.app/reset-password\" class=\"button\">RESET YOUR PASSWORD</a>                
-                </div>                
-                <div class=\"divider\"></div>                
-                <div style=\"font-size: 32px; letter-spacing: 8px; font-weight: bold; background-color: #f1f3f4; padding: 20px; border-radius: 6px; text-align: center; margin: 20px 0;\">                    
-                    {token}                
-                </div>                
-                <p style=\"margin-top: 25px; color: #d93025;\"><strong>⏰ This code will expire in 1 hour for security reasons.</strong></p>                
-                <p>If you didn't request a password reset, please ignore this email or contact our support team at <a href=\"mailto:support@jetcamstudio.com\">support@jetcamstudio.com</a> immediately.</p>            
-            </div>            
-            <div class=\"footer\">                
-                <p>© {current_year} JetCam Studio. All rights reserved.</p>                
-                <p>This is an automated message. Please do not reply to this email.</p>            
-            </div>        
-        </div>    
+    <body style="margin:0;padding:0;word-spacing:normal;background-color:#f7f7f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;line-height:1.5;color:#333333;">
+        <!--[if mso]>
+        <table role="presentation" width="100%" style="background-color:#f7f7f7;">
+        <tr><td align="center" style="font-family: Arial, sans-serif;">
+        <![endif]-->
+        
+        <div style="max-width:600px;margin:0 auto;background-color:#ffffff;border-radius:6px;overflow:hidden;">
+            <!-- Header -->
+            <div style="background-color:#e91e63;padding:20px;text-align:center;">
+                <img src="https://jetcamstudio.com/wp-content/uploads/2023/04/Untitled-9-1-2.png" alt="JetCam Studio Logo" style="max-width:180px;height:auto;border:0;">
+            </div>
+            
+            <!-- Content -->
+            <div style="padding:25px;">
+                <h1 style="margin-top:0;margin-bottom:16px;font-size:24px;line-height:32px;font-weight:bold;letter-spacing:-0.02em;">Password Reset</h1>
+                <p style="margin:0 0 16px;">We received a request to reset your password for your JetCam Studio account. Use this code to complete your password reset:</p>
+                
+                <!-- Code Box -->
+                <div style="font-size:28px;letter-spacing:5px;font-weight:bold;background-color:#f1f3f4;padding:15px;border-radius:6px;text-align:center;margin:20px 0;font-family:'Courier New',monospace;">
+                    {token}
+                </div>
+                
+                <p style="margin:20px 0;"><strong>⏰ This code will expire in 1 hour.</strong></p>
+                
+                <!-- CTA Button -->
+                <div style="text-align:center;margin:30px 0;">
+                    <a href="http://live-stream-monitoring-vue3-flask.vercel.app/reset-password" style="display:inline-block;padding:12px 24px;background-color:#e91e63;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:500;text-align:center;min-width:180px;font-size:16px;">Reset Password</a>
+                </div>
+                
+                <p style="margin:20px 0 0;">If you didn't request this reset, please ignore this email or contact <a href="mailto:support@jetcamstudio.com" style="color:#e91e63;text-decoration:underline;">support@jetcamstudio.com</a>.</p>
+            </div>
+            
+            <!-- Footer -->
+            <div style="font-size:13px;color:#777777;text-align:center;padding:20px;background-color:#f7f7f7;">
+                <p style="margin:0 0 8px;">© {current_year} JetCam Studio. All rights reserved.</p>
+                <p style="margin:0;">This is an automated message. Please do not reply.</p>
+            </div>
+        </div>
+        
+        <!--[if mso]>
+        </td></tr>
+        </table>
+        <![endif]-->
     </body>
     </html>
-    """" + "
+    """
     return email_service.send_email(user_email, subject, html_content)
 
 # Create an instance for direct import
