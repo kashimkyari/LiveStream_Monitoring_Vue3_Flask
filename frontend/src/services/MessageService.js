@@ -30,7 +30,7 @@ class MessageService {
    * @private
    */
   _setupSocketConnection() {
-    this._socket = io('http://localhost:5000/messages', { 
+    this._socket = io('http://54.86.99.85:5000/messages', { 
       path: '/ws',
       transports: ['websocket', 'polling'] // Optional: match server config
     });

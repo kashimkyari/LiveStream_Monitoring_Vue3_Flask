@@ -36,10 +36,10 @@ export function useMobileDashboardData() {
     refreshing.value = true
     try {
       const [userRes, statsRes, streamsRes, agentsRes] = await Promise.all([
-        axios.get('/api/user', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }),
-        axios.get('/api/dashboard/stats', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }),
-        axios.get('/api/streams', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }),
-        axios.get('/api/agents', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+        axios.get('/api/session'),
+        axios.get('/api/dashboard'),
+        axios.get('/api/streams'),
+        axios.get('/api/agents')
       ])
       user.value = userRes.data || {}
       dashboardStats.value = statsRes.data || {}
@@ -91,7 +91,7 @@ export function useMobileDashboardData() {
 
   const registerUserActivity = () => {
     // Emit user activity via Socket.IO
-    const socket = io('http://localhost:5000', {
+    const socket = io('ws://54.86.99.85:5000', {
           path: '/ws',
           transports: ['websocket', 'polling'],
           reconnection: true,

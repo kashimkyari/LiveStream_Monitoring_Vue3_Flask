@@ -13,11 +13,10 @@ class Config:
     """Base configuration for all environments."""
     # ─── Secret & Security ───────────────────────────────────────────────
     SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'please-set-a-secure-key')
-    SESSION_COOKIE_SECURE = True             # Only over HTTPS
-    REMEMBER_COOKIE_SECURE = True            # Only over HTTPS
+    SESSION_COOKIE_SECURE = False            # Allow cookies over HTTP
+    REMEMBER_COOKIE_SECURE = False           # Allow cookies over HTTP
 
     # ─── Database ────────────────────────────────────────────────────────
-    # Prefer DATABASE_URL; fallback to SQLite for local development
     SQLALCHEMY_DATABASE_URI = (
         os.getenv('DATABASE_URL') or
         f"sqlite:///{os.path.join(os.getcwd(), 'instance', 'app.db')}"
@@ -25,7 +24,6 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False   # Disable event system for performance
 
     # ─── CORS ────────────────────────────────────────────────────────────
-    # In production, set CORS_ORIGINS to a comma-separated list of allowed URLs
     CORS_SUPPORTS_CREDENTIALS = True
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
 
@@ -60,7 +58,6 @@ def create_app(config_class=Config):
         raise
 
     # ─── Initialize Socket.IO ───────────────────────────────────────────
-    # Uses threading by default; you may switch to eventlet/gevent for scale
     socketio = init_socketio(app)
 
     # ─── Register Blueprints ─────────────────────────────────────────────

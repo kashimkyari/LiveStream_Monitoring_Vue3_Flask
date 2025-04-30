@@ -218,3 +218,9 @@
     display: flex;
   }
 }
+
+
+/* src/assets/styles/common.css */
+body {
+  margin: 0;
+}

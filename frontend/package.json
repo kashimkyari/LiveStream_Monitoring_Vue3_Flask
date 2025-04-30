@@ -27,6 +27,8 @@
     "linkifyjs": "^4.2.0",
     "pinia": "^2.1.7",
     "socket.io-client": "4.7",
+    "stylelint": "^16.19.1",
+    "stylelint-config-standard": "^38.0.0",
     "sweetalert2": "^11.17.2",
     "v-wave": "^3.0.2",
     "video.js": "^8.22.0",

@@ -371,7 +371,7 @@ import { io } from 'socket.io-client';
 import anime from 'animejs/lib/anime.es.js';
 
 // Configure axios to use the backend URL
-axios.defaults.baseURL = 'http://localhost:5000';
+axios.defaults.baseURL = 'http://54.86.99.85:5000';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import { 
   faSearch, faArrowLeft, faPhone, faVideo, faInfoCircle, 
@@ -489,14 +489,14 @@ export default {
     
     // Methods
     const initSocket = () => {
-      // Connect to the backend at http://localhost:5000
-      socket.value = io('http://localhost:5000/messages', { 
+      // Connect to the backend at http://54.86.99.85:5000
+      socket.value = io('http://54.86.99.85:5000/messages', { 
         path: '/ws',
         transports: ['websocket']
       });
       
       socket.value.on('connect', () => {
-        console.log('Connected to WebSocket server at http://localhost:5000');
+        console.log('Connected to WebSocket server at http://54.86.99.85:5000');
         isConnected.value = true;
         
         // Send pending messages if any

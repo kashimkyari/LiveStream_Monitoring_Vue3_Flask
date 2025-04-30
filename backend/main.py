@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """
-main.py - Flask application entry point with SSL support and Socket.IO integration
+main.py - Flask application entry point
 """
-# Import gevent and apply monkey patching at the very top
-from gevent import monkey
-monkey.patch_all()
-
 import logging
 import os
-import ssl
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from werkzeug.security import generate_password_hash
@@ -47,7 +42,6 @@ app.config['CORS_ALLOWED_ORIGINS'] = allowed_origins
 logging.info(f"Configured allowed origins: {allowed_origins}")
 
 # === CORS Configuration for Flask ===
-# Use a wider set of allowed headers
 CORS(app, 
      origins=allowed_origins,
      supports_credentials=True,
@@ -55,22 +49,6 @@ CORS(app,
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      expose_headers=["Content-Length", "X-JSON"],
      max_age=600)  # 10 minutes cache for preflight requests
-
-# Get the socketio instance from utils - MOVED AFTER CORS SETUP
-from utils.notifications import get_socketio
-socketio = get_socketio()
-
-if not socketio:
-    logging.error("Socket.IO not properly initialized")
-    raise RuntimeError("Socket.IO initialization failed")
-else:
-    logging.info(f"Socket.IO initialized with async_mode: {socketio.async_mode}")
-
-# === CORS Configuration for Socket.IO ===
-if '*' in allowed_origins:
-    socketio.cors_allowed_origins = "*"  # Accept all origins
-else:
-    socketio.cors_allowed_origins = allowed_origins
 
 # Register a before_request handler for CORS
 @app.before_request
@@ -151,19 +129,11 @@ with app.app_context():
         logging.error(f"DB init failed: {str(e)}")
         raise
 
-# === Import and register socket events BEFORE background services ===
-from socket_events import register_socket_events
-register_socket_events(socketio)
-
 # === Background Services ===
 with app.app_context():
     try:
         from utils.notifications import emit_notification
-        from messaging import register_messaging_events
         from monitoring import start_notification_monitor
-        
-        # Register messaging events
-        register_messaging_events()
         
         # Start background services
         start_notification_monitor()
@@ -175,30 +145,11 @@ with app.app_context():
     except Exception as e:
         logging.error(f"Background services error: {str(e)}")
 
-# === SSL Context Creation ===
-def create_ssl_context():
-    cert_dir = os.path.expanduser(os.getenv('CERT_DIR', './'))
-    ssl_cert = os.path.join(cert_dir, 'fullchain.pem')
-    ssl_key = os.path.join(cert_dir, 'privkey.pem')
-    
-    if not all([os.path.exists(ssl_cert), os.path.exists(ssl_key)]):
-        logging.warning(f"SSL certificates not found in {cert_dir}, running without SSL")
-        return None
-    
-    context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_SERVER)
-    context.load_cert_chain(ssl_cert, ssl_key)
-    return context
-
 # === Main Execution ===
 if __name__ == "__main__":
-    ssl_ctx = create_ssl_context() if os.getenv('ENABLE_SSL', 'false').lower() == 'true' else None
-    
-    # Run with socketio
-    socketio.run(
-        app,
+    app.run(
         host='0.0.0.0',
         port=int(os.getenv('PORT', 5000)),
-        debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true',
-        use_reloader=False,
-        ssl_context=ssl_ctx
+        debug=os.getenv('FLASK_DEBUG', 'true').lower() == 'true',
+        use_reloader=True
     )

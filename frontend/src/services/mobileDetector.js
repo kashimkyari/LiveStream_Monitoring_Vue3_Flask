@@ -1,4 +1,5 @@
 import { ref, onMounted, onUnmounted } from 'vue';
+import { getCurrentInstance } from 'vue';
 
 // Singleton pattern to ensure we only have one instance of mobile detection
 let isMobile = ref(false);
