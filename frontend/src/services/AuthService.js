@@ -12,6 +12,18 @@
 import axios from 'axios';
 import { useToast } from 'vue-toastification';
 
+// Define the API base URL - using HTTP instead of HTTPS for the remote server
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'http://54.86.99.85:5000/api' // Production API URL (using HTTP)
+  : '/api'; // Local development API URL (relative path)
+
+// Create axios instance with the base URL
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000, // 10 seconds timeout
+  withCredentials: true // Important for cookies/sessions across domains
+});
+
 class AuthService {
   constructor() {
     this.toast = useToast();
@@ -25,7 +37,7 @@ class AuthService {
    */
   async login(username, password) {
     try {
-      const response = await axios.post('/api/login', {
+      const response = await apiClient.post('/login', {
         username,
         password
       });
@@ -66,7 +78,7 @@ class AuthService {
           errorMessage = error.response.data.message;
         }
       } else if (error.request) {
-        errorMessage = 'Network error. Please check your connection.';
+        errorMessage = 'Network error. Please check your connection and server availability.';
       }
       
       return {
@@ -82,7 +94,7 @@ class AuthService {
    */
   async logout() {
     try {
-      await axios.post('/api/logout');
+      await apiClient.post('/logout');
       
       // Clear local storage
       localStorage.removeItem('userId');
@@ -105,7 +117,7 @@ class AuthService {
    */
   async register(username, email, password) {
     try {
-      const response = await axios.post('/api/register', {
+      const response = await apiClient.post('/register', {
         username,
         email,
         password
@@ -158,7 +170,7 @@ class AuthService {
    */
   async forgotPassword(email) {
     try {
-      const response = await axios.post('/api/forgot-password', {
+      const response = await apiClient.post('/forgot-password', {
         email
       });
       
@@ -199,7 +211,7 @@ class AuthService {
    */
   async resetPassword(token, password) {
     try {
-      const response = await axios.post('/api/reset-password', {
+      const response = await apiClient.post('/reset-password', {
         token,
         password
       });
@@ -244,7 +256,7 @@ class AuthService {
    */
   async verifyResetToken(token) {
     try {
-      const response = await axios.post('/api/verify-reset-token', {
+      const response = await apiClient.post('/verify-reset-token', {
         token
       });
       
@@ -285,7 +297,7 @@ class AuthService {
    */
   async changePassword(currentPassword, newPassword) {
     try {
-      const response = await axios.post('/api/change-password', {
+      const response = await apiClient.post('/change-password', {
         current_password: currentPassword,
         new_password: newPassword
       });
@@ -330,7 +342,7 @@ class AuthService {
    */
   async checkUsername(username) {
     try {
-      const response = await axios.post('/api/check-username', {
+      const response = await apiClient.post('/check-username', {
         username
       });
       
@@ -355,7 +367,7 @@ class AuthService {
    */
   async checkEmail(email) {
     try {
-      const response = await axios.post('/api/check-email', {
+      const response = await apiClient.post('/check-email', {
         email
       });
       
@@ -379,7 +391,7 @@ class AuthService {
    */
   async checkAuth() {
     try {
-      const response = await axios.get('/api/check-session');
+      const response = await apiClient.get('/check-session');
       
       if (response.data && response.data.authenticated) {
         // Update localStorage with latest user info
@@ -423,7 +435,7 @@ class AuthService {
    */
   async updateProfile(profileData) {
     try {
-      const response = await axios.post('/api/update-profile', profileData);
+      const response = await apiClient.post('/update-profile', profileData);
       
       if (response.data && response.data.success) {
         // Update localStorage with updated user info

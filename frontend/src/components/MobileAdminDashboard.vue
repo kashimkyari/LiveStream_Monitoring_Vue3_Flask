@@ -192,7 +192,7 @@ export default {
 
     const displayStats = computed(() => [
       { label: 'Active Streams', value: dashboardStats.value.ongoing_streams || 0, icon: 'video' },
-      { label: 'Active Agents', value: agents.value.filter(a => a.status === 'active').length || 0, icon: 'users' },
+      { label: 'Active Agents', value: agents.value || 0, icon: 'users' },
       { label: 'Detections', value: notifications.value.length || 0, icon: 'eye' }
     ])
 
