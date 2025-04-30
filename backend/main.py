@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-main.py - Flask application entry point
+main.py - Flask application entry point with Socket.IO integration
 """
+# Import gevent and apply monkey patching at the very top
+from gevent import monkey
+monkey.patch_all()
+
 import logging
 import os
 from dotenv import load_dotenv
@@ -49,6 +53,24 @@ CORS(app,
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      expose_headers=["Content-Length", "X-JSON"],
      max_age=600)  # 10 minutes cache for preflight requests
+
+# Get the socketio instance from utils
+from utils.notifications import get_socketio
+socketio = get_socketio()
+
+if not socketio:
+    logging.error("Socket.IO not properly initialized")
+    raise RuntimeError("Socket.IO initialization failed")
+else:
+    # Explicitly set async_mode to 'gevent' for consistency
+    socketio.async_mode = 'gevent'
+    logging.info(f"Socket.IO initialized with async_mode: {socketio.async_mode}")
+
+# === CORS Configuration for Socket.IO ===
+if '*' in allowed_origins:
+    socketio.cors_allowed_origins = "*"  # Accept all origins
+else:
+    socketio.cors_allowed_origins = allowed_origins
 
 # Register a before_request handler for CORS
 @app.before_request
@@ -129,11 +151,19 @@ with app.app_context():
         logging.error(f"DB init failed: {str(e)}")
         raise
 
+# === Import and register socket events BEFORE background services ===
+from socket_events import register_socket_events
+register_socket_events(socketio)
+
 # === Background Services ===
 with app.app_context():
     try:
         from utils.notifications import emit_notification
+        from messaging import register_messaging_events
         from monitoring import start_notification_monitor
+        
+        # Register messaging events
+        register_messaging_events()
         
         # Start background services
         start_notification_monitor()
@@ -147,9 +177,11 @@ with app.app_context():
 
 # === Main Execution ===
 if __name__ == "__main__":
-    app.run(
+    # Run with socketio for development using Gevent
+    socketio.run(
+        app,
         host='0.0.0.0',
         port=int(os.getenv('PORT', 5000)),
-        debug=os.getenv('FLASK_DEBUG', 'true').lower() == 'true',
-        use_reloader=True
+        debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true',
+        use_reloader=False
     )

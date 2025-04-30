@@ -1,0 +1,47 @@
+[Unit]
+Description=LiveStream Monitoring Backend Service (Gevent Optimized)
+After=network.target
+Wants=network-online.target                  # Ensure network is fully up
+Documentation=https://live-stream-monitoring-vue3-flask.vercel.app/   # Link to service docs
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+
+WorkingDirectory=/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend
+
+# Load environment overrides (create /etc/sysconfig/livemon-backend)
+EnvironmentFile=-/etc/sysconfig/livemon-backend
+Environment=PYTHONUNBUFFERED=1               # Unbuffered logs to stdout
+Environment=FLASK_DEBUG=false
+Environment=ENABLE_SSL=false
+
+# Gunicorn startup (no shell wrapper for cleaner exec)
+ExecStart=/opt/pytorch/bin/gunicorn \
+  --worker-class gevent \
+  --workers 2 \
+  --timeout 180 \
+  --bind 0.0.0.0:5000 \
+  --error-logfile /home/ec2-user/gunicorn-error.log \
+  --access-logfile /home/ec2-user/gunicorn-access.log \
+  --log-level info \
+  main:app
+
+# Restart on failure, with back-off
+Restart=on-failure
+RestartSec=5s
+
+# Resource limits & security hardening
+LimitNOFILE=65536                            # Raise file descriptor limit
+NoNewPrivileges=true                         # Prevent privilege escalation
+PrivateTmp=true                              # Isolate /tmp directory
+ProtectSystem=full                           # Mount /usr and /boot read-only
+ProtectHome=true                             # Disable access to home dirs
+
+StandardOutput=syslog                         # Send stdout to syslog
+StandardError=syslog                         # Send stderr to syslog
+SyslogIdentifier=livemon-backend
+
+[Install]
+WantedBy=multi-user.target
