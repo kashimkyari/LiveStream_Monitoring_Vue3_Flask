@@ -27,24 +27,18 @@ from models import User
 # Initialize Flask app
 app = create_app()
 
-# Parse ALLOWED_ORIGINS from environment
-allowed_origins = os.getenv('ALLOWED_ORIGINS', 'https://live-stream-monitoring-vue3-flask.vercel.app,http://localhost:8080,https://jetcamstudios-git-main-kashimkyaris-projects.vercel.app,https://jetcamstudios-kashimkyaris-projects.vercel.app').split(',')
-vercel_domain = 'https://live-stream-monitoring-vue3-flask.vercel.app'
+# We're using wildcard CORS, so no need to specify allowed origins
+# Store wildcard origin in app config for reference
+app.config['CORS_ALLOWED_ORIGINS'] = '*'
 
-# Add the production domain if not already in the list
-if vercel_domain not in allowed_origins and vercel_domain.strip():
-    allowed_origins.append(vercel_domain)
-
-# Store allowed origins in app config for consistent access across blueprints
-app.config['CORS_ALLOWED_ORIGINS'] = allowed_origins
-
-# Log configured allowed origins
-logging.info(f"Configured allowed origins: {allowed_origins}")
+# Log CORS configuration
+logging.info("Configured for wildcard CORS with HTTP support (no HTTPS enforcement)")
 
 # === CORS Configuration for Flask ===
+# Using wildcard origin instead of specific origins to avoid protocol enforcement
 CORS(app, 
-     origins=allowed_origins,
-     supports_credentials=True,
+     origins="*",  # Allow all origins
+     supports_credentials=False,  # Must be False when using wildcard origin
      allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Cache-Control"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      expose_headers=["Content-Length", "X-JSON"],
@@ -57,17 +51,11 @@ def handle_preflight():
     if request.method == 'OPTIONS':
         response = app.make_default_options_response()
         
-        # Get origin from the request headers
-        origin = request.headers.get('Origin')
+        # Allow any origin without forcing HTTPS
+        response.headers['Access-Control-Allow-Origin'] = '*'
         
-        # Check if the origin is allowed
-        if origin in allowed_origins or '*' in allowed_origins:
-            response.headers['Access-Control-Allow-Origin'] = origin
-        else:
-            # Default to the first allowed origin if specific ones are configured
-            response.headers['Access-Control-Allow-Origin'] = allowed_origins[0] if allowed_origins and allowed_origins[0] != '*' else '*'
-        
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        # Since we're using wildcard origin, credentials must be false
+        response.headers['Access-Control-Allow-Credentials'] = 'false'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control'
         response.headers['Access-Control-Max-Age'] = '600'  # Cache preflight response for 10 minutes
@@ -82,13 +70,20 @@ def cors_test():
         # Let the before_request handler handle this
         return app.make_default_options_response()
     
-    return jsonify({
+    # Add CORS headers directly to the response
+    response = jsonify({
         "message": "CORS test successful",
         "your_origin": request.headers.get('Origin', 'No origin header'),
-        "allowed_origins": allowed_origins,
+        "request_protocol": request.headers.get('X-Forwarded-Proto', 'http'),
         "request_headers": dict(request.headers),
-        "cors_enabled": True
+        "cors_enabled": True,
+        "cors_mode": "HTTP only (no HTTPS enforcement)"
     })
+    
+    # Ensure HTTP works by adding headers manually
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    
+    return response
 
 # === Database Initialization ===
 with app.app_context():
