@@ -5,7 +5,7 @@ module.exports = defineConfig({
   devServer: {
     proxy: {
       '/api': {
-        target: 'http://54.86.99.85:5000',
+        target: 'https://54.86.99.85:5000',
         changeOrigin: true
       }
     }

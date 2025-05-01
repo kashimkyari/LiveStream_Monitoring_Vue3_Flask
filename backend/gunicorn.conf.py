@@ -2,24 +2,25 @@ import multiprocessing
 import os
 
 # SSL Configuration
-enable_ssl = os.getenv('ENABLE_SSL', 'false').lower() == 'true'
+enable_ssl = os.getenv('ENABLE_SSL', 'true').lower() == 'true'
 if enable_ssl:
     cert_dir = os.getenv('CERT_DIR', '/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend')
     certfile = os.getenv('SSL_CERT_PATH', os.path.join(cert_dir, 'fullchain.pem'))
     keyfile = os.getenv('SSL_KEY_PATH', os.path.join(cert_dir, 'privkey.pem'))
     
     # SSL Context for Gunicorn
-    ssl_options = {
-        'keyfile': keyfile,
-        'certfile': certfile
-    }
+    keyfile = keyfile
+    certfile = certfile
     
     # Log SSL configuration
     import logging
     logging.info(f"SSL Enabled with cert: {certfile} and key: {keyfile}")
 
 # Binding & Protocol
-bind = "0.0.0.0:5000"
+if enable_ssl:
+    bind = "0.0.0.0:5000 ssl"
+else:
+    bind = "0.0.0.0:5000"
 protocol = "gevent"
 
 # Worker Configuration

@@ -258,7 +258,7 @@ export default {
 
     // Messages
     const initializeSocketConnection = () => {
-      socket = io('http://54.86.99.85:5000/messages', {
+      socket = io('https://54.86.99.85:5000/messages', {
         path: '/ws',
         transports: ['websocket'],
         query: { userId: currentUserId }

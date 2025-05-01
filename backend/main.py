@@ -158,9 +158,26 @@ with app.app_context():
 
 # === Main Execution ===
 if __name__ == "__main__":
+    # SSL Configuration
+    ssl_context = None
+    enable_ssl = os.getenv('ENABLE_SSL', 'false').lower() == 'true'
+    
+    if enable_ssl:
+        cert_dir = os.getenv('CERT_DIR', '/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend')
+        certfile = os.getenv('SSL_CERT_PATH', os.path.join(cert_dir, 'fullchain.pem'))
+        keyfile = os.getenv('SSL_KEY_PATH', os.path.join(cert_dir, 'privkey.pem'))
+        
+        if os.path.exists(certfile) and os.path.exists(keyfile):
+            ssl_context = (certfile, keyfile)
+            logging.info(f"SSL Enabled with cert: {certfile} and key: {keyfile}")
+        else:
+            logging.error(f"SSL certificate files not found at {certfile} and {keyfile}")
+            logging.warning("Starting without SSL")
+    
     app.run(
         host='0.0.0.0',
         port=int(os.getenv('PORT', 5000)),
         debug=os.getenv('FLASK_DEBUG', 'true').lower() == 'true',
-        use_reloader=True
+        use_reloader=True,
+        ssl_context=ssl_context
     )

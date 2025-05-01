@@ -777,7 +777,7 @@ const showToast = (message, type = 'info') => {
 
 const setupSocketConnection = () => {
   // Connect to socket server with namespace
-  socket.value = io('http://54.86.99.85:5000/notifications', {
+  socket.value = io('https://54.86.99.85:5000/notifications', {
           path: '/ws',
           transports: ['websocket', 'polling'],
           reconnection: true,
