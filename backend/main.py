@@ -7,6 +7,7 @@ gevent.monkey.patch_all()
 
 import logging
 import os
+import time
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from werkzeug.security import generate_password_hash
@@ -146,6 +147,12 @@ with app.app_context():
         from utils.notifications import emit_notification
         from monitoring import start_notification_monitor
         
+        # Import the time module for sleep functions
+        import time
+        
+        # Delay background service startup to ensure DB is ready
+        time.sleep(1)
+        
         # Start background services
         start_notification_monitor()
         
@@ -156,9 +163,19 @@ with app.app_context():
     except Exception as e:
         logging.error(f"Background services error: {str(e)}")
 
-# === Main Execution ===
-if __name__ == "__main__":
-    # SSL Configuration
+# === Health Check Endpoint ===
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for load balancers and monitoring"""
+    return jsonify({
+        "status": "healthy",
+        "timestamp": time.time(),
+        "version": os.getenv('APP_VERSION', '1.0.0')
+    })
+
+# === SSL Configuration Helper ===
+def configure_ssl_context():
+    """Configure SSL context for the Flask application"""
     ssl_context = None
     enable_ssl = os.getenv('ENABLE_SSL', 'false').lower() == 'true'
     
@@ -167,17 +184,30 @@ if __name__ == "__main__":
         certfile = os.getenv('SSL_CERT_PATH', os.path.join(cert_dir, 'fullchain.pem'))
         keyfile = os.getenv('SSL_KEY_PATH', os.path.join(cert_dir, 'privkey.pem'))
         
+        # Check if certificate files exist
         if os.path.exists(certfile) and os.path.exists(keyfile):
             ssl_context = (certfile, keyfile)
             logging.info(f"SSL Enabled with cert: {certfile} and key: {keyfile}")
         else:
             logging.error(f"SSL certificate files not found at {certfile} and {keyfile}")
             logging.warning("Starting without SSL")
+            
+    return ssl_context
+
+# === Main Execution ===
+if __name__ == "__main__":
+    # Get SSL context
+    ssl_context = configure_ssl_context()
+    
+    # Log the server startup mode
+    server_mode = "HTTPS" if ssl_context else "HTTP"
+    debug_mode = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
+    logging.info(f"Starting server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
     
     app.run(
         host='0.0.0.0',
         port=int(os.getenv('PORT', 5000)),
-        debug=os.getenv('FLASK_DEBUG', 'true').lower() == 'true',
+        debug=debug_mode,
         use_reloader=True,
         ssl_context=ssl_context
     )

@@ -15,14 +15,23 @@ WorkingDirectory=/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend
 EnvironmentFile=-/etc/sysconfig/livemon-backend
 Environment=PYTHONUNBUFFERED=1               # Unbuffered logs to stdout
 Environment=FLASK_DEBUG=false
-Environment=ENABLE_SSL=false
+Environment=ENABLE_SSL=true                  # Enable SSL by default
+Environment=CERT_DIR=/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/certs
+Environment=SSL_CERT_PATH=/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/certs/fullchain.pem
+Environment=SSL_KEY_PATH=/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/certs/privkey.pem
+
+# Create directory for SSL certificates if it doesn't exist
+ExecStartPre=/bin/mkdir -p /home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/certs
 
 # Gunicorn startup (no shell wrapper for cleaner exec)
 ExecStart=/opt/pytorch/bin/gunicorn \
   --worker-class gevent \
   --workers 2 \
+  --threads 4 \
   --timeout 180 \
   --bind 0.0.0.0:5000 \
+  --certfile=${SSL_CERT_PATH} \
+  --keyfile=${SSL_KEY_PATH} \
   --error-logfile /home/ec2-user/gunicorn-error.log \
   --access-logfile /home/ec2-user/gunicorn-access.log \
   --log-level info \
@@ -31,16 +40,18 @@ ExecStart=/opt/pytorch/bin/gunicorn \
 # Restart on failure, with back-off
 Restart=on-failure
 RestartSec=5s
+StartLimitBurst=3                            # Only try 3 restarts in a row
+StartLimitInterval=60s                       # Within a 60s interval
 
 # Resource limits & security hardening
 LimitNOFILE=65536                            # Raise file descriptor limit
 NoNewPrivileges=true                         # Prevent privilege escalation
 PrivateTmp=true                              # Isolate /tmp directory
 ProtectSystem=full                           # Mount /usr and /boot read-only
-ProtectHome=true                             # Disable access to home dirs
+ProtectHome=read-only                        # Read-only access to home dirs
 
-StandardOutput=syslog                         # Send stdout to syslog
-StandardError=syslog                         # Send stderr to syslog
+StandardOutput=journal                       # Send stdout to journal
+StandardError=journal                        # Send stderr to journal
 SyslogIdentifier=livemon-backend
 
 [Install]
