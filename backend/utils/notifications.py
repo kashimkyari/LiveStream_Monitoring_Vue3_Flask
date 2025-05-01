@@ -1,8 +1,10 @@
 # utils/notifications.py
 from flask_socketio import SocketIO
-from flask import current_app
 import os
 import logging
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 # Initialize Socket.IO with threading mode
 socketio = None
@@ -19,7 +21,7 @@ def init_socketio(app):
         
         # In production, default to HTTP mode for websockets if not specified
         if is_production and scheme == 'https':
-            current_app.logger.warning(
+            logger.warning(
                 "Production environment detected with HTTPS. "
                 "If certificate issues occur, set WEBSOCKET_SCHEME=http"
             )
@@ -35,16 +37,16 @@ def init_socketio(app):
             websocket_transport='polling' if scheme == 'https' else 'websocket'
         )
         
-        current_app.logger.info(f"SocketIO initialized with {scheme} scheme")
+        logger.info(f"SocketIO initialized with {scheme} scheme")
         
         # Register connection handlers for debugging
         @socketio.on('connect', namespace='/notifications')
         def handle_connect():
-            current_app.logger.info("Client connected to notifications namespace")
+            logger.info("Client connected to notifications namespace")
             
         @socketio.on('disconnect', namespace='/notifications')
         def handle_disconnect():
-            current_app.logger.info("Client disconnected from notifications namespace")
+            logger.info("Client disconnected from notifications namespace")
             
     return socketio
 
@@ -57,12 +59,12 @@ def emit_notification(notification_data):
     """Emit a notification to all connected clients"""
     global socketio
     if not socketio:
-        current_app.logger.error("Socket.IO not initialized")
+        logger.error("Socket.IO not initialized")
         return False
         
     try:
         socketio.emit('notification', notification_data, namespace='/notifications')
-        current_app.logger.info(f"Emitted notification: {notification_data.get('event_type', 'unknown')}")
+        logger.info(f"Emitted notification: {notification_data.get('event_type', 'unknown')}")
         
         # Also emit to admin users specifically
         emit_role_notification(notification_data, 'admin')
@@ -86,14 +88,14 @@ def emit_notification(notification_data):
         
         return True
     except Exception as e:
-        current_app.logger.error(f"Error emitting notification: {str(e)}")
+        logger.error(f"Error emitting notification: {str(e)}")
         return False
 
 def emit_notification_update(notification_id, update_type='read'):
     """Emit a notification update (read, deleted, etc.) to all connected clients"""
     global socketio
     if not socketio:
-        current_app.logger.error("Socket.IO not initialized")
+        logger.error("Socket.IO not initialized")
         return False
         
     try:
@@ -101,32 +103,32 @@ def emit_notification_update(notification_id, update_type='read'):
             'id': notification_id,
             'type': update_type
         }, namespace='/notifications')
-        current_app.logger.info(f"Emitted notification update: {update_type} for {notification_id}")
+        logger.info(f"Emitted notification update: {update_type} for {notification_id}")
         return True
     except Exception as e:
-        current_app.logger.error(f"Error emitting notification update: {str(e)}")
+        logger.error(f"Error emitting notification update: {str(e)}")
         return False
 
 def emit_stream_update(stream_data):
     """Emit a stream update to all connected clients"""
     global socketio
     if not socketio:
-        current_app.logger.error("Socket.IO not initialized")
+        logger.error("Socket.IO not initialized")
         return False
         
     try:
         socketio.emit('stream_update', stream_data)
-        current_app.logger.info(f"Emitted stream update for stream ID: {stream_data.get('id')}")
+        logger.info(f"Emitted stream update for stream ID: {stream_data.get('id')}")
         return True
     except Exception as e:
-        current_app.logger.error(f"Error emitting stream update: {str(e)}")
+        logger.error(f"Error emitting stream update: {str(e)}")
         return False
 
 def emit_message_update(message_data):
     """Emit a message notification to specific recipients"""
     global socketio
     if not socketio:
-        current_app.logger.error("Socket.IO not initialized")
+        logger.error("Socket.IO not initialized")
         return False
         
     try:
@@ -134,7 +136,7 @@ def emit_message_update(message_data):
         if receiver_id:
             # Emit to specific room (users subscribe to their own user ID room)
             socketio.emit('new_message', message_data, room=f"user_{receiver_id}")
-            current_app.logger.info(f"Emitted message notification to user: {receiver_id}")
+            logger.info(f"Emitted message notification to user: {receiver_id}")
         
         # Also emit to sender's room for sent messages confirmation
         sender_id = message_data.get('sender_id')
@@ -142,70 +144,70 @@ def emit_message_update(message_data):
             socketio.emit('message_sent', message_data, room=f"user_{sender_id}")
         return True
     except Exception as e:
-        current_app.logger.error(f"Error emitting message notification: {str(e)}")
+        logger.error(f"Error emitting message notification: {str(e)}")
         return False
 
 def emit_assignment_update(assignment_data):
     """Emit an assignment update to affected agents"""
     global socketio
     if not socketio:
-        current_app.logger.error("Socket.IO not initialized")
+        logger.error("Socket.IO not initialized")
         return False
         
     try:
         agent_id = assignment_data.get('agent_id')
         if agent_id:
             socketio.emit('assignment_update', assignment_data, room=f"user_{agent_id}")
-            current_app.logger.info(f"Emitted assignment notification to agent: {agent_id}")
+            logger.info(f"Emitted assignment notification to agent: {agent_id}")
         return True
     except Exception as e:
-        current_app.logger.error(f"Error emitting assignment notification: {str(e)}")
+        logger.error(f"Error emitting assignment notification: {str(e)}")
         return False
 
 def emit_stream_notification(notification_data, stream_id):
     """Emit a notification to users subscribed to a specific stream"""
     global socketio
     if not socketio:
-        current_app.logger.error("Socket.IO not initialized")
+        logger.error("Socket.IO not initialized")
         return False
         
     try:
         stream_room = f"stream_{stream_id}"
         socketio.emit('notification', notification_data, room=stream_room, namespace='/notifications')
-        current_app.logger.info(f"Emitted notification to stream room: {stream_room}")
+        logger.info(f"Emitted notification to stream room: {stream_room}")
         return True
     except Exception as e:
-        current_app.logger.error(f"Error emitting stream notification: {str(e)}")
+        logger.error(f"Error emitting stream notification: {str(e)}")
         return False
 
 def emit_role_notification(notification_data, role):
     """Emit a notification to all users with a specific role"""
     global socketio
     if not socketio:
-        current_app.logger.error("Socket.IO not initialized")
+        logger.error("Socket.IO not initialized")
         return False
         
     try:
         role_room = f"role_{role}"
         socketio.emit('notification', notification_data, room=role_room, namespace='/notifications')
-        current_app.logger.info(f"Emitted notification to role room: {role_room}")
+        logger.info(f"Emitted notification to role room: {role_room}")
         return True
     except Exception as e:
-        current_app.logger.error(f"Error emitting role notification: {str(e)}")
+        logger.error(f"Error emitting role notification: {str(e)}")
         return False
 
 def emit_agent_notification(notification_data, agent_id):
     """Emit a notification to a specific agent"""
     global socketio
     if not socketio:
-        current_app.logger.error("Socket.IO not initialized")
+        logger.error("Socket.IO not initialized")
         return False
         
     try:
         agent_room = f"user_{agent_id}"
         socketio.emit('notification', notification_data, room=agent_room, namespace='/notifications')
-        current_app.logger.info(f"Emitted notification to agent: {agent_id}")
+        logger.info(f"Emitted notification to agent: {agent_id}")
         return True
     except Exception as e:
-        current_app.logger.error(f"Error emitting agent notification: {str(e)}")
+        logger.error(f"Error emitting agent notification: {str(e)}")
         return False

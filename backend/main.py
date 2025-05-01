@@ -176,12 +176,6 @@ def health_check():
 # === SSL Configuration Helper ===
 def configure_ssl_context():
     """Configure SSL context for the Flask application"""
-    # Always return None to disable SSL and use HTTP
-    # This will force HTTP mode regardless of environment settings
-    return None
-    
-    # Original code commented out:
-    '''
     ssl_context = None
     enable_ssl = os.getenv('ENABLE_SSL', 'false').lower() == 'true'
     
@@ -199,15 +193,14 @@ def configure_ssl_context():
             logging.warning("Starting without SSL")
             
     return ssl_context
-    '''
 
 # === Main Execution ===
 if __name__ == "__main__":
-    # Always use HTTP mode
-    ssl_context = None
+    # Get SSL context
+    ssl_context = configure_ssl_context()
     
     # Log the server startup mode
-    server_mode = "HTTP"  # Force HTTP mode
+    server_mode = "HTTPS" if ssl_context else "HTTP"
     debug_mode = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
     logging.info(f"Starting server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
     
@@ -216,5 +209,5 @@ if __name__ == "__main__":
         port=int(os.getenv('PORT', 5000)),
         debug=debug_mode,
         use_reloader=True,
-        ssl_context=None  # Always use HTTP
+        ssl_context=ssl_context
     )

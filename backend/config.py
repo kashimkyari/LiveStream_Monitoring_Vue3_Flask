@@ -28,10 +28,6 @@ class Config:
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
 
 def create_app(config_class=Config):
-    """
-    Application factory function.
-    Usage: app = create_app()
-    """
     # Create app with instance folder for config & SQLite file
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class)
@@ -47,7 +43,7 @@ def create_app(config_class=Config):
         app,
         supports_credentials=app.config['CORS_SUPPORTS_CREDENTIALS'],
         origins=[u.strip() for u in app.config['CORS_ORIGINS'].split(',')]
-    )  # ⚠️ In prod, replace '*' with explicit domain list
+    )
 
     # ─── Initialize Extensions ───────────────────────────────────────────
     try:
@@ -58,7 +54,8 @@ def create_app(config_class=Config):
         raise
 
     # ─── Initialize Socket.IO ───────────────────────────────────────────
-    socketio = init_socketio(app)
+    with app.app_context():  # Add app context here
+        socketio = init_socketio(app)
 
     # ─── Register Blueprints ─────────────────────────────────────────────
     from routes.auth_routes import auth_bp
@@ -71,7 +68,6 @@ def create_app(config_class=Config):
     from routes.keyword_object_routes import keyword_bp
     from routes.messaging_routes import messaging_bp
     from routes.notification_routes import notification_bp
-    
 
     for bp in (
         auth_bp, agent_bp, stream_bp, assignment_bp, dashboard_bp,

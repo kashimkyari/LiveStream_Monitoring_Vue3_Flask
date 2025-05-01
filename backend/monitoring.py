@@ -37,6 +37,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+_app = None
+
 # =============== ENVIRONMENT VARIABLE CONFIGURATION ===============
 WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL_SIZE", "base")
 AUDIO_SAMPLE_DURATION = int(os.environ.get("AUDIO_SAMPLE_DURATION", "10"))
