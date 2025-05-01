@@ -144,7 +144,7 @@ with app.app_context():
         logging.error(f"Background services error: {str(e)}")
 
 # === Health Check Endpoint ===
-@app.route('/health', methods=['GET'])
+@app.route('/check-health', methods=['GET'])
 def health_check():
     """Health check endpoint for load balancers and monitoring"""
     return jsonify({
