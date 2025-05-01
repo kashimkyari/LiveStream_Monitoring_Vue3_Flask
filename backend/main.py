@@ -32,7 +32,7 @@ from models import User
 app = create_app()
 
 # Parse allowed origins from environment but allow all with specific reflection
-allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://live-stream-monitoring-vue3-flask.vercel.app,http://localhost:8080,http://jetcamstudios-git-main-kashimkyaris-projects.vercel.app,http://jetcamstudios-kashimkyaris-projects.vercel.app').split(',')
+allowed_origins = os.getenv('ALLOWED_ORIGINS', 'https://live-stream-monitoring-vue3-flask.vercel.app,http://localhost:8080,https://jetcamstudios-git-main-kashimkyaris-projects.vercel.app,http://jetcamstudios-kashimkyaris-projects.vercel.app').split(',')
 
 # For debugging - store allowed origins, though we'll reflect any origin back
 app.config['CORS_ALLOWED_ORIGINS'] = allowed_origins

@@ -12,16 +12,12 @@ Group=ec2-user
 WorkingDirectory=/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend
 
 # Load environment overrides (create /etc/sysconfig/livemon-backend)
-EnvironmentFile=-/etc/sysconfig/livemon-backend
 Environment=PYTHONUNBUFFERED=1               # Unbuffered logs to stdout
-Environment=FLASK_DEBUG=false
+Environment=FLASK_DEBUG=true
 Environment=ENABLE_SSL=true                  # Enable SSL by default
-Environment=CERT_DIR=/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/certs
-Environment=SSL_CERT_PATH=/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/certs/fullchain.pem
-Environment=SSL_KEY_PATH=/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/certs/privkey.pem
-
-# Create directory for SSL certificates if it doesn't exist
-ExecStartPre=/bin/mkdir -p /home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/certs
+Environment=CERT_DIR=/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend
+Environment=SSL_CERT_PATH=/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/fullchain.pem
+Environment=SSL_KEY_PATH=/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/privkey.pem
 
 # Gunicorn startup (no shell wrapper for cleaner exec)
 ExecStart=/opt/pytorch/bin/gunicorn \
@@ -32,8 +28,6 @@ ExecStart=/opt/pytorch/bin/gunicorn \
   --bind 0.0.0.0:5000 \
   --certfile=${SSL_CERT_PATH} \
   --keyfile=${SSL_KEY_PATH} \
-  --error-logfile /home/ec2-user/gunicorn-error.log \
-  --access-logfile /home/ec2-user/gunicorn-access.log \
   --log-level info \
   main:app
 
