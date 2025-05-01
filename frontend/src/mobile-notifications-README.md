@@ -1,4 +1,3 @@
-
 # Mobile Notifications System
 
 This document describes the mobile-optimized notification system implemented for the moderation platform. The system provides enhanced real-time notifications with grouping, filtering, and preferences, all designed for optimal mobile experience.
