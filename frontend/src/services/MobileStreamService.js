@@ -9,41 +9,7 @@ import { ref } from 'vue';
  * to reduce data usage and improve performance on mobile devices
  */
 class MobileStreamService {
-  // Cache storage
-  static _cache = {
-    streams: ref([]),
-    agents: ref([]),
-    lastFetched: {
-      streams: null,
-      agents: null,
-    },
-    // Cache expiration in milliseconds
-    expirationTime: 5 * 60 * 1000, // 5 minutes
-    queryCache: new Map(),
-  };
-
-  /**
-   * Clear all cached data
-   */
-  static clearCache() {
-    this._cache.streams.value = [];
-    this._cache.agents.value = [];
-    this._cache.lastFetched.streams = null;
-    this._cache.lastFetched.agents = null;
-    this._cache.queryCache.clear();
-  }
-
-  /**
-   * Check if cache for a specific type is still valid
-   * @param {string} type - Cache type to check
-   * @returns {boolean} - Whether cache is still valid
-   */
-  static isCacheValid(type) {
-    const lastFetched = this._cache.lastFetched[type];
-    if (!lastFetched) return false;
-    return Date.now() - lastFetched < this._cache.expirationTime;
-  }
-
+  
   /**
    * Get details for a specific stream
    * @param {number} streamId - The ID of the stream to fetch
@@ -336,6 +302,17 @@ class MobileStreamService {
       });
   }
 }
+
+MobileStreamService._cache = {
+  streams: ref([]),
+  agents: ref([]),
+  lastFetched: {
+    streams: null,
+    agents: null,
+  },
+  expirationTime: 5 * 60 * 1000,
+  queryCache: new Map(),
+};
 
 // Add reactive properties for convenience
 MobileStreamService.streams = MobileStreamService._cache.streams;

@@ -9,6 +9,7 @@
  * - Session management
  * - Improved mobile device support
  */
+/* global process */
 import axios from 'axios';
 import { useToast } from 'vue-toastification';
 
