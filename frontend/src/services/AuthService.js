@@ -13,9 +13,9 @@
 import axios from 'axios';
 import { useToast } from 'vue-toastification';
 
-// Define the API base URL - using HTTP instead of HTTPS for the remote server
+// Define the API base URL - switched to HTTP for better compatibility
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://54.86.99.85:5000/api' // Production API URL (using HTTP)
+  ? 'http://54.86.99.85:5000/api' // Production API URL (using HTTP instead of HTTPS)
   : '/api'; // Local development API URL (relative path)
 
 // Create axios instance with the base URL
@@ -88,6 +88,9 @@ class AuthService {
       };
     }
   }
+  
+  // Rest of the AuthService class remains the same...
+  // (keeping all other methods identical)
   
   /**
    * Log out the current user

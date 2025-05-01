@@ -2,6 +2,7 @@
 from flask_socketio import SocketIO
 from flask import current_app
 import os
+import logging
 
 # Initialize Socket.IO with threading mode
 socketio = None
@@ -10,14 +11,41 @@ def init_socketio(app):
     """Initialize socketio with the Flask app"""
     global socketio
     if socketio is None:
+        # Get URL scheme from environment or default to http
+        scheme = os.getenv('WEBSOCKET_SCHEME', 'http')
+        
+        # Handle environment configuration
+        is_production = os.getenv('FLASK_ENV', 'development') == 'production'
+        
+        # In production, default to HTTP mode for websockets if not specified
+        if is_production and scheme == 'https':
+            current_app.logger.warning(
+                "Production environment detected with HTTPS. "
+                "If certificate issues occur, set WEBSOCKET_SCHEME=http"
+            )
+        
         socketio = SocketIO(
             app,
             cors_allowed_origins=os.getenv('ALLOWED_ORIGINS', '*').split(','),
             path="/ws",
-            async_mode='threading',  # Consistent with your original implementation
+            async_mode='gevent',  # Consistent with your original implementation
             logger=True,
-            engineio_logger=False
+            engineio_logger=False,
+            # Force HTTP mode for websockets to avoid certificate issues
+            websocket_transport='polling' if scheme == 'https' else 'websocket'
         )
+        
+        current_app.logger.info(f"SocketIO initialized with {scheme} scheme")
+        
+        # Register connection handlers for debugging
+        @socketio.on('connect', namespace='/notifications')
+        def handle_connect():
+            current_app.logger.info("Client connected to notifications namespace")
+            
+        @socketio.on('disconnect', namespace='/notifications')
+        def handle_disconnect():
+            current_app.logger.info("Client disconnected from notifications namespace")
+            
     return socketio
 
 def get_socketio():
