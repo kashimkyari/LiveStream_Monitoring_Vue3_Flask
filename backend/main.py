@@ -2,6 +2,9 @@
 """
 main.py - Flask application entry point
 """
+import gevent.monkey
+gevent.monkey.patch_all()  
+
 import logging
 import os
 from dotenv import load_dotenv
@@ -19,7 +22,7 @@ logging.basicConfig(
 
 load_dotenv()
 
-# Import after monkey patching but before app creation
+
 from config import create_app
 from extensions import db
 from models import User
