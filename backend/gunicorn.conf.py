@@ -11,10 +11,10 @@ worker_class = "gevent"
 # Calculate optimal number of workers based on available CPU cores
 # Using a modified formula that balances speed and resource usage
 cpu_count = multiprocessing.cpu_count()
-workers = min(cpu_count * 2 + 1, 12)  # Cap at 12 for most environments
+workers = 4  # Cap at 12 for most environments
 
 # Thread configuration - lower for gevent since it's async
-threads = 2
+threads = 4
 
 # Connection settings
 worker_connections = 2000
@@ -27,8 +27,8 @@ preload_app = True  # Preload application code before forking workers
 reuse_port = True  # Enable SO_REUSEPORT for faster restarts
 
 # Timeouts (in seconds)
-timeout = 60  # Reduced from 90 for faster error recovery
-graceful_timeout = 30  # Reduced for faster restart cycles
+timeout = 30  # Reduced from 90 for faster error recovery
+graceful_timeout = 15  # Reduced for faster restart cycles
 keepalive = 5  # Lowered to free up connections faster
 
 # Logging
