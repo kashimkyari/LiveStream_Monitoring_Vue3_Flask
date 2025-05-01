@@ -27,18 +27,21 @@ from models import User
 # Initialize Flask app
 app = create_app()
 
-# We're using wildcard CORS, so no need to specify allowed origins
-# Store wildcard origin in app config for reference
-app.config['CORS_ALLOWED_ORIGINS'] = '*'
+# Parse allowed origins from environment but allow all with specific reflection
+allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://live-stream-monitoring-vue3-flask.vercel.app,http://localhost:8080,http://jetcamstudios-git-main-kashimkyaris-projects.vercel.app,http://jetcamstudios-kashimkyaris-projects.vercel.app').split(',')
+
+# For debugging - store allowed origins, though we'll reflect any origin back
+app.config['CORS_ALLOWED_ORIGINS'] = allowed_origins
 
 # Log CORS configuration
-logging.info("Configured for wildcard CORS with HTTP support (no HTTPS enforcement)")
+logging.info("Configured for CORS with credentials support and HTTP compatibility")
+logging.info(f"Configured default allowed origins (for reference): {allowed_origins}")
 
 # === CORS Configuration for Flask ===
-# Using wildcard origin instead of specific origins to avoid protocol enforcement
+# Custom CORS setup to allow HTTP requests with credentials
 CORS(app, 
-     origins="*",  # Allow all origins
-     supports_credentials=False,  # Must be False when using wildcard origin
+     origins=["*"],  # Will be overridden in before_request handler
+     supports_credentials=True,  # Enable credentials support
      allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Cache-Control"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      expose_headers=["Content-Length", "X-JSON"],
@@ -51,16 +54,30 @@ def handle_preflight():
     if request.method == 'OPTIONS':
         response = app.make_default_options_response()
         
-        # Allow any origin without forcing HTTPS
-        response.headers['Access-Control-Allow-Origin'] = '*'
+        # Get origin from the request headers
+        origin = request.headers.get('Origin', '*')
         
-        # Since we're using wildcard origin, credentials must be false
-        response.headers['Access-Control-Allow-Credentials'] = 'false'
+        # Set the specific origin instead of wildcard to enable credentials
+        response.headers['Access-Control-Allow-Origin'] = origin
+        
+        # Enable credentials support
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control'
         response.headers['Access-Control-Max-Age'] = '600'  # Cache preflight response for 10 minutes
         
         return response
+
+# Add after_request handler to set CORS headers for all responses
+@app.after_request
+def add_cors_headers(response):
+    """Add CORS headers to all responses"""
+    origin = request.headers.get('Origin')
+    if origin:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    
+    return response
 
 # Add CORS test endpoint for debugging
 @app.route('/cors-test', methods=['GET', 'OPTIONS'])
@@ -70,20 +87,16 @@ def cors_test():
         # Let the before_request handler handle this
         return app.make_default_options_response()
     
-    # Add CORS headers directly to the response
-    response = jsonify({
+    # The response will have CORS headers added by the after_request handler
+    return jsonify({
         "message": "CORS test successful",
         "your_origin": request.headers.get('Origin', 'No origin header'),
         "request_protocol": request.headers.get('X-Forwarded-Proto', 'http'),
         "request_headers": dict(request.headers),
         "cors_enabled": True,
-        "cors_mode": "HTTP only (no HTTPS enforcement)"
+        "cors_mode": "HTTP with credentials enabled",
+        "credentials_supported": True
     })
-    
-    # Ensure HTTP works by adding headers manually
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    
-    return response
 
 # === Database Initialization ===
 with app.app_context():
