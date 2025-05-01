@@ -3,7 +3,7 @@
 main.py - Flask application entry point
 """
 import gevent.monkey
-gevent.monkey.patch_all()  
+gevent.monkey.patch_all()
 
 import logging
 import os
@@ -23,7 +23,6 @@ logging.basicConfig(
 
 load_dotenv()
 
-
 from config import create_app
 from extensions import db
 from models import User
@@ -31,25 +30,22 @@ from models import User
 # Initialize Flask app
 app = create_app()
 
-# Parse allowed origins from environment but allow all with specific reflection
-allowed_origins = os.getenv('ALLOWED_ORIGINS', 'https://live-stream-monitoring-vue3-flask.vercel.app,http://localhost:8080,https://jetcamstudios-git-main-kashimkyaris-projects.vercel.app,http://jetcamstudios-kashimkyaris-projects.vercel.app').split(',')
-
-# For debugging - store allowed origins, though we'll reflect any origin back
-app.config['CORS_ALLOWED_ORIGINS'] = allowed_origins
+# Parse allowed origins from environment
+allowed_origins = os.getenv('ALLOWED_ORIGINS', 'https://live-stream-monitoring-vue3-flask.vercel.app,http://localhost:8080,https://jetcamstudios-git-main-kashimkyaris-projects.vercel.app,https://jetcamstudios-kashimkyaris-projects.vercel.app').split(',')
 
 # Log CORS configuration
-logging.info("Configured for CORS with credentials support and HTTP compatibility")
-logging.info(f"Configured default allowed origins (for reference): {allowed_origins}")
+app.config['CORS_ALLOWED_ORIGINS'] = allowed_origins
+logging.info("Configured for CORS with credentials support and HTTPS compatibility")
+logging.info(f"Configured allowed origins: {allowed_origins}")
 
 # === CORS Configuration for Flask ===
-# Custom CORS setup to allow HTTP requests with credentials
-CORS(app, 
-     origins=["*"],  # Will be overridden in before_request handler
-     supports_credentials=True,  # Enable credentials support
+CORS(app,
+     origins=allowed_origins,
+     supports_credentials=True,
      allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Cache-Control"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      expose_headers=["Content-Length", "X-JSON"],
-     max_age=600)  # 10 minutes cache for preflight requests
+     max_age=600)
 
 # Register a before_request handler for CORS
 @app.before_request
@@ -57,19 +53,14 @@ def handle_preflight():
     """Special handling for CORS preflight requests"""
     if request.method == 'OPTIONS':
         response = app.make_default_options_response()
-        
-        # Get origin from the request headers
         origin = request.headers.get('Origin', '*')
         
-        # Set the specific origin instead of wildcard to enable credentials
-        response.headers['Access-Control-Allow-Origin'] = origin
-        
-        # Enable credentials support
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control'
-        response.headers['Access-Control-Max-Age'] = '600'  # Cache preflight response for 10 minutes
-        
+        if origin in allowed_origins:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control'
+            response.headers['Access-Control-Max-Age'] = '600'
         return response
 
 # Add after_request handler to set CORS headers for all responses
@@ -77,10 +68,9 @@ def handle_preflight():
 def add_cors_headers(response):
     """Add CORS headers to all responses"""
     origin = request.headers.get('Origin')
-    if origin:
+    if origin and origin in allowed_origins:
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Credentials'] = 'true'
-    
     return response
 
 # Add CORS test endpoint for debugging
@@ -88,17 +78,15 @@ def add_cors_headers(response):
 def cors_test():
     """Test endpoint for CORS configuration"""
     if request.method == 'OPTIONS':
-        # Let the before_request handler handle this
         return app.make_default_options_response()
     
-    # The response will have CORS headers added by the after_request handler
     return jsonify({
         "message": "CORS test successful",
         "your_origin": request.headers.get('Origin', 'No origin header'),
-        "request_protocol": request.headers.get('X-Forwarded-Proto', 'http'),
+        "request_protocol": request.headers.get('X-Forwarded-Proto', 'https'),
         "request_headers": dict(request.headers),
         "cors_enabled": True,
-        "cors_mode": "HTTP with credentials enabled",
+        "cors_mode": "HTTPS with credentials enabled",
         "credentials_supported": True
     })
 
@@ -147,16 +135,8 @@ with app.app_context():
         from utils.notifications import emit_notification
         from monitoring import start_notification_monitor
         
-        # Import the time module for sleep functions
-        import time
-        
-        # Delay background service startup to ensure DB is ready
         time.sleep(1)
-        
-        # Start background services
         start_notification_monitor()
-        
-        # Notify of server start
         emit_notification({'system': 'Server started successfully', 'event_type': 'server_start'})
         logging.info("Background services initialized")
     
@@ -177,37 +157,33 @@ def health_check():
 def configure_ssl_context():
     """Configure SSL context for the Flask application"""
     ssl_context = None
-    enable_ssl = os.getenv('ENABLE_SSL', 'false').lower() == 'true'
+    enable_ssl = os.getenv('ENABLE_SSL', 'true').lower() == 'true'
     
     if enable_ssl:
         cert_dir = os.getenv('CERT_DIR', '/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend')
         certfile = os.getenv('SSL_CERT_PATH', os.path.join(cert_dir, 'fullchain.pem'))
         keyfile = os.getenv('SSL_KEY_PATH', os.path.join(cert_dir, 'privkey.pem'))
         
-        # Check if certificate files exist
         if os.path.exists(certfile) and os.path.exists(keyfile):
             ssl_context = (certfile, keyfile)
             logging.info(f"SSL Enabled with cert: {certfile} and key: {keyfile}")
         else:
             logging.error(f"SSL certificate files not found at {certfile} and {keyfile}")
-            logging.warning("Starting without SSL")
+            raise FileNotFoundError("SSL certificate files not found")
             
     return ssl_context
 
 # === Main Execution ===
 if __name__ == "__main__":
-    # Get SSL context
     ssl_context = configure_ssl_context()
-    
-    # Log the server startup mode
     server_mode = "HTTPS" if ssl_context else "HTTP"
-    debug_mode = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
+    debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
     logging.info(f"Starting server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
     
     app.run(
         host='0.0.0.0',
         port=int(os.getenv('PORT', 5000)),
         debug=debug_mode,
-        use_reloader=True,
+        use_reloader=debug_mode,
         ssl_context=ssl_context
     )

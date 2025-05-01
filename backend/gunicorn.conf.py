@@ -1,60 +1,57 @@
 import multiprocessing
 import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # SSL Configuration
 enable_ssl = os.getenv('ENABLE_SSL', 'true').lower() == 'true'
+certfile = None
+keyfile = None
+
 if enable_ssl:
     cert_dir = os.getenv('CERT_DIR', '/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend')
     certfile = os.getenv('SSL_CERT_PATH', os.path.join(cert_dir, 'fullchain.pem'))
     keyfile = os.getenv('SSL_KEY_PATH', os.path.join(cert_dir, 'privkey.pem'))
     
-    # SSL Context for Gunicorn
-    keyfile = keyfile
-    certfile = certfile
+    # Verify certificate files exist
+    if not (os.path.exists(certfile) and os.path.exists(keyfile)):
+        logger.error(f"SSL certificate files not found: cert={certfile}, key={keyfile}")
+        raise FileNotFoundError("SSL certificate files not found")
     
-    # Log SSL configuration
-    import logging
-    logging.info(f"SSL Enabled with cert: {certfile} and key: {keyfile}")
+    logger.info(f"SSL Enabled with cert: {certfile} and key: {keyfile}")
 
-# Binding & Protocol
-if enable_ssl:
-    bind = "0.0.0.0:5000 ssl"
-else:
-    bind = "0.0.0.0:5000"
-protocol = "gevent"
+# Binding
+bind = "0.0.0.0:5000"
 
 # Worker Configuration
 worker_class = "gevent"
-
-# Calculate optimal number of workers based on available CPU cores
-# Using a modified formula that balances speed and resource usage
-cpu_count = multiprocessing.cpu_count()
-workers = 4  # Cap at 12 for most environments
-
-# Thread configuration - lower for gevent since it's async
-threads = 4
+workers = min(multiprocessing.cpu_count() * 2 + 1, 4)  # Adjusted for moderate load
+threads = 4  # Suitable for gevent async workers
 
 # Connection settings
 worker_connections = 2000
-backlog = 2048  # Larger backlog for high-traffic scenarios
+backlog = 2048
 
 # Performance optimizations
-max_requests = 1000  # Restart workers after handling this many requests
-max_requests_jitter = 200  # Add randomness to prevent all workers restarting at once
-preload_app = True  # Preload application code before forking workers
-reuse_port = True  # Enable SO_REUSEPORT for faster restarts
+max_requests = 1000
+max_requests_jitter = 200
+preload_app = True
+reuse_port = True
 
 # Timeouts (in seconds)
-timeout = 30  # Reduced from 90 for faster error recovery
-graceful_timeout = 15  # Reduced for faster restart cycles
-keepalive = 5  # Lowered to free up connections faster
+timeout = 30
+graceful_timeout = 15
+keepalive = 5
 
 # Logging
-accesslog = "-"  # Log to stdout
-errorlog = "-"  # Log to stderr
+accesslog = "-"
+errorlog = "-"
 loglevel = "info"
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(L)s'
-capture_output = True  # Capture stdout/stderr from workers
+capture_output = True
 
 # Security Headers
 forwarded_allow_ips = "*"
@@ -63,15 +60,9 @@ limit_request_line = 8190
 limit_request_fields = 100
 limit_request_field_size = 8190
 
-# Statsd monitoring (uncomment and configure if you have statsd)
-# statsd_host = "localhost:8125"
-# statsd_prefix = "livestream_api"
-
-# Immediately restart workers if they use too much memory
+# Hooks
 def worker_int(worker):
     worker.log.info("Worker received INT or QUIT signal")
-    
-    # Get the current process ID
     pid = os.getpid()
     worker.log.info("Worker syncing to disk before exit (pid: %s)", pid)
 

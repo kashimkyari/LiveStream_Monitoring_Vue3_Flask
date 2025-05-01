@@ -15,7 +15,7 @@ import { useToast } from 'vue-toastification';
 
 // Define the API base URL - switched to HTTP for better compatibility
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'http://54.86.99.85:5000/api' // Production API URL (using HTTP instead of HTTPS)
+  ? 'https://54.86.99.85:5000/api' // Production API URL (using HTTP instead of HTTPS)
   : '/api'; // Local development API URL (relative path)
 
 // Create axios instance with the base URL
