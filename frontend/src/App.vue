@@ -418,7 +418,7 @@ onMounted(() => {
   isDarkTheme.value = localStorage.getItem('themePreference') === 'dark'
   
   // Configure axios
-  axios.defaults.baseURL = "https://54.86.99.85:5000"
+  axios.defaults.baseURL = "https://monitor-backend.jetcamstudio.com:5000"
   axios.defaults.withCredentials = true
   
   // Add request/response interceptors for debugging

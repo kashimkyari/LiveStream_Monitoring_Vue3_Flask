@@ -89,7 +89,7 @@ app.use(Toast, {
   rtl: false
 });
 
-app.config.globalProperties.$socket = io('https://54.86.99.85:5000', {
+app.config.globalProperties.$socket = io('https://monitor-backend.jetcamstudio.com:5000', {
   path: '/ws',
   withCredentials: true,
   transports: ['websocket', 'polling'] // Recommended for fallback

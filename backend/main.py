@@ -31,7 +31,7 @@ from models import User
 app = create_app()
 
 # Parse allowed origins from environment
-allowed_origins = os.getenv('ALLOWED_ORIGINS', 'https://live-stream-monitoring-vue3-flask.vercel.app,http://localhost:8080,https://jetcamstudios-git-main-kashimkyaris-projects.vercel.app,https://jetcamstudios-kashimkyaris-projects.vercel.app').split(',')
+allowed_origins = os.getenv('ALLOWED_ORIGINS', 'https://monitor.jetcamstudio.com,http://localhost:8080').split(',')
 
 # Log CORS configuration
 app.config['CORS_ALLOWED_ORIGINS'] = allowed_origins
