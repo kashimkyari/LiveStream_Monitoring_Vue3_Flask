@@ -131,7 +131,7 @@ export default {
       { name: 'Streams', icon: 'video' },
       { name: 'Analytics', icon: 'chart-line' },
       { name: 'Messages', icon: 'comment' },
-      { name: 'Notifications', icon: 'bell' },
+      { name: 'Alerts', icon: 'bell' },
       { name: 'Settings', icon: 'cog' }
     ]
     const activeTab = ref(0)
@@ -258,7 +258,7 @@ export default {
 
     // Messages
     const initializeSocketConnection = () => {
-      socket = io('https://monitor-backend.jetcamstudio.com:5000/messages', {
+      socket = io('https://monitor-backend.jetcamstudio.com:5000', {
         path: '/ws',
         transports: ['websocket'],
         query: { userId: currentUserId }

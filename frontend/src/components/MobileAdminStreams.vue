@@ -290,6 +290,7 @@ const initializeMiniPlayers = () => {
         liveMaxLatencyDuration: 10,
         debug: false,
         autoplay: true,
+        capLevelToPlayerSize: true,
 
       });
       
