@@ -46,7 +46,7 @@
             </template>
             <template v-else>
               <font-awesome-icon icon="paper-plane" class="mr-2" />
-              Send Reset Link
+              Send Reset Code
             </template>
           </button>
         </div>
@@ -58,6 +58,8 @@
               <font-awesome-icon icon="fingerprint" class="input-icon" />
               <input
                 type="text"
+                inputmode="numeric"
+                pattern="[0-9]{6}"
                 id="token"
                 v-model="token"
                 :disabled="loading"
@@ -65,10 +67,13 @@
                 placeholder=" "
                 required
                 ref="tokenInput"
+                aria-describedby="token-hint"
               />
-              <label for="token" class="input-label">Reset Token</label>
+              <label for="token" class="input-label">Reset Code</label>
             </div>
-            <p class="input-hint">Enter the token from the email we sent you</p>
+            <p id="token-hint" class="input-hint" :class="{ error: tokenError }">
+              {{ tokenHintText }}
+            </p>
           </div>
           
           <div class="input-group" ref="passwordGroup">
@@ -172,12 +177,12 @@ export default {
       confirmPassword: '',
       loading: false,
       resetCompleted: false,
-      tokenVerified: false
+      tokenVerified: false,
+      tokenError: false
     }
   },
   computed: {
     passwordStrength() {
-      // Password strength calculation
       let strength = 0;
       const password = this.newPassword;
       
@@ -215,28 +220,22 @@ export default {
     passwordMismatch() {
       return this.confirmPassword && this.newPassword !== this.confirmPassword;
     },
+    tokenHintText() {
+      return this.tokenError ? 'Token must be a 6-digit number' : 'Enter the 6-digit code from the email';
+    },
     canResetPassword() {
       return (
         this.token &&
+        /^\d{6}$/.test(this.token) &&
         this.newPassword.length >= 8 &&
         this.confirmPassword.length >= 8 &&
         this.newPassword === this.confirmPassword &&
-        this.passwordStrength >= 3 // Require at least Strong password
+        this.passwordStrength >= 3
       );
     }
   },
   mounted() {
     this.initializeAnimations();
-    
-    // Check if token is provided in URL (for direct access from email)
-    const urlParams = new URLSearchParams(window.location.search);
-    const tokenFromUrl = urlParams.get('token');
-    
-    if (tokenFromUrl) {
-      this.token = tokenFromUrl;
-      this.currentStep = 2;
-      this.verifyToken();
-    }
   },
   methods: {
     handleBack() {
@@ -249,9 +248,7 @@ export default {
         this.animateStepChange();
       }
     },
-    
     initializeAnimations() {
-      // Initial animations when component mounts
       anime.timeline({
         easing: 'easeOutExpo',
       })
@@ -294,10 +291,8 @@ export default {
         duration: 1000,
       }, '-=700');
       
-      // Animate decorative circles continuously
       this.animateDecorations();
     },
-    
     animateStepChange() {
       anime.timeline({
         easing: 'easeOutExpo'
@@ -307,9 +302,6 @@ export default {
         opacity: [1, 0],
         translateY: [0, -10],
         duration: 300,
-        complete: () => {
-          // Animation completed
-        }
       })
       .add({
         targets: this.$refs.formContent,
@@ -318,9 +310,7 @@ export default {
         duration: 500,
       });
     },
-    
     animateDecorations() {
-      // Continuous animations for decorative elements
       anime({
         targets: this.$refs.circle1,
         translateX: '10px',
@@ -330,7 +320,6 @@ export default {
         loop: true,
         easing: 'easeInOutSine'
       });
-      
       anime({
         targets: this.$refs.circle2,
         translateX: '-15px',
@@ -340,7 +329,6 @@ export default {
         loop: true,
         easing: 'easeInOutSine'
       });
-      
       anime({
         targets: this.$refs.circle3,
         translateX: '8px',
@@ -351,7 +339,6 @@ export default {
         easing: 'easeInOutSine'
       });
     },
-    
     async requestPasswordReset() {
       if (this.loading) return;
       
@@ -371,27 +358,26 @@ export default {
         });
         
         if (response.status === 200) {
-          this.toast.success("Reset link sent to your email. Please check your inbox.", {
+          this.toast.success("Reset code sent to your email. Please check your inbox.", {
             position: "top-center"
           });
           this.currentStep = 2;
           this.animateStepChange();
           
-          // Focus on token input field
           setTimeout(() => {
             if (this.$refs.tokenInput) {
               this.$refs.tokenInput.focus();
             }
           }, 500);
         } else {
-          this.toast.error(response.data.message || "Failed to send reset link", {
+          this.toast.error(response.data.message || "Failed to send reset code", {
             position: "top-center"
           });
           this.shakeElement(this.$refs.emailGroup);
         }
       } catch (error) {
-        console.error('Request reset link error:', error);
-        this.toast.error(error.response?.data?.message || "An error occurred while sending the reset link", {
+        console.error('Request reset code error:', error);
+        this.toast.error(error.response?.data?.message || "An error occurred while sending the reset code", {
           position: "top-center"
         });
         this.shakeElement(this.$refs.emailGroup);
@@ -399,10 +385,19 @@ export default {
         this.loading = false;
       }
     },
-    
     async verifyToken() {
       if (!this.token) return;
       
+      if (!/^\d{6}$/.test(this.token)) {
+        this.tokenError = true;
+        this.toast.error("Token must be a 6-digit number", {
+          position: "top-center"
+        });
+        this.shakeElement(this.$refs.tokenGroup);
+        return;
+      }
+      
+      this.tokenError = false;
       this.loading = true;
       
       try {
@@ -416,7 +411,8 @@ export default {
             this.$refs.passwordInput.focus();
           }
         } else {
-          this.toast.error("Invalid or expired reset token. Please request a new reset link.", {
+          this.tokenError = true;
+          this.toast.error("Invalid or expired reset code. Please request a new code.", {
             position: "top-center"
           });
           this.token = '';
@@ -425,7 +421,8 @@ export default {
         }
       } catch (error) {
         console.error('Verify token error:', error);
-        this.toast.error(error.response?.data?.message || "Invalid or expired reset token", {
+        this.tokenError = true;
+        this.toast.error(error.response?.data?.message || "Invalid or expired reset code", {
           position: "top-center"
         });
         this.token = '';
@@ -435,12 +432,19 @@ export default {
         this.loading = false;
       }
     },
-    
     async handleSubmit() {
       if (this.loading || !this.canResetPassword) return;
       
-      // Verify token first if not already verified
       if (!this.tokenVerified) {
+        if (!/^\d{6}$/.test(this.token)) {
+          this.tokenError = true;
+          this.toast.error("Token must be a 6-digit number", {
+            position: "top-center"
+          });
+          this.shakeElement(this.$refs.tokenGroup);
+          return;
+        }
+        
         try {
           this.loading = true;
           const verifyResponse = await api.post('/api/verify-reset-token', {
@@ -448,7 +452,8 @@ export default {
           });
           
           if (!verifyResponse.data.valid) {
-            this.toast.error("Invalid or expired reset token. Please request a new reset link.", {
+            this.tokenError = true;
+            this.toast.error("Invalid or expired reset code. Please request a new code.", {
               position: "top-center"
             });
             this.shakeElement(this.$refs.tokenGroup);
@@ -459,7 +464,8 @@ export default {
           this.tokenVerified = true;
         } catch (error) {
           console.error('Token verification error:', error);
-          this.toast.error(error.response?.data?.message || "Invalid or expired reset token", {
+          this.tokenError = true;
+          this.toast.error(error.response?.data?.message || "Invalid or expired reset code", {
             position: "top-center"
           });
           this.shakeElement(this.$refs.tokenGroup);
@@ -482,7 +488,6 @@ export default {
             position: "top-center"
           });
           
-          // Animate success
           anime.timeline({
             easing: 'easeOutExpo'
           })
@@ -508,7 +513,6 @@ export default {
         this.loading = false;
       }
     },
-    
     shakeElement(element) {
       if (!element) return;
       
@@ -550,7 +554,7 @@ export default {
   position: relative;
   margin-top: 1rem;
   overflow: hidden;
-  opacity: 0; /* Initial state for animation */
+  opacity: 0;
 }
 
 .back-button {
@@ -724,6 +728,10 @@ export default {
   padding-left: 0.5rem;
 }
 
+.input-hint.error {
+  color: var(--error-color);
+}
+
 .password-strength {
   font-size: 0.85rem;
   margin-top: 0.5rem;
@@ -875,7 +883,6 @@ export default {
   }
 }
 
-/* Dark mode support */
 @media (prefers-color-scheme: dark) {
   :root {
     --bg-color: #121212;
@@ -894,7 +901,6 @@ export default {
   }
 }
 
-/* Accessibility improvements */
 .input-field:focus, 
 .action-button:focus, 
 .back-button:focus {
@@ -902,7 +908,6 @@ export default {
   box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.5);
 }
 
-/* Focus visible */
 .input-field:focus-visible, 
 .action-button:focus-visible, 
 .back-button:focus-visible {

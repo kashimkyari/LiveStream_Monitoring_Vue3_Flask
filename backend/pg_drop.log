@@ -35,3 +35,78 @@
 2025-04-17 17:10:42,356 [INFO] Dropping any remaining views...
 2025-04-17 17:10:43,357 [INFO] Success! All tables have been dropped from the database.
 2025-04-17 17:10:43,556 [INFO] PostgreSQL table deletion process completed
+2025-05-02 02:15:05,853 [INFO] Starting PostgreSQL table deletion process
+2025-05-02 02:15:07,117 [INFO] SocketIO initialized with http scheme
+2025-05-02 02:15:14,828 [INFO] [Background] Updated proxy list with 548 proxies at 2025-05-02 02:15:14.828854
+2025-05-02 02:15:19,649 [INFO] Disabling triggers
+2025-05-02 02:15:20,263 [INFO] Working with schema: public
+2025-05-02 02:15:20,672 [INFO] Found 14 tables: assignments, chat_keywords, chat_messages, chaturbate_streams, detection_logs, flagged_objects, logs, message_attachments, password_reset_tokens, password_resets, streams, stripchat_streams, telegram_recipients, users
+2025-05-02 02:15:20,673 [INFO] Dropping all foreign key constraints...
+2025-05-02 02:17:20,877 [ERROR] Unexpected error dropping tables: (psycopg2.errors.QueryCanceled) canceling statement due to statement timeout
+CONTEXT:  SQL statement "ALTER TABLE assignments DROP CONSTRAINT assignments_agent_id_fkey"
+PL/pgSQL function inline_code_block line 8 at EXECUTE
+
+[SQL: 
+                DO $$
+                DECLARE
+                    r RECORD;
+                BEGIN
+                    FOR r IN (SELECT conname, conrelid::regclass AS table_name FROM pg_constraint
+                             WHERE contype = 'f' AND connamespace = 'public'::regnamespace)
+                    LOOP
+                        EXECUTE 'ALTER TABLE ' || r.table_name || ' DROP CONSTRAINT ' || r.conname;
+                    END LOOP;
+                END $$;
+            ]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2025-05-02 02:17:21,082 [INFO] PostgreSQL table deletion process completed
+2025-05-02 02:18:50,622 [INFO] Starting PostgreSQL table deletion process
+2025-05-02 02:18:50,852 [INFO] SocketIO initialized with http scheme
+2025-05-02 02:18:53,100 [INFO] [Background] Updated proxy list with 548 proxies at 2025-05-02 02:18:53.100015
+2025-05-02 02:18:56,430 [INFO] Disabling triggers
+2025-05-02 02:18:57,034 [INFO] Working with schema: public
+2025-05-02 02:18:57,251 [INFO] Found 14 tables: assignments, chat_keywords, chat_messages, chaturbate_streams, detection_logs, flagged_objects, logs, message_attachments, password_reset_tokens, password_resets, streams, stripchat_streams, telegram_recipients, users
+2025-05-02 02:18:57,252 [INFO] Dropping all foreign key constraints...
+2025-05-02 02:20:57,674 [ERROR] Unexpected error dropping tables: (psycopg2.errors.QueryCanceled) canceling statement due to statement timeout
+CONTEXT:  SQL statement "ALTER TABLE assignments DROP CONSTRAINT assignments_agent_id_fkey"
+PL/pgSQL function inline_code_block line 8 at EXECUTE
+
+[SQL: 
+                DO $$
+                DECLARE
+                    r RECORD;
+                BEGIN
+                    FOR r IN (SELECT conname, conrelid::regclass AS table_name FROM pg_constraint
+                             WHERE contype = 'f' AND connamespace = 'public'::regnamespace)
+                    LOOP
+                        EXECUTE 'ALTER TABLE ' || r.table_name || ' DROP CONSTRAINT ' || r.conname;
+                    END LOOP;
+                END $$;
+            ]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2025-05-02 02:20:57,877 [INFO] PostgreSQL table deletion process completed
+2025-05-02 02:25:47,327 [INFO] Starting PostgreSQL table deletion process
+2025-05-02 02:25:47,449 [INFO] SocketIO initialized with http scheme
+2025-05-02 02:25:48,888 [INFO] [Background] Updated proxy list with 573 proxies at 2025-05-02 02:25:48.888692
+2025-05-02 02:25:52,470 [INFO] Disabling triggers
+2025-05-02 02:25:53,301 [INFO] Working with schema: public
+2025-05-02 02:25:53,506 [INFO] Found 14 tables: assignments, chat_keywords, chat_messages, chaturbate_streams, detection_logs, flagged_objects, logs, message_attachments, password_reset_tokens, password_resets, streams, stripchat_streams, telegram_recipients, users
+2025-05-02 02:25:53,507 [INFO] Dropping all foreign key constraints...
+2025-05-02 02:27:53,724 [ERROR] Unexpected error dropping tables: (psycopg2.errors.QueryCanceled) canceling statement due to statement timeout
+CONTEXT:  SQL statement "ALTER TABLE assignments DROP CONSTRAINT assignments_agent_id_fkey"
+PL/pgSQL function inline_code_block line 8 at EXECUTE
+
+[SQL: 
+                DO $$
+                DECLARE
+                    r RECORD;
+                BEGIN
+                    FOR r IN (SELECT conname, conrelid::regclass AS table_name FROM pg_constraint
+                             WHERE contype = 'f' AND connamespace = 'public'::regnamespace)
+                    LOOP
+                        EXECUTE 'ALTER TABLE ' || r.table_name || ' DROP CONSTRAINT ' || r.conname;
+                    END LOOP;
+                END $$;
+            ]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2025-05-02 02:27:53,929 [INFO] PostgreSQL table deletion process completed

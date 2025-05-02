@@ -111,3 +111,13 @@ const toggleGroupByType = () => {
 ## License
 
 All rights reserved. This codebase is proprietary and confidential.
+
+
+
+sudo cp /etc/letsencrypt/live/monitor-backend.jetcamstudio.com/fullchain.pem ./fullchain.pem
+sudo cp /etc/letsencrypt/live/monitor-backend.jetcamstudio.com/privkey.pem ./privkey.pem
+
+sudo chown ec2-user:ec2-user /home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/fullchain.pem
+sudo chown ec2-user:ec2-user /home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/privkey.pem
+sudo chmod 600 /home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/fullchain.pem
+sudo chmod 600 /home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/privkey.pem

@@ -1,6 +1,5 @@
 <template>
   <div class="mobile-forgot-password-container" :data-theme="theme">
-    <!-- Theme toggle button for accessibility -->
     <button 
       class="theme-toggle" 
       @click="toggleTheme" 
@@ -23,7 +22,6 @@
       <p class="subtitle" ref="subtitle">Recover your account access</p>
       
       <div class="form-content" ref="formContent">
-        <!-- Step 1: Email Entry -->
         <div v-if="currentStep === 1">
           <div class="input-group" ref="emailGroup">
             <div class="input-container">
@@ -50,28 +48,35 @@
             </template>
             <template v-else>
               <font-awesome-icon icon="paper-plane" class="mr-2" />
-              Send Reset Link
+              Send Reset Code
             </template>
           </button>
         </div>
         
-        <!-- Step 2: Reset Password with Token -->
         <div v-if="currentStep === 2">
           <div class="input-group" ref="tokenGroup">
             <div class="input-container">
               <font-awesome-icon icon="fingerprint" class="input-icon" />
               <input
                 type="text"
+                inputmode="numeric"
+                pattern="[0-9]{6}"
                 id="token"
                 v-model="token"
                 :disabled="loading"
                 class="input-field"
-                placeholder="Reset Token"
+                placeholder="Reset Code"
                 required
                 ref="tokenInput"
+                aria-describedby="token-hint"
               />
             </div>
-            <p class="input-hint">Enter the token from the email we sent you</p>
+            <p id="token-hint" class="input-hint error" v-if="tokenError">
+              Token must be a 6-digit number
+            </p>
+            <p id="token-hint" class="input-hint" v-else>
+              Enter the 6-digit code from the email
+            </p>
           </div>
           
           <div class="input-group" ref="passwordGroup">
@@ -115,8 +120,6 @@
           </div>
           
           <div class="button-group">
-            
-            
             <button type="submit" class="action-button" :disabled="loading || !canResetPassword">
               <template v-if="loading">
                 <font-awesome-icon icon="spinner" spin class="mr-2" />
@@ -130,7 +133,6 @@
           </div>
         </div>
         
-        <!-- Success State -->
         <div v-if="resetCompleted" class="success-container" ref="successContainer">
           <div class="success-icon">
             <font-awesome-icon icon="check-circle" />
@@ -160,28 +162,22 @@ export default {
   emits: ['back'],
   setup() {
     const toast = useToast()
-    // Theme state management
     const theme = ref('light')
     
-    // Check system preference and localStorage on mount
     onMounted(() => {
-      // Check localStorage first
       const savedTheme = localStorage.getItem('preferred-theme')
       if (savedTheme) {
         theme.value = savedTheme
         return
       }
       
-      // Check system preference as fallback
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         theme.value = 'dark'
       }
       
-      // Save initial theme
       localStorage.setItem('preferred-theme', theme.value)
     })
     
-    // Toggle theme function
     const toggleTheme = () => {
       theme.value = theme.value === 'dark' ? 'light' : 'dark'
       localStorage.setItem('preferred-theme', theme.value)
@@ -198,12 +194,12 @@ export default {
       confirmPassword: '',
       loading: false,
       resetCompleted: false,
-      tokenVerified: false
+      tokenVerified: false,
+      tokenError: false
     }
   },
   computed: {
     passwordStrength() {
-      // Simple password strength calculation
       let strength = 0;
       const password = this.newPassword;
       
@@ -244,23 +240,16 @@ export default {
     canResetPassword() {
       return (
         this.token &&
+        /^\d{6}$/.test(this.token) &&
         this.newPassword.length >= 8 &&
         this.confirmPassword.length >= 8 &&
         this.newPassword === this.confirmPassword &&
-        this.passwordStrength >= 3 // Require at least Strong password
+        this.passwordStrength >= 3
       );
     }
   },
   mounted() {
-    // Check if token is provided in URL (for direct access from email)
-    const urlParams = new URLSearchParams(window.location.search);
-    const tokenFromUrl = urlParams.get('token');
-    
-    if (tokenFromUrl) {
-      this.token = tokenFromUrl;
-      this.currentStep = 2;
-      this.verifyToken();
-    }
+    // No token extraction from URL
   },
   methods: {
     async requestPasswordReset() {
@@ -279,37 +268,44 @@ export default {
         const response = await requestPasswordReset(this.email);
         
         if (response.status === 200) {
-          this.toast.success("Reset link sent to your email. Please check your inbox.", {
+          this.toast.success("Reset code sent to your email. Please check your inbox.", {
             position: "top-center"
           });
           this.currentStep = 2;
           
-          // Focus on token input field
           setTimeout(() => {
             if (this.$refs.tokenInput) {
               this.$refs.tokenInput.focus();
             }
           }, 500);
         } else {
-          this.toast.error(response.data.message || "Failed to send reset link", {
+          this.toast.error(response.data.message || "Failed to send reset code", {
             position: "top-center"
           });
         }
       } catch (error) {
-        console.error('Request reset link error:', error);
+        console.error('Request reset code error:', error);
         this.toast.error(
           error.response?.data?.message || 
-          "An error occurred while sending the reset link", 
+          "An error occurred while sending the reset code", 
           { position: "top-center" }
         );
       } finally {
         this.loading = false;
       }
     },
-    
     async verifyToken() {
       if (!this.token) return;
       
+      if (!/^\d{6}$/.test(this.token)) {
+        this.tokenError = true;
+        this.toast.error("Token must be a 6-digit number", {
+          position: "top-center"
+        });
+        return;
+      }
+      
+      this.tokenError = false;
       this.loading = true;
       
       try {
@@ -321,7 +317,8 @@ export default {
             this.$refs.passwordInput.focus();
           }
         } else {
-          this.toast.error("Invalid or expired reset token. Please request a new reset link.", {
+          this.tokenError = true;
+          this.toast.error("Invalid or expired reset code. Please request a new code.", {
             position: "top-center"
           });
           this.token = '';
@@ -329,9 +326,10 @@ export default {
         }
       } catch (error) {
         console.error('Verify token error:', error);
+        this.tokenError = true;
         this.toast.error(
           error.response?.data?.message || 
-          "Invalid or expired reset token", 
+          "Invalid or expired reset code", 
           { position: "top-center" }
         );
         this.token = '';
@@ -340,18 +338,25 @@ export default {
         this.loading = false;
       }
     },
-    
     async handleSubmit() {
       if (this.loading || !this.canResetPassword) return;
       
-      // Verify token first if not already verified
       if (!this.tokenVerified) {
+        if (!/^\d{6}$/.test(this.token)) {
+          this.tokenError = true;
+          this.toast.error("Token must be a 6-digit number", {
+            position: "top-center"
+          });
+          return;
+        }
+        
         try {
           this.loading = true;
           const verifyResponse = await verifyResetToken(this.token);
           
           if (!verifyResponse.data.valid) {
-            this.toast.error("Invalid or expired reset token. Please request a new reset link.", {
+            this.tokenError = true;
+            this.toast.error("Invalid or expired reset code. Please request a new code.", {
               position: "top-center"
             });
             this.loading = false;
@@ -361,9 +366,10 @@ export default {
           this.tokenVerified = true;
         } catch (error) {
           console.error('Token verification error:', error);
+          this.tokenError = true;
           this.toast.error(
             error.response?.data?.message || 
-            "Invalid or expired reset token", 
+            "Invalid or expired reset code", 
             { position: "top-center" }
           );
           this.loading = false;
@@ -404,10 +410,7 @@ export default {
 </script>
 
 <style scoped>
-/* CSS Variables for theming */
-/* Light theme (default) */
 :root {
-  /* Color scheme */
   --color-background: #f8f9fa;
   --color-form-bg: #ffffff;
   --color-primary: #0d6efd;
@@ -418,35 +421,23 @@ export default {
   --color-warning: #ffc107;
   --color-info: #0dcaf0;
   --color-info-light: rgba(13, 202, 240, 0.1);
-  
-  /* Text colors */
   --color-text: #212529;
   --color-text-muted: #6c757d;
   --color-text-light: #adb5bd;
-  
-  /* Border colors */
   --color-border: #dee2e6;
   --color-border-dark: #ced4da;
-  
-  /* Input fields */
   --color-input-bg: #f8f9fa;
   --color-input-border: #ced4da;
   --color-input-text: #212529;
   --color-input-placeholder: #6c757d;
   --color-input-icon: #6c757d;
-  
-  /* Shadows */
   --shadow-sm: 0 .125rem .25rem rgba(0,0,0,.075);
   --shadow-md: 0 .5rem 1rem rgba(0,0,0,.15);
   --shadow-lg: 0 1rem 3rem rgba(0,0,0,.175);
-  
-  /* Focus state */
   --color-focus-ring: rgba(13, 110, 253, 0.25);
 }
 
-/* Dark theme */
 [data-theme="dark"] {
-  /* Color scheme */
   --color-background: #121212;
   --color-form-bg: #343a40;
   --color-primary: #0dcaf0;
@@ -457,33 +448,22 @@ export default {
   --color-warning: #ffc107;
   --color-info: #0dcaf0; 
   --color-info-light: rgba(13, 202, 240, 0.1);
-  
-  /* Text colors */
   --color-text: #f8f9fa;
   --color-text-muted: #adb5bd;
   --color-text-light: #ced4da;
-  
-  /* Border colors */
   --color-border: #495057;
   --color-border-dark: #6c757d;
-  
-  /* Input fields */
   --color-input-bg: #212529;
   --color-input-border: #495057;
   --color-input-text: #f8f9fa;
   --color-input-placeholder: #adb5bd;
   --color-input-icon: #adb5bd;
-  
-  /* Shadows remain the same, but adjusted for dark mode */
   --shadow-sm: 0 .125rem .25rem rgba(0,0,0,.2);
   --shadow-md: 0 .5rem 1rem rgba(0,0,0,.3);
   --shadow-lg: 0 1rem 3rem rgba(0,0,0,.4);
-  
-  /* Focus state */
   --color-focus-ring: rgba(13, 202, 240, 0.4);
 }
 
-/* Mobile-first responsive layout optimizations */
 .mobile-forgot-password-container {
   display: flex;
   align-items: center;
@@ -495,7 +475,6 @@ export default {
   position: relative;
 }
 
-/* Theme toggle button positioning for thumb accessibility */
 .theme-toggle {
   position: fixed;
   top: 1.5rem;
@@ -521,7 +500,7 @@ export default {
 }
 
 .theme-toggle:focus-visible {
-  outline: 3px solid var(--focus-ring-color);
+  outline: 3px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 
@@ -533,7 +512,7 @@ export default {
   width: 100%;
   max-width: 480px;
   padding: 1.5rem;
-  background: var(--color-background);
+  background: var(--color-form-bg);
   border-radius: 1rem;
   box-shadow: var(--shadow-md);
   position: relative;
@@ -552,16 +531,14 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 3rem; /* Increased for better touch target */
-  height: 3rem; /* Increased for better touch target */
+  width: 3rem;
+  height: 3rem;
   border-radius: 50%;
 }
 
 .back-button:hover,
 .back-button:focus {
   color: var(--color-primary);
-  background-color: grey;
-
 }
 
 .back-button:focus-visible {
@@ -571,21 +548,21 @@ export default {
 
 .logo-container {
   text-align: center;
-  margin-top: 2rem; /* Increased for mobile spacing */
+  margin-top: 2rem;
   margin-bottom: 1.5rem;
 }
 
 .logo-icon {
-  font-size: 2.5rem; /* Larger for mobile */
+  font-size: 2.5rem;
   color: var(--color-primary);
-  padding: 1.25rem; /* Larger padding for mobile */
+  padding: 1.25rem;
   border-radius: 50%;
   background: var(--color-info-light);
 }
 
 .title-text {
   color: var(--color-text);
-  font-size: 1.75rem; /* Larger for mobile readability */
+  font-size: 1.75rem;
   text-align: center;
   margin: 0 0 0.75rem 0;
   font-weight: 600;
@@ -595,15 +572,15 @@ export default {
   color: var(--color-text-muted);
   text-align: center;
   margin-bottom: 1.5rem;
-  font-size: 1rem; /* Increased for readability */
+  font-size: 1rem;
 }
 
 .form-content {
-  margin-top: 1.5rem; /* More breathing room */
+  margin-top: 1.5rem;
 }
 
 .input-group {
-  margin-bottom: 1.5rem; /* Increased spacing for mobile */
+  margin-bottom: 1.5rem;
 }
 
 .input-container {
@@ -624,8 +601,8 @@ export default {
 
 .input-field {
   width: 100%;
-  height: 3rem; /* At least 48px for touch targets */
-  padding: 0.8rem 0.8rem 0.8rem 3rem; /* Increased horizontal padding */
+  height: 3rem;
+  padding: 0.8rem 0.8rem 0.8rem 3rem;
   border: 1px solid var(--color-input-border);
   border-radius: 0.5rem;
   color: var(--color-input-text);
@@ -645,7 +622,7 @@ export default {
 
 .input-hint {
   margin-top: 0.5rem;
-  font-size: 0.875rem; /* Larger for readability */
+  font-size: 0.875rem;
   color: var(--color-text-muted);
 }
 
@@ -655,9 +632,9 @@ export default {
 
 .action-button {
   width: 100%;
-  min-height: 3rem; /* At least 48px for touch targets */
+  min-height: 3rem;
   padding: 0.8rem;
-  background: green;
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 0.5rem;
@@ -674,50 +651,15 @@ export default {
 
 .action-button:hover,
 .action-button:focus {
-  background: green;
+  background: var(--color-primary-hover);
 }
 
 .action-button:focus-visible {
   outline: 3px solid var(--color-focus-ring);
   outline-offset: 2px;
-
 }
 
 .action-button:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-  background-color: grey;
-}
-
-.secondary-button {
-  width: 45%;
-  min-height: 3rem; /* At least 48px for touch targets */
-  padding: 0.8rem;
-  background: var(--color-secondary);
-  color: white;
-  border: none;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  font-size: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.secondary-button:hover,
-.secondary-button:focus {
-  background: var(--color-secondary-dark, #5a6268);
-}
-
-.secondary-button:focus-visible {
-  outline: 3px solid var(--color-focus-ring);
-  outline-offset: 2px;
-}
-
-.secondary-button:disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }
@@ -726,12 +668,12 @@ export default {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  margin-top: 1.5rem; /* Increased for mobile */
+  margin-top: 1.5rem;
 }
 
 .password-strength {
   margin-top: 0.5rem;
-  font-size: 0.875rem; /* Increased for readability */
+  font-size: 0.875rem;
   display: flex;
   align-items: center;
 }
@@ -744,11 +686,7 @@ export default {
   color: var(--color-warning);
 }
 
-.pw-strong {
-  color: var(--color-success);
-}
-
-.pw-very-strong {
+.pw-strong, .pw-very-strong {
   color: var(--color-success);
 }
 
@@ -762,24 +700,23 @@ export default {
 }
 
 .success-icon {
-  font-size: 3.5rem; /* Larger for better visibility */
+  font-size: 3.5rem;
   color: var(--color-success);
   margin-bottom: 1.5rem;
 }
 
 .success-title {
   color: var(--color-text);
-  font-size: 1.75rem; /* Larger for mobile */
+  font-size: 1.75rem;
   margin-bottom: 0.75rem;
 }
 
 .success-message {
   color: var(--color-text-muted);
   margin-bottom: 1.75rem;
-  font-size: 1rem; /* Increased for readability */
+  font-size: 1rem;
 }
 
-/* Media queries for different mobile sizes */
 @media (max-width: 480px) {
   .mobile-forgot-password-container {
     padding: 0.75rem;
@@ -790,11 +727,10 @@ export default {
   }
   
   .button-group {
-    flex-direction: column; /* Stack buttons on very small screens */
+    flex-direction: column;
     gap: 0.75rem;
   }
   
-  .secondary-button,
   .action-button {
     width: 100%;
   }
@@ -815,13 +751,11 @@ export default {
   }
 }
 
-/* Enhance accessibility with focus indicators */
 :focus-visible {
   outline: 3px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 
-/* High-contrast text helper classes */
 .mr-1 {
   margin-right: 0.25rem;
 }
