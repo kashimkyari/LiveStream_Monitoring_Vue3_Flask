@@ -131,7 +131,6 @@ import AuthService from '../services/AuthService';
 import { useToast } from 'vue-toastification';
 import anime from 'animejs/lib/anime.es.js';
 
-
 export default {
   name: 'MobileLogin',
   emits: ['login-success', 'forgot-password', 'create-account'],
@@ -178,6 +177,7 @@ export default {
     const handleLogin = async () => {
       if (!username.value || !password.value) {
         errorMessage.value = 'Please enter both username and password.';
+        toast.error('Please enter both username and password.');
         return;
       }
 
@@ -196,106 +196,106 @@ export default {
         const result = await AuthService.login(username.value, password.value);
 
         if (result.success) {
-          if (rememberMe.value) {
-            localStorage.setItem('rememberedUsername', username.value);
-          } else {
-            localStorage.removeItem('rememberedUsername');
-          }
           toast.success('Login successful!');
           emit('login-success', result.user);
           loginSuccess.value = true;
 
           await nextTick();
 
-          // Create particles
-          const particleContainer = document.querySelector('.particle-container');
-          for (let i = 0; i < 20; i++) {
-            const particle = document.createElement('div');
-            particle.className = 'particle';
-            particle.innerHTML = `
-              <svg width="10" height="10" viewBox="0 0 10 10">
-                <path d="M5 0L6.12 3.88H10L7.24 6.12L8.36 10L5 7.76L1.64 10L2.76 6.12L0 3.88H3.88L5 0Z" fill="var(--success-color)"/>
-              </svg>
-            `;
-            particleContainer.appendChild(particle);
-          }
-
-          // Animation timeline
-          const timeline = anime.timeline({
-            easing: 'easeOutExpo',
-            complete: () => {
-              window.location.href = '/'; // Navigate after animation
+          // Small delay to ensure DOM is ready
+          setTimeout(() => {
+            // Create particles
+            const particleContainer = document.querySelector('.particle-container');
+            for (let i = 0; i < 20; i++) {
+              const particle = document.createElement('div');
+              particle.className = 'particle';
+              particle.innerHTML = `
+                <svg width="10" height="10" viewBox="0 0 10 10">
+                  <path d="M5 0L6.12 3.88H10L7.24 6.12L8.36 10L5 7.76L1.64 10L2.76 6.12L0 3.88H3.88L5 0Z" fill="var(--success-color)"/>
+                </svg>
+              `;
+              particleContainer.appendChild(particle);
             }
-          });
 
-          // Progress bar animation
-          timeline
-            .add({
-              targets: '.progress-fill',
-              width: '100%',
-              duration: 800
-            })
-            // Fade out progress bar
-            .add({
-              targets: '.progress-bar',
-              opacity: 0,
-              duration: 200,
+            // Animation timeline
+            const timeline = anime.timeline({
+              easing: 'easeOutExpo',
               complete: () => {
-                document.querySelector('.progress-bar').style.display = 'none';
+                toast.info('Redirecting to dashboard...');
+                window.location.replace('/index'); // Best approach for redirect
               }
-            })
-            // Checkmark and welcome message animation
-            .add({
-              targets: '.success-checkmark',
-              scale: [0, 1.2, 1],
-              opacity: [0, 1],
-              duration: 600,
-              easing: 'easeOutBack'
-            }, '-=200')
-            .add({
-              targets: '.welcome-message',
-              translateY: [20, 0],
-              opacity: [0, 1],
-              duration: 400
-            }, '-=400')
-            // Particle burst
-            .add({
-              targets: '.particle',
-              translateX: () => anime.random(-100, 100),
-              translateY: () => anime.random(-100, 100),
-              scale: [0.5, 1.5, 0],
-              opacity: [0, 1, 0],
-              duration: 1000,
-              delay: anime.stagger(50)
-            }, '-=600')
-            // Fade out entire overlay
-            .add({
-              targets: '.animation-overlay',
-              opacity: 0,
-              duration: 400
             });
+
+            // Progress bar animation
+            timeline
+              .add({
+                targets: '.progress-fill',
+                width: '100%',
+                duration: 800
+              })
+              // Fade out progress bar
+              .add({
+                targets: '.progress-bar',
+                opacity: 0,
+                duration: 200,
+                complete: () => {
+                  document.querySelector('.progress-bar').style.display = 'none';
+                }
+              })
+              // Checkmark and welcome message animation
+              .add({
+                targets: '.success-checkmark',
+                scale: [0, 1.2, 1],
+                opacity: [0, 1],
+                duration: 600,
+                easing: 'easeOutBack'
+              }, '-=200')
+              .add({
+                targets: '.welcome-message',
+                translateY: [20, 0],
+                opacity: [0, 1],
+                duration: 400
+              }, '-=400')
+              // Particle burst
+              .add({
+                targets: '.particle',
+                translateX: () => anime.random(-100, 100),
+                translateY: () => anime.random(-100, 100),
+                scale: [0.5, 1.5, 0],
+                opacity: [0, 1, 0],
+                duration: 1000,
+                delay: anime.stagger(50)
+              }, '-=600')
+              // Fade out entire overlay
+              .add({
+                targets: '.animation-overlay',
+                opacity: 0,
+                duration: 400
+              });
+          }, 100); // 100ms delay to ensure DOM readiness
         } else {
-          const errorMsg = result.message || 'Login failed. Please try again.';
-          errorMessage.value = errorMsg;
+          errorMessage.value = result.message;
+          toast.error(result.message);
           if (analyzeContext) {
             analyzeContext({
               screen: 'login',
               action: 'error',
-              error: { message: errorMsg }
+              error: { message: result.message }
             });
           }
         }
       } catch (error) {
-        console.error('Login error:', error);
+        console.error('Unexpected login error:', error);
         const errorMsg = 'An unexpected error occurred. Please try again.';
         errorMessage.value = errorMsg;
+        toast.error(errorMsg);
         if (analyzeContext) {
           analyzeContext({
             screen: 'login',
             action: 'error',
             error: {
               message: errorMsg,
-              details: error.message || 'Connection error'
+              details: error.message || 'Unknown error'
             }
           });
         }
@@ -335,14 +335,6 @@ export default {
           localStorage.setItem('login_help_shown', 'true');
         }
       }, 500);
-
-      // Ensure anime.js is loaded
-      if (!window.anime) {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js';
-        script.async = true;
-        document.head.appendChild(script);
-      }
     });
 
     return {
@@ -367,7 +359,6 @@ export default {
 <style scoped>
 /* Define color variables for light and dark themes */
 :root {
-  /* Light theme (default) */
   --primary-color: #5e72e4;
   --primary-dark: #324cdd;
   --secondary-color: #8392ab;
@@ -426,11 +417,10 @@ export default {
   padding: 1rem;
   background-color: var(--background-color);
   width: 100%;
-  position: relative; /* For positioning the theme toggle */
+  position: relative;
   transition: background-color 0.3s ease;
 }
 
-/* Theme toggle button positioning and styling */
 .theme-toggle {
   position: absolute;
   top: 1rem;
@@ -462,12 +452,12 @@ export default {
 
 .login-container {
   width: 100%;
-  max-width: 100%; /* Full width on mobile */
+  max-width: 100%;
   background-color: var(--surface-color);
   border-radius: 1rem;
   box-shadow: 0 0.25rem 0.75rem var(--shadow-color);
   padding: 1.5rem;
-  margin-top: 4rem; /* Increased for better spacing with theme toggle */
+  margin-top: 4rem;
   transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -534,7 +524,7 @@ export default {
   color: var(--text-primary);
   transition: all 0.3s ease;
   height: 3rem;
-  -webkit-appearance: none; /* Remove default styling on iOS */
+  -webkit-appearance: none;
 }
 
 .input-container input:focus {
@@ -566,8 +556,8 @@ export default {
   align-items: center;
   justify-content: center;
   height: 3rem;
-  width: 3rem; /* Increased for better touch target */
-  min-width: 3rem; /* Ensure minimum width for accessibility */
+  width: 3rem;
+  min-width: 3rem;
   transition: color 0.2s ease;
 }
 
@@ -595,8 +585,8 @@ export default {
 }
 
 .remember-me input[type="checkbox"] {
-  width: 1.25rem; /* Increased for better touch target */
-  height: 1.25rem; /* Increased for better touch target */
+  width: 1.25rem;
+  height: 1.25rem;
   accent-color: var(--primary-color);
   margin: 0;
   -webkit-appearance: none;
@@ -633,7 +623,7 @@ export default {
 .remember-me label {
   color: var(--text-secondary);
   font-weight: 500;
-  font-size: 0.875rem; /* Increased for readability */
+  font-size: 0.875rem;
   transition: color 0.3s ease;
 }
 
@@ -641,13 +631,13 @@ export default {
   color: var(--primary-color);
   background: none;
   border: none;
-  padding: 0.5rem; /* Added padding for better touch target */
-  font-size: 0.875rem; /* Increased for readability */
+  padding: 0.5rem;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
   transition: color 0.2s;
-  min-height: 2.5rem; /* Ensure minimum height for accessibility */
+  min-height: 2.5rem;
   border-radius: 0.25rem;
 }
 
@@ -668,7 +658,7 @@ export default {
   background-color: var(--error-bg);
   color: var(--danger-color);
   border-radius: 0.5rem;
-  font-size: 0.875rem; /* Increased for readability */
+  font-size: 0.875rem;
   margin-top: 0.5rem;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
@@ -679,14 +669,14 @@ export default {
   border: none;
   border-radius: 0.5rem;
   padding: 0;
-  font-size: 1rem; /* Increased for readability */
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.3s ease, transform 0.2s ease;
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 3rem; /* Increased for better touch target */
+  height: 3rem;
   width: 100%;
   margin-top: 0.5rem;
   box-shadow: 0 0.25rem 0.375rem var(--shadow-color-intense), 0 0.0625rem 0.1875rem var(--shadow-color);
@@ -722,7 +712,7 @@ export default {
   justify-content: center;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.875rem; /* Increased for readability */
+  font-size: 0.875rem;
   margin-top: 1.5rem;
   color: var(--text-secondary);
   transition: color 0.3s ease;
@@ -732,12 +722,12 @@ export default {
   color: var(--primary-color);
   background: none;
   border: none;
-  padding: 0.5rem; /* Added padding for better touch target */
+  padding: 0.5rem;
   font-weight: 600;
-  font-size: 0.875rem; /* Increased for readability */
+  font-size: 0.875rem;
   cursor: pointer;
   transition: color 0.2s;
-  min-height: 2.5rem; /* Ensure minimum height for accessibility */
+  min-height: 2.5rem;
   border-radius: 0.25rem;
 }
 
@@ -750,7 +740,6 @@ export default {
   color: var(--primary-dark);
 }
 
-/* Animation overlay and success animation styles */
 .animation-overlay {
   position: fixed;
   top: 0;
@@ -825,26 +814,23 @@ export default {
   transform: translate(-50%, -50%);
 }
 
-/* Fix for iOS input zoom issue */
 @media screen and (-webkit-min-device-pixel-ratio: 0) {
   select,
   textarea,
   input[type="text"],
   input[type="password"],
   input[type="number"] {
-    font-size: 16px; /* iOS doesn't zoom on inputs with font-size >= 16px */
+    font-size: 16px;
   }
 }
 
-/* Media query for devices in portrait orientation */
 @media screen and (orientation: portrait) {
   .login-container {
-    margin-top: 5rem; /* Adjusted for theme toggle */
+    margin-top: 5rem;
     padding: 1.75rem;
   }
 }
 
-/* Additional mobile-specific adjustments */
 @media (max-width: 380px) {
   .login-container {
     padding: 1.25rem;
@@ -862,11 +848,10 @@ export default {
   
   .forgot-password-link {
     align-self: flex-end;
-    margin-top: -2.5rem; /* Adjusted for larger touch target */
+    margin-top: -2.5rem;
   }
 }
 
-/* Handle iPhone notch areas */
 @supports (padding: max(0px)) {
   .mobile-login {
     padding-left: max(1rem, env(safe-area-inset-left));
@@ -875,7 +860,6 @@ export default {
     padding-top: max(1rem, env(safe-area-inset-top));
   }
   
-  /* Adjust theme toggle position for notch */
   .theme-toggle {
     right: max(1rem, env(safe-area-inset-right));
     top: max(1rem, env(safe-area-inset-top));
