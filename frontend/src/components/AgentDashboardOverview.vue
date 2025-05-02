@@ -8,7 +8,10 @@
       </div>
       <div class="stats-container">
         <div class="stat-item" v-for="(value, key, index) in stats" :key="key" :ref="el => { if (el) statItems[index] = el }">
-          <div class="stat-value">{{ value }}</div>
+          <div class="stat-icon">
+            <font-awesome-icon :icon="getStatIcon(key)" />
+          </div>
+          <div class="stat-value" :data-value="value">{{ value }}</div>
           <div class="stat-label">{{ formatStatLabel(key) }}</div>
         </div>
       </div>
@@ -20,8 +23,8 @@
         <h2>Recent Alerts</h2>
         <span class="view-all" @click="$emit('navigate', 'notifications')">View All</span>
       </div>
-      <div v-if="recentAlerts.length > 0">
-        <div v-for="(alert, index) in recentAlerts" :key="index" class="alert-item" :ref="el => { if (el) alertItems[index] = el }">
+      <transition-group name="list" tag="div" class="alerts-container">
+        <div v-for="(alert, index) in recentAlerts" :key="alert.id" class="alert-item" :class="{ unread: !alert.read }" @click="$emit('view-alert', alert.id)" :ref="el => { if (el) alertItems[index] = el }">
           <div class="alert-icon" :class="alert.level">
             <font-awesome-icon :icon="getAlertIcon(alert.level)" />
           </div>
@@ -31,8 +34,8 @@
             <div class="alert-time">{{ formatTimestamp(alert.timestamp) }}</div>
           </div>
         </div>
-      </div>
-      <div v-else class="empty-state">
+      </transition-group>
+      <div v-if="recentAlerts.length === 0" class="empty-state">
         <font-awesome-icon :icon="['fas', 'bell-slash']" class="empty-icon" />
         <div class="empty-message">No recent alerts</div>
       </div>
@@ -44,10 +47,10 @@
         <h2>Active Streams</h2>
         <span class="view-all" @click="$emit('navigate', 'streams')">View All</span>
       </div>
-      <div v-if="activeStreams.length > 0">
-        <div v-for="(stream, index) in activeStreams" :key="index" class="stream-item" :ref="el => { if (el) streamItems[index] = el }">
+      <transition-group name="list" tag="div" class="streams-container">
+        <div v-for="(stream, index) in activeStreams" :key="stream.id" class="stream-item" @click="$emit('view-stream', stream.id)" :ref="el => { if (el) streamItems[index] = el }">
           <div class="stream-preview">
-            <div class="stream-status-indicator" :class="{ live: stream.isLive }"></div>
+            <div class="stream-status-indicator" :class="{ live: stream.isLive }" :title="stream.isLive ? 'Live' : 'Offline'"></div>
             <div class="stream-thumbnail"></div>
           </div>
           <div class="stream-content">
@@ -56,8 +59,8 @@
             <div class="stream-duration">{{ stream.assigned_agent ? `Agent: ${stream.assigned_agent}` : 'Unassigned' }}</div>
           </div>
         </div>
-      </div>
-      <div v-else class="empty-state">
+      </transition-group>
+      <div v-if="activeStreams.length === 0" class="empty-state">
         <font-awesome-icon :icon="['fas', 'video-slash']" class="empty-icon" />
         <div class="empty-message">No active streams</div>
       </div>
@@ -70,7 +73,7 @@
         <span class="card-count">{{ chatKeywords.length }} active</span>
       </div>
       <div class="keywords-container">
-        <div v-for="(keyword, index) in chatKeywords" :key="index" class="keyword-item" :ref="el => { if (el) keywordItems[index] = el }">
+        <div v-for="(keyword, index) in chatKeywords" :key="keyword.id" class="keyword-item" :ref="el => { if (el) keywordItems[index] = el }">
           <div class="keyword-name">{{ keyword.keyword }}</div>
           <div class="keyword-badge" :class="getPriorityClass(keyword)">
             {{ getPriorityLabel(keyword) }}
@@ -86,7 +89,7 @@
         <span class="card-count">{{ flaggedObjects.length }} active</span>
       </div>
       <div class="objects-container">
-        <div v-for="(object, index) in flaggedObjects" :key="index" class="object-item" :ref="el => { if (el) objectItems[index] = el }">
+        <div v-for="(object, index) in flaggedObjects" :key="object.id" class="object-item" :ref="el => { if (el) objectItems[index] = el }">
           <div class="object-icon">
             <font-awesome-icon :icon="getObjectIcon(object.object_name)" />
           </div>
@@ -105,7 +108,7 @@
         <span class="card-count">{{ telegramRecipients.length }} active</span>
       </div>
       <div class="recipients-container">
-        <div v-for="(recipient, index) in telegramRecipients" :key="index" class="recipient-item" :ref="el => { if (el) recipientItems[index] = el }">
+        <div v-for="(recipient, index) in telegramRecipients" :key="recipient.id" class="recipient-item" :ref="el => { if (el) recipientItems[index] = el }">
           <div class="recipient-avatar"></div>
           <div class="recipient-name">{{ recipient.telegram_username }}</div>
           <div class="recipient-status" :class="recipient.active ? 'active' : 'inactive'">
@@ -153,8 +156,7 @@ export default {
       default: () => []
     }
   },
-  emits: ['navigate'],
-  // eslint-disable-next-line
+  emits: ['navigate', 'view-alert', 'view-stream'],
   setup(props) {
     // Refs for animation
     const dashboardGrid = ref(null)
@@ -170,18 +172,16 @@ export default {
     const keywordItems = ref([])
     const objectItems = ref([])
     const recipientItems = ref([])
-    
+
     // Helper methods
     const formatStatLabel = (key) => {
-      if (!key) return '';
-      
-      // Convert camelCase to Title Case with spaces
+      if (!key) return ''
       return key
-        .replace(/([A-Z])/g, ' $1') // Insert a space before all uppercase letters
-        .replace(/^./, str => str.toUpperCase()) // Capitalize the first letter
-        .trim();
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, str => str.toUpperCase())
+        .trim()
     }
-    
+
     const getAlertIcon = (level) => {
       switch (level) {
         case 'critical':
@@ -196,11 +196,9 @@ export default {
           return ['fas', 'bell']
       }
     }
-    
+
     const getPlatformName = (type) => {
-      if (!type) return 'Unknown Platform';
-      
-      // Convert to readable platform name
+      if (!type) return 'Unknown Platform'
       switch (type.toLowerCase()) {
         case 'chaturbate':
           return 'Chaturbate'
@@ -210,11 +208,9 @@ export default {
           return type.charAt(0).toUpperCase() + type.slice(1)
       }
     }
-    
+
     const getObjectIcon = (objectName) => {
-      if (!objectName) return ['fas', 'box'];
-      
-      // Map common objects to appropriate icons
+      if (!objectName) return ['fas', 'box']
       const objectMap = {
         'camera': 'camera',
         'person': 'user',
@@ -225,75 +221,68 @@ export default {
         'flag': 'flag',
         'fire': 'fire'
       }
-      
       const iconName = objectMap[objectName.toLowerCase()] || 'box'
       return ['fas', iconName]
     }
-    
+
     const getPriorityClass = (keyword) => {
-      // Use the keyword object to determine priority
       if (!keyword || !keyword.priority) return 'medium'
-      
-      const priority = keyword.priority.toLowerCase()
-      return priority || 'medium'
+      return keyword.priority.toLowerCase()
     }
-    
+
     const getPriorityLabel = (keyword) => {
-      // Use the keyword object to get the priority label
       if (!keyword || !keyword.priority) return 'Medium'
-      
-      const priority = keyword.priority
-      return priority.charAt(0).toUpperCase() + priority.slice(1)
+      return keyword.priority.charAt(0).toUpperCase() + keyword.priority.slice(1)
     }
-    
+
     const formatTimestamp = (timestamp) => {
-      if (!timestamp) return '';
-      
-      const date = new Date(timestamp);
-      
-      // Check if it's today
-      const today = new Date();
-      const isToday = date.getDate() === today.getDate() && 
-                      date.getMonth() === today.getMonth() && 
-                      date.getFullYear() === today.getFullYear();
-      
+      if (!timestamp) return ''
+      const date = new Date(timestamp)
+      const today = new Date()
+      const isToday = date.getDate() === today.getDate() &&
+                      date.getMonth() === today.getMonth() &&
+                      date.getFullYear() === today.getFullYear()
       if (isToday) {
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
-      
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     }
-    
+
     const getConfidenceClass = (confidence) => {
-      if (!confidence) return 'low';
-      
-      const confidenceValue = parseFloat(confidence);
-      if (confidenceValue >= 80) return 'high';
-      if (confidenceValue >= 50) return 'medium';
-      return 'low';
+      if (!confidence) return 'low'
+      const confidenceValue = parseFloat(confidence)
+      if (confidenceValue >= 80) return 'high'
+      if (confidenceValue >= 50) return 'medium'
+      return 'low'
     }
-    
+
+    const getStatIcon = (key) => {
+      const icons = {
+        totalAlerts: ['fas', 'bell'],
+        activeStreams: ['fas', 'video'],
+        // Add more mappings as needed
+      }
+      return icons[key] || ['fas', 'chart-line']
+    }
+
     // Animation function
     const animateDashboard = () => {
       nextTick(() => {
-        // Create a timeline for animated entrance
         const tl = anime.timeline({
           easing: 'easeOutExpo',
           duration: 600
-        });
-        
-        // Animate stats card if it exists
+        })
+
         if (statsCard.value) {
           tl.add({
             targets: statsCard.value,
             translateY: [20, 0],
             opacity: [0, 1],
             duration: 500
-          });
+          })
         }
-        
-        // Collect and filter valid stat items
-        const validStatItems = statItems.value.filter(Boolean);
+
+        const validStatItems = statItems.value.filter(Boolean)
         if (validStatItems.length > 0) {
           tl.add({
             targets: validStatItems,
@@ -301,18 +290,24 @@ export default {
             opacity: [0, 1],
             delay: anime.stagger(80),
             duration: 600
-          }, '-=400');
+          }, '-=400')
+          tl.add({
+            targets: '.stat-value',
+            innerHTML: [0, function(el) { return el.dataset.value }],
+            round: 1,
+            easing: 'easeOutExpo',
+            duration: 1000
+          }, '-=400')
         }
-        
-        // Collect cards that exist in the DOM
+
         const cards = [
           alertsCard.value,
           streamsCard.value,
           keywordsCard.value,
           objectsCard.value,
           telegramCard.value
-        ].filter(Boolean);
-        
+        ].filter(Boolean)
+
         if (cards.length > 0) {
           tl.add({
             targets: cards,
@@ -320,77 +315,17 @@ export default {
             opacity: [0, 1],
             delay: anime.stagger(100),
             duration: 600
-          }, '-=400');
+          }, '-=400')
         }
-        
-        // Animate alert items
-        const validAlertItems = alertItems.value.filter(Boolean);
-        if (validAlertItems.length > 0) {
-          tl.add({
-            targets: validAlertItems,
-            translateX: [10, 0],
-            opacity: [0, 1],
-            delay: anime.stagger(50, {start: 300}),
-            duration: 500
-          }, '-=500');
-        }
-        
-        // Animate stream items
-        const validStreamItems = streamItems.value.filter(Boolean);
-        if (validStreamItems.length > 0) {
-          tl.add({
-            targets: validStreamItems,
-            translateX: [10, 0],
-            opacity: [0, 1],
-            delay: anime.stagger(50, {start: 400}),
-            duration: 500
-          }, '-=450');
-        }
-        
-        // Animate keyword items
-        const validKeywordItems = keywordItems.value.filter(Boolean);
-        if (validKeywordItems.length > 0) {
-          tl.add({
-            targets: validKeywordItems,
-            scale: [0.9, 1],
-            opacity: [0, 1],
-            delay: anime.stagger(30, {start: 500}),
-            duration: 400
-          }, '-=400');
-        }
-        
-        // Animate object items
-        const validObjectItems = objectItems.value.filter(Boolean);
-        if (validObjectItems.length > 0) {
-          tl.add({
-            targets: validObjectItems,
-            scale: [0.9, 1],
-            opacity: [0, 1],
-            delay: anime.stagger(30, {start: 600}),
-            duration: 400
-          }, '-=350');
-        }
-        
-        // Animate recipient items
-        const validRecipientItems = recipientItems.value.filter(Boolean);
-        if (validRecipientItems.length > 0) {
-          tl.add({
-            targets: validRecipientItems,
-            translateY: [10, 0],
-            opacity: [0, 1],
-            delay: anime.stagger(50, {start: 700}),
-            duration: 400
-          }, '-=300');
-        }
-      });
+      })
     }
-    
-    // Run animations when component is mounted
+
     onMounted(() => {
-      animateDashboard();
-    });
-    
+      animateDashboard()
+    })
+
     return {
+      props,
       dashboardGrid,
       statsCard,
       alertsCard,
@@ -411,13 +346,106 @@ export default {
       getPriorityClass,
       getPriorityLabel,
       formatTimestamp,
-      getConfidenceClass
+      getConfidenceClass,
+      getStatIcon
     }
   }
 }
 </script>
 
 <style scoped>
+/* Existing styles remain, with additions below */
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-areas:
+    "stats stats"
+    "alerts streams"
+    "keywords objects"
+    "telegram telegram";
+  gap: 24px;
+}
+
+@media (max-width: 1200px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "stats"
+      "alerts"
+      "streams"
+      "keywords"
+      "objects"
+      "telegram";
+  }
+}
+
+.stats-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.stat-item {
+  flex: 1;
+  min-width: 120px;
+  text-align: center;
+  padding: 16px;
+  border-radius: 8px;
+  background-color: var(--bg-light);
+  opacity: 0;
+}
+
+.stat-icon {
+  font-size: 1.5rem;
+  margin-bottom: 8px;
+  color: var(--primary-color);
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.alert-item {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.alert-item:hover {
+  transform: translateY(-2px);
+}
+
+.alert-item.unread {
+  background-color: var(--bg-unread);
+  font-weight: bold;
+}
+
+.stream-item {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.stream-item:hover {
+  transform: translateY(-2px);
+}
+
+.list-enter-active, .list-leave-active {
+  transition: all 0.5s ease;
+}
+
+.list-enter, .list-leave-to {
+  opacity: 0;
+  transform: translateY(30px);
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

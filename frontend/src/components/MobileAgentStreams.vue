@@ -1192,6 +1192,12 @@ watch(viewMode, (newMode) => {
   z-index: 1;
 }
 
+.mini-video-player {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
 .mini-player-instance {
   width: 100%;
   height: 100%;

@@ -1,85 +1,90 @@
 <template>
   <div v-if="show" class="video-player-modal">
-    <div class="modal-overlay" @click="closeModal"></div>
+    <div v-if="stream" class="modal-overlay" @click="closeModal"></div>
     <div class="modal-content">
-      <!-- Modal Header -->
-      <div class="modal-header">
-        <div class="modal-title">
-          <h3>{{ stream.streamer_username }}</h3>
-          <div class="stream-platform" :class="stream.platform?.toLowerCase()">
-            {{ stream.platform }}
+      <div v-if="stream">
+        <!-- Modal Header -->
+        <div class="modal-header">
+          <div class="modal-title">
+            <h3>{{ stream.streamer_username }}</h3>
+            <div class="stream-platform" :class="stream.platform?.toLowerCase()">
+              {{ stream.platform }}
+            </div>
+            <div class="stream-status-badge">
+              <span class="live-dot"></span>LIVE
+            </div>
           </div>
-          <div class="stream-status-badge">
-            <span class="live-dot"></span>LIVE
+          <button class="close-btn" @click="closeModal">
+            <font-awesome-icon icon="times" />
+          </button>
+        </div>
+        
+        <!-- Video Player -->
+        <div class="video-container">
+          <div class="video-player">
+            <div class="full-player">
+              <video 
+                ref="videoPlayer" 
+                class="full-video-player" 
+                playsinline
+                autoplay
+              ></video>
+              <button 
+                v-if="!isPlaying" 
+                class="play-overlay-btn"
+                @click="startPlayback"
+              >
+                <font-awesome-icon icon="play" size="3x" />
+              </button>
+            </div>
           </div>
         </div>
-        <button class="close-btn" @click="closeModal">
-          <font-awesome-icon icon="times" />
-        </button>
-      </div>
-      
-      <!-- Video Player -->
-      <div class="video-container">
-        <div class="video-player">
-          <div class="full-player">
-            <video 
-              ref="videoPlayer" 
-              class="full-video-player" 
-              playsinline
-              autoplay
-            ></video>
+        
+        <!-- Stream Metadata -->
+        <div class="stream-metadata">
+          <div class="meta-row">
+            <div class="platform-badge" :class="stream.platform?.toLowerCase()">
+              {{ stream.platform }}
+            </div>
+            <div class="viewer-count">
+              <font-awesome-icon icon="eye" /> {{ formatNumber(stream.viewer_count || 0) }} viewers
+            </div>
+          </div>
+          <div class="meta-row">
+            <div class="stream-time">
+              <font-awesome-icon icon="clock" /> 
+              Streaming {{ formatStreamTime(stream.stream_start_time) }}
+            </div>
+            <div class="status-group">
+              <div class="live-status">
+                <span class="live-dot"></span> LIVE
+              </div>
+              <div v-if="stream.detection_status" class="detection-status">
+                {{ stream.detection_status }}
+              </div>
+            </div>
+          </div>
+          <div class="detection-controls">
             <button 
-              v-if="!isPlaying" 
-              class="play-overlay-btn"
-              @click="startPlayback"
+              class="detection-trigger-btn" 
+              :class="{ 'active': stream.detection_active }"
+              @click="toggleDetection"
             >
-              <font-awesome-icon icon="play" size="3x" />
+              <font-awesome-icon :icon="stream.detection_active ? 'stop' : 'play'" />
+              {{ stream.detection_active ? 'Stop Detection' : 'Start Detection' }}
+            </button>
+            <button class="refresh-stream-btn" @click="refreshStream">
+              <font-awesome-icon icon="sync" />
+              Refresh Stream
             </button>
           </div>
+          <div class="stream-url">
+            <p><strong>Room URL:</strong> <a :href="stream.room_url" target="_blank">{{ stream.room_url }}</a></p>
+          </div>
         </div>
       </div>
-      
-      <!-- Stream Metadata -->
-      <div class="stream-metadata">
-        <div class="meta-row">
-          <div class="platform-badge" :class="stream.platform?.toLowerCase()">
-            {{ stream.platform }}
-          </div>
-          <div class="viewer-count">
-            <font-awesome-icon icon="eye" /> {{ formatNumber(stream.viewer_count || 0) }} viewers
-          </div>
-        </div>
-        <div class="meta-row">
-          <div class="stream-time">
-            <font-awesome-icon icon="clock" /> 
-            Streaming {{ formatStreamTime(stream.stream_start_time) }}
-          </div>
-          <div class="status-group">
-            <div class="live-status">
-              <span class="live-dot"></span> LIVE
-            </div>
-            <div v-if="stream.detection_status" class="detection-status">
-              {{ stream.detection_status }}
-            </div>
-          </div>
-        </div>
-        <div class="detection-controls">
-          <button 
-            class="detection-trigger-btn" 
-            :class="{ 'active': stream.detection_active }"
-            @click="toggleDetection"
-          >
-            <font-awesome-icon :icon="stream.detection_active ? 'stop' : 'play'" />
-            {{ stream.detection_active ? 'Stop Detection' : 'Start Detection' }}
-          </button>
-          <button class="refresh-stream-btn" @click="refreshStream">
-            <font-awesome-icon icon="sync" />
-            Refresh Stream
-          </button>
-        </div>
-        <div class="stream-url">
-          <p><strong>Room URL:</strong> <a :href="stream.room_url" target="_blank">{{ stream.room_url }}</a></p>
-        </div>
+      <div v-else>
+        <p>No stream selected</p>
       </div>
     </div>
   </div>
@@ -125,17 +130,20 @@ watch(() => props.show, (newValue) => {
 });
 
 // Watch for changes in the stream's video URL
-watch(() => props.stream.video_url, (newUrl) => {
-  if (newUrl && props.show) {
-    // Reinitialize player when stream URL changes
-    destroyPlayer();
-    initializePlayer();
+watch(
+  () => props.stream?.video_url,
+  (newUrl) => {
+    if (newUrl && props.show) {
+      // Reinitialize player when stream URL changes
+      destroyPlayer();
+      initializePlayer();
+    }
   }
-});
+);
 
 // Initialize the video player
 const initializePlayer = () => {
-  if (!videoPlayer.value || !props.stream.video_url) return;
+  if (!videoPlayer.value || !props.stream?.video_url) return;
 
   if (Hls.isSupported()) {
     const hls = new Hls({
@@ -516,8 +524,7 @@ onUnmounted(() => {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
-  border: none;
-}
+  }
 
 .detection-trigger-btn {
   background-color: #2563eb;

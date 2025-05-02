@@ -15,10 +15,10 @@
       ref="spinnerContainer" 
       @mouseenter="handleSpinnerHover" 
       @mouseleave="handleSpinnerLeave">
-        <div class="spinner">
+        <div class="spinner" ref="spinner">
           <div class="spinner-circle" v-for="n in 12" :key="n" :style="`--i: ${n}`"></div>
         </div>
-        <div class="spinner-text">Verifying session...</div>
+        <div class="spinner-text">{{ loadingMessage }}</div>
       </div>
     </div>
     
@@ -32,6 +32,7 @@
             @login-success="handleLoginSuccess"
             @forgot-password="mobileAuthView = 'forgot-password'"
             @create-account="mobileAuthView = 'create-account'"
+            :is-offline="isOffline"
             key="mobile-login"
           />
           <MobileForgotPassword
@@ -57,6 +58,11 @@
       
       <div v-else-if="!isCheckingAuth && isLoggedIn" class="dashboard" key="dashboard" ref="dashboardContainer">
         <div class="content-area theme-container">
+          <!-- Connection status indicator for mobile -->
+          <div v-if="isOffline" class="offline-indicator">
+            <font-awesome-icon icon="wifi-slash" /> Offline Mode
+          </div>
+          
           <!-- Debug info to help troubleshoot -->
           <div class="debug-info" v-if="showDebugInfo">
             <p>User Role: {{ userRole }}</p>
@@ -65,6 +71,8 @@
             <p>Is Mobile: {{ isMobile }}</p>
             <p>Is Dark Theme: {{ isDarkTheme }}</p>
             <p>Unread Notifications: {{ unreadNotificationCount }}</p>
+            <p>Is Offline: {{ isOffline }}</p>
+            <p>Session Last Checked: {{ sessionLastChecked }}</p>
           </div>
           
           <!-- Use appropriate component based on device type -->
@@ -74,6 +82,7 @@
               key="mobile-admin"
               :theme="isDarkTheme ? 'dark' : 'light'"
               :unread-notifications="unreadNotificationCount"
+              :is-offline="isOffline"
             />
             <AdminDashboard v-else key="admin" />
           </template>
@@ -85,6 +94,7 @@
               key="mobile-agent"
               :theme="isDarkTheme ? 'dark' : 'light'"
               :unread-notifications="unreadNotificationCount"
+              :is-offline="isOffline"
             />
             <AgentDashboard v-else key="agent" />
           </template>
@@ -98,8 +108,6 @@
               Logout and Try Again
             </button>
           </div>
-          
-          
         </div>
       </div>
     </transition>
@@ -107,14 +115,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, provide } from 'vue'
+import { ref, onMounted, onUnmounted, watch, provide } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import {
   faMoon, faSun, faSignOutAlt, faBroadcastTower, faTachometerAlt,
   faVideo, faExclamationTriangle, faChartLine, faCog, faUserLock,
   faUser, faLock, faBell, faComment, faCommentAlt, faEye, faCommentDots,
-  faExclamationCircle, faEyeSlash, faSpinner
+  faExclamationCircle, faEyeSlash, faSpinner, faWifi3
 } from '@fortawesome/free-solid-svg-icons'
 import { faGoogle, faApple } from '@fortawesome/free-brands-svg-icons'
 import axios from 'axios'
@@ -136,13 +144,12 @@ import 'vue-toastification/dist/index.css'
 import { useIsMobile } from './composables/useIsMobile'
 import { SpeedInsights } from '@vercel/speed-insights/vue';
 
-
-// Icon setup
+// Icon setup - added WiFi slash icon
 const faIcons = [
   faMoon, faSun, faSignOutAlt, faBroadcastTower, faTachometerAlt,
   faVideo, faExclamationTriangle, faChartLine, faCog, faUserLock,
   faUser, faLock, faBell, faComment, faCommentAlt, faEye, faCommentDots,
-  faExclamationCircle, faEyeSlash, faSpinner
+  faExclamationCircle, faEyeSlash, faSpinner, faWifi3
 ]
 const fabIcons = [faGoogle, faApple]
 library.add(...faIcons, ...fabIcons)
@@ -163,6 +170,20 @@ const spinner = ref(null)
 const showDebugInfo = ref(false)
 const mobileAuthView = ref('login')
 const unreadNotificationCount = ref(0)
+const isOffline = ref(false)
+const sessionLastChecked = ref('Never')
+const loadingMessage = ref('Verifying session...')
+const maxRetryAttempts = 3
+const retryAttempts = ref(0)
+const retryDelay = 3000 // 3 seconds
+const sessionToken = ref(null)
+const sessionExpiry = ref(null)
+
+// Local session storage keys
+const SESSION_TOKEN_KEY = 'session_token'
+const SESSION_EXPIRY_KEY = 'session_expiry'
+const USER_ROLE_KEY = 'userRole'
+const LAST_CHECKED_KEY = 'session_last_checked'
 
 // Composables
 const { isMobile } = useIsMobile()
@@ -290,6 +311,89 @@ const initSpinnerAnimation = () => {
   })
 }
 
+// Check if the network is online
+const checkNetworkStatus = () => {
+  const online = navigator.onLine
+  isOffline.value = !online
+  
+  if (!online && isLoggedIn.value) {
+    toast.warning("You're currently offline. Limited functionality available.")
+  }
+  
+  return online
+}
+
+// Network event listeners
+const handleNetworkChange = () => {
+  const wasOffline = isOffline.value
+  const online = checkNetworkStatus()
+  
+  if (online && wasOffline) {
+    toast.info("You're back online. Syncing data...")
+    // Try to refresh session data when back online
+    checkAuthentication(true)
+  }
+}
+
+// Check if session token is expired
+const isSessionExpired = () => {
+  if (!sessionExpiry.value) return true
+  return new Date().getTime() > parseInt(sessionExpiry.value)
+}
+
+// Store session token in localStorage
+const storeSessionToken = (token, expiresIn = 86400) => {
+  if (!token) return
+  
+  sessionToken.value = token
+  // Calculate expiry time (current time + expiresIn in ms)
+  const expiryTime = new Date().getTime() + (expiresIn * 1000)
+  sessionExpiry.value = expiryTime.toString()
+  
+  // Store in localStorage for persistence
+  localStorage.setItem(SESSION_TOKEN_KEY, token)
+  localStorage.setItem(SESSION_EXPIRY_KEY, expiryTime.toString())
+  
+  // Set for future API calls
+  axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+  
+  console.log(`Session token stored. Expires in ${expiresIn} seconds`)
+}
+
+// Try to restore session from localStorage
+const restoreSessionFromStorage = () => {
+  const storedToken = localStorage.getItem(SESSION_TOKEN_KEY)
+  const storedExpiry = localStorage.getItem(SESSION_EXPIRY_KEY)
+  const storedRole = localStorage.getItem(USER_ROLE_KEY)
+  const lastChecked = localStorage.getItem(LAST_CHECKED_KEY)
+  
+  if (lastChecked) {
+    sessionLastChecked.value = new Date(parseInt(lastChecked)).toLocaleString()
+  }
+  
+  if (storedToken && storedExpiry) {
+    sessionToken.value = storedToken
+    sessionExpiry.value = storedExpiry
+    
+    // Check if token is not expired
+    if (!isSessionExpired()) {
+      // Set the token in the Authorization header
+      axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
+      
+      // If we have a valid stored role, use it
+      if (storedRole) {
+        console.log('Restoring session from storage with role:', storedRole)
+        userRole.value = storedRole
+        return true
+      }
+    } else {
+      console.log('Stored session token is expired')
+    }
+  }
+  
+  return false
+}
+
 // Authentication handling
 const hideSpinner = () => {
   anime({
@@ -304,14 +408,55 @@ const hideSpinner = () => {
 const handleAuthSuccess = (user) => {
   isLoggedIn.value = true
   userRole.value = user.role
-  localStorage.setItem('userRole', user.role)
+  localStorage.setItem(USER_ROLE_KEY, user.role)
   animateControls()
+  
+  // Store session info
+  if (user.token) {
+    storeSessionToken(user.token, user.expiresIn || 86400)
+  }
+  
+  // Record the last time we checked the session
+  const now = new Date().getTime()
+  localStorage.setItem(LAST_CHECKED_KEY, now.toString())
+  sessionLastChecked.value = new Date(now).toLocaleString()
 }
 
-const checkAuthentication = async () => {
+const checkAuthentication = async (isRetry = false) => {
   try {
+    // If retrying, update loading message
+    if (isRetry) {
+      loadingMessage.value = `Reconnecting... (Attempt ${retryAttempts.value + 1}/${maxRetryAttempts})`
+    } else {
+      loadingMessage.value = 'Verifying session...'
+    }
+    
+    // Check if we're offline
+    if (!checkNetworkStatus()) {
+      console.log("Device is offline, checking for stored session")
+      
+      // Try to use stored session data
+      if (restoreSessionFromStorage()) {
+        console.log("Using stored credentials in offline mode")
+        isLoggedIn.value = true
+        hideSpinner()
+        return
+      } else {
+        console.log("No valid stored session found for offline mode")
+        isLoggedIn.value = false
+        hideSpinner()
+        return
+      }
+    }
+    
+    // First try to use stored session if available
+    const useStoredSession = restoreSessionFromStorage()
+    if (useStoredSession) {
+      console.log("Found stored session, validating with server...")
+    }
+    
     // Enable debug logging for session check
-    console.log("Checking authentication status")
+    console.log("Checking authentication status with server")
     
     const { data } = await axios.get('/api/session')
     console.log("Session check response:", data)
@@ -320,15 +465,35 @@ const checkAuthentication = async () => {
       console.log("User is logged in:", data.user)
       handleAuthSuccess(data.user)
     } else {
-      console.log("User is not logged in, checking localStorage fallback")
-      // Try fallback to local storage if session cookie might be missing
-      const storedRole = localStorage.getItem('userRole')
-      if (storedRole) {
-        console.log("Found role in localStorage:", storedRole)
-        // Verify the stored role by making an additional API call or use a token if available
-        // For now, we'll just clear it as it may be stale
-        localStorage.removeItem('userRole')
+      console.log("Server reports user is not logged in, checking localStorage fallback")
+      
+      // If server says not logged in, but we restored from storage:
+      // Could be a cookie issue but token is still valid
+      if (useStoredSession && !isSessionExpired()) {
+        console.log("Session token exists but server reports not logged in, trying token auth")
+        
+        try {
+          // Try to authenticate using the token directly
+          const tokenAuthResponse = await axios.post('/api/auth/token-verify', {
+            token: sessionToken.value
+          })
+          
+          if (tokenAuthResponse.data && tokenAuthResponse.data.valid) {
+            console.log("Token is valid, session restored")
+            handleAuthSuccess({
+              role: userRole.value,
+              token: tokenAuthResponse.data.refreshedToken || sessionToken.value,
+              expiresIn: tokenAuthResponse.data.expiresIn || 86400
+            })
+            hideSpinner()
+            return
+          }
+        } catch (tokenError) {
+          console.error("Token verification failed:", tokenError)
+        }
       }
+      
+      // If we get here, session couldn't be recovered
       logout(false)
     }
   } catch (error) {
@@ -336,8 +501,32 @@ const checkAuthentication = async () => {
     if (error.response) {
       console.error("Error response:", error.response.data)
     }
-    toast.warning("Authentication check failed. Please log in again.")
-    logout(false)
+    
+    // Handle retry logic - especially important for mobile
+    if (retryAttempts.value < maxRetryAttempts) {
+      retryAttempts.value++
+      console.log(`Authentication check failed. Retrying (${retryAttempts.value}/${maxRetryAttempts})...`)
+      
+      // Try to use stored credentials while waiting for retry
+      if (restoreSessionFromStorage() && !isSessionExpired()) {
+        console.log("Using stored credentials while waiting for retry")
+        isLoggedIn.value = true
+        userRole.value = localStorage.getItem(USER_ROLE_KEY)
+      }
+      
+      setTimeout(() => checkAuthentication(true), retryDelay)
+      return
+    }
+    
+    // After max retries, check if we can use offline mode
+    if (restoreSessionFromStorage() && !isSessionExpired()) {
+      console.log("Using stored credentials after max retries")
+      isLoggedIn.value = true
+      toast.warning("Connection issues detected. Using offline mode.")
+    } else {
+      toast.error("Authentication check failed. Please log in again.")
+      logout(false)
+    }
   } finally {
     hideSpinner()
   }
@@ -385,19 +574,70 @@ const animateControls = () => {
   }
 }
 
+// Start periodic session refresh
+const startSessionRefresh = () => {
+  // Check session every 5 minutes
+  const REFRESH_INTERVAL = 5 * 60 * 1000 
+  
+  console.log(`Starting session refresh interval (every ${REFRESH_INTERVAL/1000} seconds)`)
+  
+  // Set up refresh interval
+  const sessionInterval = setInterval(async () => {
+    // Skip refresh if offline
+    if (isOffline.value) {
+      console.log('Skipping session refresh - device is offline')
+      return
+    }
+    
+    console.log('Performing scheduled session refresh')
+    try {
+      const { data } = await axios.get('/api/session')
+      
+      if (data.isLoggedIn) {
+        console.log("Session refreshed successfully")
+        
+        // Update token if provided
+        if (data.user && data.user.token) {
+          storeSessionToken(data.user.token, data.user.expiresIn || 86400)
+        }
+        
+        // Update last checked timestamp
+        const now = new Date().getTime()
+        localStorage.setItem(LAST_CHECKED_KEY, now.toString())
+        sessionLastChecked.value = new Date(now).toLocaleString()
+      } else {
+        console.warn("Session expired during refresh")
+        toast.warning("Your session has expired. Please log in again.")
+        logout(false)
+      }
+    } catch (error) {
+      console.error("Session refresh error:", error)
+      // Don't log out on refresh errors, just keep the existing session
+    }
+  }, REFRESH_INTERVAL)
+  
+  // Store reference to allow cleanup
+  return sessionInterval
+}
+
 // Event handlers
-
-
 const handleLoginSuccess = (userData) => {
   console.log("Login success:", userData)
-  isLoggedIn.value = true
-  userRole.value = userData.role
-  localStorage.setItem('userRole', userData.role)
   
-  // Refresh session info from the server to ensure proper sync
-  setTimeout(() => {
-    checkAuthentication()
-  }, 300)
+  // Reset retry counter
+  retryAttempts.value = 0
+  
+  handleAuthSuccess(userData)
+  
+  // Start session refresh
+  const sessionInterval = startSessionRefresh()
+  
+  // Clear session refresh on component unmount
+  onUnmounted(() => {
+    if (sessionInterval) {
+      clearInterval(sessionInterval)
+    }
+  })
 }
 
 const handleAccountCreated = (username) => {
@@ -407,9 +647,18 @@ const handleAccountCreated = (username) => {
 }
 
 const logout = (showAlert = true) => {
-  localStorage.removeItem('userRole')
+  // Clear session data
+  localStorage.removeItem(SESSION_TOKEN_KEY)
+  localStorage.removeItem(SESSION_EXPIRY_KEY)
+  localStorage.removeItem(USER_ROLE_KEY)
+  
+  // Reset state
   isLoggedIn.value = false
   userRole.value = null
+  sessionToken.value = null
+  sessionExpiry.value = null
+  delete axios.defaults.headers.common['Authorization']
+  
   showAlert && toast.info("You have been logged out")
 }
 
@@ -452,6 +701,13 @@ onMounted(() => {
       toast.info(showDebugInfo.value ? 'Debug mode activated' : 'Debug mode deactivated')
     }
   })
+  
+  // Set up network status listeners
+  window.addEventListener('online', handleNetworkChange)
+  window.addEventListener('offline', handleNetworkChange)
+  
+  // Check initial network status
+  checkNetworkStatus()
   
   // Delay checking authentication slightly to allow spinner animation
   setTimeout(checkAuthentication, 800)

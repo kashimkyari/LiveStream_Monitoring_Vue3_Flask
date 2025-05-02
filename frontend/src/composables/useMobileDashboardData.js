@@ -91,7 +91,7 @@ export function useMobileDashboardData() {
 
   const registerUserActivity = () => {
     // Emit user activity via Socket.IO
-    const socket = io('ws://54.86.99.85:5000', {
+    const socket = io('ws://monitor-backend.jetcamstudio.com:5000', {
           path: '/ws',
           transports: ['websocket', 'polling'],
           reconnection: true,

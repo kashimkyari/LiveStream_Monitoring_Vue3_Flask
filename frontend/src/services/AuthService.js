@@ -9,14 +9,12 @@
  * - Session management
  * - Improved mobile device support
  */
-/* global process */
 import axios from 'axios';
 import { useToast } from 'vue-toastification';
+import sessionService from './SessionService';
 
 // Define the API base URL - switched to HTTP for better compatibility
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://monitor-backend.jetcamstudio.com:5000/api' // Production API URL (using HTTP instead of HTTPS)
-  : '/api'; // Local development API URL (relative path)
+const API_BASE_URL = 'https://monitor-backend.jetcamstudio.com:5000/api'; // Local development API URL (relative path)
 
 // Create axios instance with the base URL
 const apiClient = axios.create({
@@ -44,10 +42,11 @@ class AuthService {
       });
       
       if (response.data && response.data.success) {
-        // Store user info in localStorage
-        localStorage.setItem('userId', response.data.user.id);
-        localStorage.setItem('username', response.data.user.username);
-        localStorage.setItem('userRole', response.data.user.role);
+        // Create session with user data and token
+        sessionService.createSession(
+          response.data.user, 
+          response.data.token || null
+        );
         
         // Set theme if not set
         if (!localStorage.getItem('theme')) {
@@ -89,27 +88,24 @@ class AuthService {
     }
   }
   
-  // Rest of the AuthService class remains the same...
-  // (keeping all other methods identical)
-  
   /**
    * Log out the current user
    * @returns {Promise<boolean>} - Success status
    */
   async logout() {
     try {
+      // First try to notify the server
       await apiClient.post('/logout');
       
-      // Clear local storage
-      localStorage.removeItem('userId');
-      localStorage.removeItem('username');
-      localStorage.removeItem('userRole');
-      
-      return true;
     } catch (error) {
-      console.error('Logout error:', error);
-      return false;
+      console.error('Logout error on server:', error);
+      // Continue with local logout even if server request fails
+    } finally {
+      // Always destroy the local session
+      sessionService.destroySession();
     }
+    
+    return true;
   }
   
   /**
@@ -128,6 +124,11 @@ class AuthService {
       });
       
       if (response.data && response.data.success) {
+        // Automatically log in after successful registration if token provided
+        if (response.data.token) {
+          sessionService.createSession(response.data.user, response.data.token);
+        }
+        
         return {
           success: true,
           user: response.data.user
@@ -394,42 +395,8 @@ class AuthService {
    * @returns {Promise<Object>} - Authentication status
    */
   async checkAuth() {
-    try {
-      const response = await apiClient.get('/check-session');
-      
-      if (response.data && response.data.authenticated) {
-        // Update localStorage with latest user info
-        localStorage.setItem('userId', response.data.user.id);
-        localStorage.setItem('username', response.data.user.username);
-        localStorage.setItem('userRole', response.data.user.role);
-        
-        return {
-          authenticated: true,
-          user: response.data.user
-        };
-      } else {
-        // Clear localStorage if not authenticated
-        localStorage.removeItem('userId');
-        localStorage.removeItem('username');
-        localStorage.removeItem('userRole');
-        
-        return {
-          authenticated: false
-        };
-      }
-    } catch (error) {
-      console.error('Auth check error:', error);
-      
-      // Clear localStorage in case of error
-      localStorage.removeItem('userId');
-      localStorage.removeItem('username');
-      localStorage.removeItem('userRole');
-      
-      return {
-        authenticated: false,
-        error: 'Authentication check failed.'
-      };
-    }
+    // Delegate to the session service
+    return sessionService.checkSession();
   }
   
   /**
@@ -444,7 +411,7 @@ class AuthService {
       if (response.data && response.data.success) {
         // Update localStorage with updated user info
         if (response.data.user) {
-          localStorage.setItem('username', response.data.user.username);
+          sessionService.updateLocalUserData(response.data.user);
         }
         
         return {
@@ -482,6 +449,7 @@ class AuthService {
     const userId = localStorage.getItem('userId');
     const username = localStorage.getItem('username');
     const userRole = localStorage.getItem('userRole');
+    const timestamp = localStorage.getItem('userDataTimestamp');
     
     if (userId && username) {
       return {
@@ -490,7 +458,8 @@ class AuthService {
           id: userId,
           username,
           role: userRole || 'agent'
-        }
+        },
+        timestamp: timestamp ? parseInt(timestamp) : null
       };
     }
     
