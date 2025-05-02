@@ -95,10 +95,6 @@
           </div>
         </button>
         
-        
-        
-        
-        
         <div class="register-option">
           <span>Don't have an account?</span>
           <button 
@@ -112,13 +108,29 @@
         </div>
       </form>
     </div>
+    
+    <!-- Anime.js gamified success animation overlay -->
+    <div v-if="loginSuccess" class="animation-overlay">
+      <div class="success-container">
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+        <div class="success-content">
+          <font-awesome-icon icon="check" class="success-checkmark" />
+          <p class="welcome-message">Welcome Back{{ username ? ', ' + username + '!' : '!' }}</p>
+        </div>
+        <div class="particle-container"></div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
-import { ref, inject, onMounted } from 'vue';
+import { ref, inject, onMounted, nextTick } from 'vue';
 import AuthService from '../services/AuthService';
 import { useToast } from 'vue-toastification';
+import anime from 'animejs/lib/anime.es.js';
+
 
 export default {
   name: 'MobileLogin',
@@ -131,83 +143,140 @@ export default {
     const showPassword = ref(false);
     const isLoading = ref(false);
     const errorMessage = ref('');
-    
-    // Theme state
     const isDarkMode = ref(false);
-    
-    // Toast notifications
+    const loginSuccess = ref(false);
+
     const toast = useToast();
-    
-    // Get context help functions from global context
     const analyzeContext = inject('analyzeContext', null);
-    
+
     // Theme detection and toggle methods
     const detectPreferredTheme = () => {
-      // Check localStorage first
       const savedTheme = localStorage.getItem('theme');
       if (savedTheme) {
         isDarkMode.value = savedTheme === 'dark';
       } else {
-        // Check system preference as fallback
         isDarkMode.value = window.matchMedia('(prefers-color-scheme: dark)').matches;
       }
-      
-      // Apply theme to document
       applyTheme();
     };
-    
+
     const toggleTheme = () => {
       isDarkMode.value = !isDarkMode.value;
       localStorage.setItem('theme', isDarkMode.value ? 'dark' : 'light');
       applyTheme();
     };
-    
+
     const applyTheme = () => {
-      // Set data-theme attribute on document body
       document.documentElement.setAttribute('data-theme', isDarkMode.value ? 'dark' : 'light');
     };
-    
+
     // Original methods
     const togglePasswordVisibility = () => {
       showPassword.value = !showPassword.value;
     };
-    
+
     const handleLogin = async () => {
       if (!username.value || !password.value) {
         errorMessage.value = 'Please enter both username and password.';
         return;
       }
-      
+
       isLoading.value = true;
       errorMessage.value = '';
-      
+
+      // Shake animation for login button
+      anime({
+        targets: '.login-button',
+        translateX: [0, 10, -10, 5, -5, 0],
+        duration: 300,
+        easing: 'easeInOutQuad'
+      });
+
       try {
         const result = await AuthService.login(username.value, password.value);
-        
-        if (result.success) {
-          // Save username in localStorage if remember me is checked
 
-           
+        if (result.success) {
           if (rememberMe.value) {
             localStorage.setItem('rememberedUsername', username.value);
           } else {
             localStorage.removeItem('rememberedUsername');
           }
-
-          
           toast.success('Login successful!');
           emit('login-success', result.user);
-          window.location.href = '/';
+          loginSuccess.value = true;
 
-          
-          
-        }
+          await nextTick();
 
-         else {
+          // Create particles
+          const particleContainer = document.querySelector('.particle-container');
+          for (let i = 0; i < 20; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            particle.innerHTML = `
+              <svg width="10" height="10" viewBox="0 0 10 10">
+                <path d="M5 0L6.12 3.88H10L7.24 6.12L8.36 10L5 7.76L1.64 10L2.76 6.12L0 3.88H3.88L5 0Z" fill="var(--success-color)"/>
+              </svg>
+            `;
+            particleContainer.appendChild(particle);
+          }
+
+          // Animation timeline
+          const timeline = anime.timeline({
+            easing: 'easeOutExpo',
+            complete: () => {
+              window.location.href = '/'; // Navigate after animation
+            }
+          });
+
+          // Progress bar animation
+          timeline
+            .add({
+              targets: '.progress-fill',
+              width: '100%',
+              duration: 800
+            })
+            // Fade out progress bar
+            .add({
+              targets: '.progress-bar',
+              opacity: 0,
+              duration: 200,
+              complete: () => {
+                document.querySelector('.progress-bar').style.display = 'none';
+              }
+            })
+            // Checkmark and welcome message animation
+            .add({
+              targets: '.success-checkmark',
+              scale: [0, 1.2, 1],
+              opacity: [0, 1],
+              duration: 600,
+              easing: 'easeOutBack'
+            }, '-=200')
+            .add({
+              targets: '.welcome-message',
+              translateY: [20, 0],
+              opacity: [0, 1],
+              duration: 400
+            }, '-=400')
+            // Particle burst
+            .add({
+              targets: '.particle',
+              translateX: () => anime.random(-100, 100),
+              translateY: () => anime.random(-100, 100),
+              scale: [0.5, 1.5, 0],
+              opacity: [0, 1, 0],
+              duration: 1000,
+              delay: anime.stagger(50)
+            }, '-=600')
+            // Fade out entire overlay
+            .add({
+              targets: '.animation-overlay',
+              opacity: 0,
+              duration: 400
+            });
+        } else {
           const errorMsg = result.message || 'Login failed. Please try again.';
           errorMessage.value = errorMsg;
-          
-          // Show help bubble for login error
           if (analyzeContext) {
             analyzeContext({
               screen: 'login',
@@ -220,13 +289,11 @@ export default {
         console.error('Login error:', error);
         const errorMsg = 'An unexpected error occurred. Please try again.';
         errorMessage.value = errorMsg;
-        
-        // Show help bubble for login error
         if (analyzeContext) {
           analyzeContext({
             screen: 'login',
             action: 'error',
-            error: { 
+            error: {
               message: errorMsg,
               details: error.message || 'Connection error'
             }
@@ -234,42 +301,30 @@ export default {
         }
       } finally {
         isLoading.value = false;
-        // Redirect to home page
-         
       }
     };
-    
+
     const goToForgotPassword = () => {
-      // Emit event to navigate to the MobileForgotPasswordComponent
       emit('forgot-password');
     };
 
     const goToRegister = () => {
-      // Emit event to navigate to the MobileCreateAccountComponent
       emit('create-account');
     };
-    
+
     onMounted(() => {
-      // Initialize theme
       detectPreferredTheme();
-      
-      // Listen for system theme changes
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-        // Only update if the user hasn't set a preference already
         if (!localStorage.getItem('theme')) {
           isDarkMode.value = e.matches;
           applyTheme();
         }
       });
-      
-      // Check if username is stored in localStorage
       const rememberedUsername = localStorage.getItem('rememberedUsername');
       if (rememberedUsername) {
         username.value = rememberedUsername;
         rememberMe.value = true;
       }
-      
-      // Show login help for first-time users
       setTimeout(() => {
         if (analyzeContext) {
           analyzeContext({
@@ -277,13 +332,19 @@ export default {
             action: 'view',
             isFirstTime: !localStorage.getItem('login_help_shown')
           });
-          
-          // Mark that login help has been shown
           localStorage.setItem('login_help_shown', 'true');
         }
       }, 500);
+
+      // Ensure anime.js is loaded
+      if (!window.anime) {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js';
+        script.async = true;
+        document.head.appendChild(script);
+      }
     });
-    
+
     return {
       username,
       password,
@@ -296,7 +357,8 @@ export default {
       togglePasswordVisibility,
       handleLogin,
       goToForgotPassword,
-      goToRegister
+      goToRegister,
+      loginSuccess
     };
   }
 };
@@ -655,72 +717,6 @@ export default {
   color: white;
 }
 
-.divider {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  margin: 1.25rem 0;
-  font-size: 0.875rem; /* Increased for readability */
-  color: var(--text-secondary);
-  transition: color 0.3s ease;
-}
-
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  border-bottom: 1px solid var(--border-color);
-  transition: border-color 0.3s ease;
-}
-
-.divider::before {
-  margin-right: 0.75rem;
-}
-
-.divider::after {
-  margin-left: 0.75rem;
-}
-
-.social-login {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-
-.social-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  padding: 0;
-  height: 3rem; /* Increased for better touch target */
-  border-radius: 0.5rem;
-  font-size: 1rem; /* Increased for readability */
-  font-weight: 600;
-  border: 1px solid var(--border-color);
-  background-color: var(--surface-color);
-  cursor: pointer;
-  transition: background-color 0.3s ease, border-color 0.3s ease;
-}
-
-.social-button:focus-visible {
-  outline: 3px solid var(--focus-ring-color);
-  outline-offset: 2px;
-}
-
-.social-button.google {
-  color: var(--social-google);
-}
-
-.social-button.apple {
-  color: var(--social-apple);
-}
-
-.social-button:active {
-  background-color: var(--hover-bg);
-}
-
 .register-option {
   display: flex;
   justify-content: center;
@@ -752,6 +748,81 @@ export default {
 
 .register-link:active {
   color: var(--primary-dark);
+}
+
+/* Animation overlay and success animation styles */
+.animation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at center, rgba(45, 206, 137, 0.3) 0%, rgba(0, 0, 0, 0.5) 70%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { background: radial-gradient(circle at center, rgba(45, 206, 137, 0.3) 0%, rgba(0, 0, 0, 0.5) 70%); }
+  50% { background: radial-gradient(circle at center, rgba(45, 206, 137, 0.5) 0%, rgba(0, 0, 0, 0.5) 70%); }
+}
+
+.success-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.progress-bar {
+  width: 200px;
+  height: 8px;
+  background-color: var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  width: 0;
+  height: 100%;
+  background-color: var(--success-color);
+  transition: width 0.3s ease;
+}
+
+.success-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.success-checkmark {
+  color: var(--success-color);
+  font-size: 4rem;
+  filter: drop-shadow(0 0 10px rgba(45, 206, 137, 0.5));
+}
+
+.welcome-message {
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-shadow: 0 2px 4px var(--shadow-color);
+}
+
+.particle-container {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+}
+
+.particle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 /* Fix for iOS input zoom issue */
