@@ -280,6 +280,10 @@ class DetectionLog(db.Model):
         }
 
 
+# models.py
+# Add to models.py
+# Add to models.py
+
 class MessageAttachment(db.Model):
     """
     MessageAttachment model stores files attached to chat messages.
@@ -311,6 +315,7 @@ class MessageAttachment(db.Model):
         }
 
 
+# Update the ChatMessage model to support attachments
 class ChatMessage(db.Model):
     __tablename__ = "chat_messages"
     id = db.Column(db.Integer, primary_key=True)
@@ -321,11 +326,13 @@ class ChatMessage(db.Model):
     read = db.Column(db.Boolean, default=False, index=True)
     is_system = db.Column(db.Boolean, default=False)
     details = db.Column(db.JSON)
+    # Add this new column to support attachments
     attachment_id = db.Column(db.Integer, db.ForeignKey('message_attachments.id'), nullable=True)
 
     # Relationships
     sender = db.relationship("User", foreign_keys=[sender_id])
     receiver = db.relationship("User", foreign_keys=[receiver_id])
+    # Add this new relationship
     attachment = db.relationship("MessageAttachment", foreign_keys=[attachment_id])
 
     def serialize(self):
@@ -342,6 +349,7 @@ class ChatMessage(db.Model):
             "receiver_username": self.receiver.username if self.receiver else None
         }
         
+        # Include attachment data if present
         if self.attachment:
             result["attachment"] = {
                 "id": self.attachment.id,
@@ -359,9 +367,9 @@ class PasswordReset(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    token = db.Column(db.String(6), nullable=False, unique=True)
-    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    token = db.Column(db.String(100), nullable=False, unique=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationship with User model
     user = db.relationship('User', backref=db.backref('password_resets', lazy=True))
@@ -370,9 +378,9 @@ class PasswordReset(db.Model):
         return f'<PasswordReset {self.id} for user {self.user_id}>'
     
     def is_expired(self):
-        return self.expires_at < datetime.now(timezone.utc)
+        return self.expires_at < datetime.utcnow()
 
-
+# Add this near other models in models.py
 class PasswordResetToken(db.Model):
     """
     Stores hashed password reset tokens with expiration and CASCADE deletion.
