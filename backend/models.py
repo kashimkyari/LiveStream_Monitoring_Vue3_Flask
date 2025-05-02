@@ -1,7 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from extensions import db
 
-
 # Updated User model in models.py
 class User(db.Model):
     """
@@ -71,7 +70,6 @@ class Stream(db.Model):
             data["assignments"] = [assignment.serialize(include_relationships=False) for assignment in self.assignments]
         return data
 
-
 class ChaturbateStream(Stream):
     """
     ChaturbateStream model extends Stream for Chaturbate-specific streams.
@@ -96,7 +94,6 @@ class ChaturbateStream(Stream):
         })
         return data
 
-
 class StripchatStream(Stream):
     """
     StripchatStream model extends Stream for Stripchat-specific streams.
@@ -120,7 +117,6 @@ class StripchatStream(Stream):
             "stripchat_m3u8_url": self.stripchat_m3u8_url,
         })
         return data
-
 
 class Assignment(db.Model):
     """
@@ -156,7 +152,6 @@ class Assignment(db.Model):
             data["stream"] = self.stream.serialize(include_relationships=False) if self.stream else None
         return data
 
-
 class Log(db.Model):
     """
     Log model records events such as detections, video notifications, and chat events.
@@ -187,7 +182,6 @@ class Log(db.Model):
             "read": self.read,
         }
 
-
 class ChatKeyword(db.Model):
     """
     ChatKeyword model stores keywords for flagging chat messages.
@@ -201,7 +195,6 @@ class ChatKeyword(db.Model):
 
     def serialize(self):
         return {"id": self.id, "keyword": self.keyword}
-
 
 class FlaggedObject(db.Model):
     """
@@ -223,7 +216,6 @@ class FlaggedObject(db.Model):
             "confidence_threshold": float(self.confidence_threshold),
         }
 
-
 class TelegramRecipient(db.Model):
     """
     TelegramRecipient model stores Telegram user information for notifications.
@@ -242,7 +234,6 @@ class TelegramRecipient(db.Model):
             "telegram_username": self.telegram_username,
             "chat_id": self.chat_id,
         }
-
 
 class DetectionLog(db.Model):
     """
@@ -279,11 +270,6 @@ class DetectionLog(db.Model):
             "read": self.read,
         }
 
-
-# models.py
-# Add to models.py
-# Add to models.py
-
 class MessageAttachment(db.Model):
     """
     MessageAttachment model stores files attached to chat messages.
@@ -314,8 +300,6 @@ class MessageAttachment(db.Model):
             "user_id": self.user_id
         }
 
-
-# Update the ChatMessage model to support attachments
 class ChatMessage(db.Model):
     __tablename__ = "chat_messages"
     id = db.Column(db.Integer, primary_key=True)
@@ -326,13 +310,11 @@ class ChatMessage(db.Model):
     read = db.Column(db.Boolean, default=False, index=True)
     is_system = db.Column(db.Boolean, default=False)
     details = db.Column(db.JSON)
-    # Add this new column to support attachments
     attachment_id = db.Column(db.Integer, db.ForeignKey('message_attachments.id'), nullable=True)
 
     # Relationships
     sender = db.relationship("User", foreign_keys=[sender_id])
     receiver = db.relationship("User", foreign_keys=[receiver_id])
-    # Add this new relationship
     attachment = db.relationship("MessageAttachment", foreign_keys=[attachment_id])
 
     def serialize(self):
@@ -361,13 +343,12 @@ class ChatMessage(db.Model):
             
         return result
 
-
 class PasswordReset(db.Model):
     __tablename__ = 'password_resets'
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    token = db.Column(db.String(100), nullable=False, unique=True)
+    token = db.Column(db.String(6), nullable=False, unique=True)  # Changed to String(6) for 6-digit numeric token
     expires_at = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -380,7 +361,6 @@ class PasswordReset(db.Model):
     def is_expired(self):
         return self.expires_at < datetime.utcnow()
 
-# Add this near other models in models.py
 class PasswordResetToken(db.Model):
     """
     Stores hashed password reset tokens with expiration and CASCADE deletion.

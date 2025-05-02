@@ -2,11 +2,9 @@ from flask import Blueprint, request, jsonify, session, make_response, current_a
 from extensions import db
 from models import User, PasswordReset
 from utils import login_required
-from utils.enhanced_email import email_service, send_welcome_email, send_password_reset_email
+from utils.enhanced_email import email_service, send_welcome_email, send_password_reset_email, generate_six_digit_token
 import re
-import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
-import hashlib
 from datetime import datetime, timedelta
 import logging
 
@@ -264,32 +262,28 @@ def forgot_password():
     
     user = User.query.filter_by(email=email).first()
     if not user:
-        return jsonify({"message": "If your email is registered, you will receive a password reset link"}), 200
+        return jsonify({"message": "If your email is registered, you will receive a password reset code"}), 200
     
-    random_bytes = secrets.token_bytes(32)
-    user_id_bytes = str(user.id).encode('utf-8')
-    timestamp = str(datetime.utcnow().timestamp()).encode('utf-8')
-    
-    token_seed = random_bytes + user_id_bytes + timestamp
-    token_hash = hashlib.sha256(token_seed).hexdigest()
-    secure_token = token_hash[:40]
+    # Generate a 6-digit numeric token
+    token = generate_six_digit_token()
     
     expiration = datetime.utcnow() + timedelta(hours=1)
     
     password_reset = PasswordReset(
         user_id=user.id,
-        token=secure_token,
+        token=token,
         expires_at=expiration
     )
     
     try:
+        # Delete any existing reset tokens for this user
         PasswordReset.query.filter_by(user_id=user.id).delete()
         
         db.session.add(password_reset)
         db.session.commit()
         
         try:
-            send_password_reset_email(email, secure_token)
+            send_password_reset_email(email, token)
             current_app.logger.info(f"Password reset email sent to {email}")
         except Exception as e:
             current_app.logger.error(f"Failed to send password reset email: {str(e)}")
@@ -297,7 +291,7 @@ def forgot_password():
             return jsonify({"message": "Unable to send password reset email. Please try again later."}), 500
         
         return jsonify({
-            "message": "If your email is registered, you will receive a password reset link"
+            "message": "If your email is registered, you will receive a password reset code"
         }), 200
     except Exception as e:
         db.session.rollback()
@@ -311,6 +305,10 @@ def verify_reset_token():
     
     if not token:
         return jsonify({"valid": False, "message": "Token is required"}), 400
+    
+    # Validate that token is a 6-digit number
+    if not token.isdigit() or len(token) != 6:
+        return jsonify({"valid": False, "message": "Token must be a 6-digit number"}), 400
     
     reset_entry = PasswordReset.query.filter_by(token=token).first()
     
@@ -330,6 +328,10 @@ def reset_password():
     
     if not token or not new_password:
         return jsonify({"message": "Token and new password are required"}), 400
+    
+    # Validate that token is a 6-digit number
+    if not token.isdigit() or len(token) != 6:
+        return jsonify({"message": "Token must be a 6-digit number"}), 400
     
     if len(new_password) < 8:
         return jsonify({"message": "Password must be at least 8 characters"}), 400
@@ -362,8 +364,37 @@ def reset_password():
         
         try:
             email_subject = "Your Password Has Been Reset"
-            html_content = f"..."  # Keep existing email content
+            html_content = f"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <meta name="x-apple-disable-message-reformatting">
+                <title>Password Reset Confirmation</title>
+            </head>
+            <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td align="center">
+                            <table width="600" style="margin: 20px auto; background-color: #ffffff; border-radius: 8px;">
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <h2>Password Reset Successful</h2>
+                                        <p>Your JetCam Studio account password has been successfully reset.</p>
+                                        <p>You can now log in with your new password.</p>
+                                        <p>If you did not initiate this change, please contact <a href="mailto:support@jetcamstudio.com">support@jetcamstudio.com</a>.</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+            """
             email_service.send_email(user.email, email_subject, html_content)
+            current_app.logger.info(f"Password reset confirmation email sent to {user.email}")
         except Exception as e:
             current_app.logger.error(f"Failed to send password reset confirmation email: {str(e)}")
         
@@ -410,8 +441,36 @@ def change_password():
         
         try:
             email_subject = "Your Password Has Been Changed"
-            html_content = f"..."  # Keep existing email content
+            html_content = f"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <meta name="x-apple-disable-message-reformatting">
+                <title>Password Change Confirmation</title>
+            </head>
+            <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td align="center">
+                            <table width="600" style="margin: 20px auto; background-color: #ffffff; border-radius: 8px;">
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <h2>Password Changed Successfully</h2>
+                                        <p>Your JetCam Studio account password has been successfully changed.</p>
+                                        <p>If you did not initiate this change, please contact <a href="mailto:support@jetcamstudio.com">support@jetcamstudio.com</a>.</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+            """
             email_service.send_email(user.email, email_subject, html_content)
+            current_app.logger.info(f"Password change confirmation email sent to {user.email}")
         except Exception as e:
             current_app.logger.error(f"Failed to send password change confirmation email: {str(e)}")
         
