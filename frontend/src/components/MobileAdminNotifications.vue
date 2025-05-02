@@ -574,7 +574,7 @@ export default {
 }
 
 .header h2 {
-  font-size: 1.5rem;
+  font-size: 20px;
   font-weight: 600;
   margin: 0;
   color: var(--text-color);
@@ -755,6 +755,7 @@ export default {
   background-color: var(--input-bg);
   border-radius: 1rem;
   margin-bottom: 0.5rem;
+  margin-top: 6px;
   box-shadow: var(--shadow-sm);
   transition: transform 0.2s, box-shadow 0.2s;
   position: relative;
@@ -1130,7 +1131,7 @@ export default {
 @media (max-width: 360px) {
   .header h2 { font-size: 1.25rem; }
   .refresh-btn, .mark-all-read-btn { padding: 0.5rem 1rem; font-size: 0.75rem; }
-  .notification-item { padding: 0.75rem; }
+  .notification-item { padding: 0.75rem;}
   .notification-details p { font-size: 0.75rem; }
   .modal { max-width: 95%; }
   .modal-header h3 { font-size: 1rem; }

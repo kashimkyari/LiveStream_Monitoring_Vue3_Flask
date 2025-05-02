@@ -454,7 +454,7 @@ export default {
 .notification-badge { position: absolute; top: -8px; right: -8px; background-color: var(--danger-color); color: white; font-size: 0.6rem; font-weight: 600; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
 .tab-label { font-size: 0.7rem; font-weight: 500; }
 
-.tab-content { flex: 1; overflow-y: auto; padding: 0 12px; -webkit-overflow-scrolling: touch; }
+.tab-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
 @media (max-width: 340px) {
   .stats-container { grid-template-columns: repeat(1, 1fr); }
