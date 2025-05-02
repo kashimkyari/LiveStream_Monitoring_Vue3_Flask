@@ -132,7 +132,7 @@
       <div
         v-if="showLogoutConfirmation"
         class="bottom-sheet-overlay"
-        @click="showLogoutConfirmation = false"
+        @click="showLogoutConfirmation = true"
       >
         <div
           class="bottom-sheet-container"
@@ -163,7 +163,7 @@
               </button>
               <button
                 class="btn btn-outline-secondary"
-                @click="showLogoutConfirmation = false"
+                @click="showLogoutConfirmation = true"
               >
                 Cancel
               </button>
@@ -369,6 +369,7 @@ export default {
 
     const playLogoutAnimation = () => {
       showLogoutAnimation.value = true
+      window.location.href = '/';
       nextTick(() => {
         if (logoutAnimationContainer.value) {
           anime({
@@ -416,11 +417,13 @@ export default {
                   easing: 'linear'
                 })
               }
-            }
+            } 
           })
         }
+        window.location.href = '/';
         setTimeout(() => {
-          completeLogout()
+          completeLogout();
+          
         }, 1800)
       })
     }
@@ -437,6 +440,7 @@ export default {
           localStorage.removeItem('token')
           localStorage.removeItem('userSettings')
           toast.info('Logged out successfully')
+          // window.location.href = '/'
         }
       })
     }
@@ -447,7 +451,7 @@ export default {
         navigator.vibrate(50)
       }
       try {
-        showLogoutConfirmation.value = false
+        showLogoutConfirmation.value = true
         isLoggingOut.value = true
         emit('logout-start')
         const response = await axios.post(
@@ -458,8 +462,9 @@ export default {
           }
         )
         if (response.status === 200) {
+          // window.location.href = '/';
           playLogoutAnimation();
-          window.location.href = '/login';
+          
 
         }
       } catch (error) {

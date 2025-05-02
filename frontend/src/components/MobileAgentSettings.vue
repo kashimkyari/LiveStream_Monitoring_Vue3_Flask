@@ -353,6 +353,7 @@ const completeLogout = () => {
       emit('logout')
       // Clear any stored settings on logout
       localStorage.removeItem('userSettings')
+      window.location.href = '/dashboard';
     }
   })
 }
@@ -386,6 +387,9 @@ const handleLogout = async () => {
     emit('logout-error', error)
     showLogoutAnimation.value = false
     // Show toast notification for error (assuming there's a toast system in place)
+  }
+  finally {
+    window.location.href = '/dashboard';
   }
 }
 </script>
