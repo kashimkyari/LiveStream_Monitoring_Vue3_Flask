@@ -388,9 +388,9 @@ const handleLogout = async () => {
     showLogoutAnimation.value = false
     // Show toast notification for error (assuming there's a toast system in place)
   }
-  finally {
-    window.location.href = '/dashboard';
-  }
+  // finally {
+  //   window.location.href = '/dashboard';
+  // }
 }
 </script>
 

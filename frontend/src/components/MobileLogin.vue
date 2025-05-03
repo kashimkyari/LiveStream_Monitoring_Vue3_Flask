@@ -138,7 +138,7 @@
       </form>
     </div>
     
-    <!-- Enhanced success animation with particles and smooth transition -->
+    <!-- Success animation -->
     <div v-if="loginSuccess" class="animation-overlay">
       <div class="success-container">
         <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
@@ -160,22 +160,7 @@
       </div>
     </div>
     
-    <!-- Quick help tooltip that appears on first visit -->
-    <transition name="fade">
-      <div v-if="showHelp" class="help-tooltip">
-        <button @click="closeHelp" class="close-tooltip">
-          <font-awesome-icon icon="times" />
-        </button>
-        <h3>Welcome!</h3>
-        <p>Enter your credentials to sign in or create a new account.</p>
-        <div class="tooltip-tips">
-          <div class="tooltip-tip">
-            <font-awesome-icon icon="lightbulb" />
-            <span>Use the theme toggle to switch between light and dark mode.</span>
-          </div>
-        </div>
-      </div>
-    </transition>
+   
   </div>
 </template>
 
@@ -190,10 +175,7 @@ export default {
   name: 'MobileLogin',
   emits: ['login-success', 'forgot-password', 'create-account'],
   setup(props, { emit }) {
-    // Router for navigation
     const router = useRouter();
-    
-    // State management
     const username = ref('');
     const password = ref('');
     const rememberMe = ref(false);
@@ -204,41 +186,32 @@ export default {
     const loginSuccess = ref(false);
     const loginError = ref(false);
     const showHelp = ref(false);
-    
-    // Focus state tracking
     const usernameHasFocus = ref(false);
     const passwordHasFocus = ref(false);
-    
-    // References for DOM elements
     const usernameInput = ref(null);
     const passwordInput = ref(null);
     const progressFill = ref(null);
     const particleContainer = ref(null);
-    
-    // Services
     const toast = useToast();
     const analyzeContext = inject('analyzeContext', null);
-    
-    // Computed properties
+
     const isFormValid = computed(() => {
       return username.value.trim() !== '' && password.value.trim() !== '';
     });
-    
-    // Helper methods
+
     const getGreeting = () => {
       const hour = new Date().getHours();
       if (hour < 12) return 'Good Morning';
       if (hour < 18) return 'Good Afternoon';
       return 'Good Evening';
     };
-    
+
     const focusPassword = () => {
       if (passwordInput.value) {
         passwordInput.value.focus();
       }
     };
-    
-    // Theme detection and management
+
     const detectPreferredTheme = () => {
       const savedTheme = localStorage.getItem('theme');
       if (savedTheme) {
@@ -253,8 +226,6 @@ export default {
       isDarkMode.value = !isDarkMode.value;
       localStorage.setItem('theme', isDarkMode.value ? 'dark' : 'light');
       applyTheme();
-      
-      // Animate theme change
       anime({
         targets: '.theme-toggle',
         rotate: [0, 360],
@@ -267,11 +238,8 @@ export default {
       document.documentElement.setAttribute('data-theme', isDarkMode.value ? 'dark' : 'light');
     };
 
-    // Password visibility toggle
     const togglePasswordVisibility = () => {
       showPassword.value = !showPassword.value;
-      
-      // Animate button press
       anime({
         targets: '.toggle-password',
         scale: [1, 0.9, 1],
@@ -280,7 +248,6 @@ export default {
       });
     };
 
-    // Save username if "Remember me" is checked
     const saveUsername = () => {
       if (rememberMe.value) {
         localStorage.setItem('rememberedUsername', username.value);
@@ -288,8 +255,7 @@ export default {
         localStorage.removeItem('rememberedUsername');
       }
     };
-    
-    // Handle help tooltip
+
     const checkFirstVisit = () => {
       const isFirstVisit = !localStorage.getItem('login_help_shown');
       showHelp.value = isFirstVisit;
@@ -305,7 +271,7 @@ export default {
         }, 500);
       }
     };
-    
+
     const closeHelp = () => {
       anime({
         targets: '.help-tooltip',
@@ -319,138 +285,101 @@ export default {
         }
       });
     };
-    
-    // Animation for error state
+
     const animateError = () => {
       loginError.value = true;
-      
-      // Shake animation for login container
       anime({
         targets: '.login-container',
-        translateX: [0, 15, -15, 10, -10, 5, -5, 0],
-        duration: 600,
+        translateX: [0, 10, -10, 5, -5, 0],
+        duration: 400,
         easing: 'easeInOutQuad',
         complete: () => {
           loginError.value = false;
         }
       });
-      
-      // Pulse animation for error icon
       anime({
         targets: '.error-icon',
         scale: [1, 1.2, 1],
         opacity: [0.7, 1, 0.7],
         duration: 600,
-        loop: 2,
         easing: 'easeInOutQuad'
       });
     };
-    
-    // Create and animate particles for success animation
+
     const createParticles = () => {
       if (!particleContainer.value) return;
-      
       const container = particleContainer.value;
       container.innerHTML = '';
-      
-      const colors = ['#2dce89', '#11cdef', '#5e72e4', '#ffffff'];
-      const shapes = ['circle', 'square', 'triangle', 'star'];
-      
-      for (let i = 0; i < 40; i++) {
+      const colors = ['#2dce89', '#11cdef', '#5e72e4'];
+      for (let i = 0; i < 20; i++) {
         const particle = document.createElement('div');
         particle.className = 'particle';
-        
-        const shape = shapes[Math.floor(Math.random() * shapes.length)];
-        particle.classList.add(shape);
-        
         particle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-        particle.style.width = `${Math.random() * 10 + 5}px`;
+        particle.style.width = `${Math.random() * 6 + 4}px`;
         particle.style.height = particle.style.width;
-        
         container.appendChild(particle);
       }
     };
-    
-    // Success animation sequence
+
     const playSuccessAnimation = () => {
       createParticles();
-      
-      // Animation timeline for success state
       const timeline = anime.timeline({
         easing: 'easeOutExpo'
       });
-      
-      // Animate checkmark
-      timeline.add({
-        targets: '.checkmark-circle',
-        strokeDashoffset: [anime.setDashoffset, 0],
-        duration: 1000,
-        easing: 'easeOutCubic'
-      })
-      .add({
-        targets: '.checkmark-check',
-        strokeDashoffset: [anime.setDashoffset, 0],
-        duration: 800,
-        easing: 'easeOutCubic'
-      }, '-=600')
-      
-      // Progress bar animation
-      .add({
-        targets: progressFill.value,
-        width: '100%',
-        duration: 2000,
-        easing: 'easeInOutQuad'
-      }, '-=400')
-      
-      // Welcome message animation
-      .add({
-        targets: '.welcome-message',
-        opacity: [0, 1],
-        translateY: [30, 0],
-        duration: 800,
-        easing: 'easeOutBack'
-      }, '-=1800')
-      
-      // Redirect message animation
-      .add({
-        targets: '.redirect-message',
-        opacity: [0, 1],
-        translateY: [20, 0],
-        duration: 800,
-        easing: 'easeOutBack'
-      }, '-=600')
-      
-      // Particle explosion animation
-      .add({
-        targets: '.particle',
-        translateX: () => anime.random(-150, 150),
-        translateY: () => anime.random(-150, 150),
-        scale: [0, 1, 0],
-        opacity: [0, 1, 0],
-        easing: 'easeOutExpo',
-        duration: 2000,
-        delay: anime.stagger(30)
-      }, '-=2000')
-      
-      // Final fade to dashboard
-      .add({
-        targets: '.transition-overlay',
-        opacity: [0, 1],
-        duration: 800,
-        easing: 'easeInQuad',
-        complete: () => {
-          // Navigate to dashboard
-          redirectToDashboard();
-        }
-      }, '-=500');
+      timeline
+        .add({
+          targets: '.checkmark-circle',
+          strokeDashoffset: [anime.setDashoffset, 0],
+          duration: 800,
+          easing: 'easeOutCubic'
+        })
+        .add({
+          targets: '.checkmark-check',
+          strokeDashoffset: [anime.setDashoffset, 0],
+          duration: 600,
+          easing: 'easeOutCubic'
+        }, '-=400')
+        .add({
+          targets: progressFill.value,
+          width: '100%',
+          duration: 1500,
+          easing: 'easeInOutQuad'
+        }, '-=300')
+        .add({
+          targets: '.welcome-message',
+          opacity: [0, 1],
+          translateY: [20, 0],
+          duration: 600,
+          easing: 'easeOutBack'
+        }, '-=1200')
+        .add({
+          targets: '.redirect-message',
+          opacity: [0, 1],
+          translateY: [15, 0],
+          duration: 600,
+          easing: 'easeOutBack'
+        }, '-=400')
+        .add({
+          targets: '.particle',
+          translateX: () => anime.random(-100, 100),
+          translateY: () => anime.random(-100, 100),
+          scale: [0, 1, 0],
+          opacity: [0, 0.8, 0],
+          easing: 'easeOutExpo',
+          duration: 1500,
+          delay: anime.stagger(20)
+        }, '-=1500')
+        .add({
+          targets: '.transition-overlay',
+          opacity: [0, 1],
+          duration: 600,
+          easing: 'easeInQuad',
+          complete: redirectToDashboard
+        }, '-=400');
     };
-    
-    // Redirect to dashboard
+
     const redirectToDashboard = () => {
-      // Store authentication state in localStorage or sessionStorage
       localStorage.setItem('isAuthenticated', 'true');
-      
-      // Log analytics event
       if (analyzeContext) {
         analyzeContext({
           screen: 'login',
@@ -458,18 +387,11 @@ export default {
           user: username.value
         });
       }
-      
-      // Redirect to dashboard
       setTimeout(() => {
-        if (router) {
-          router.push('/dashboard');
-        } else {
-          window.location.href = '/dashboard';
-        }
-      }, 1000);
+        router?.push('/dashboard') || (window.location.href = '/dashboard');
+      }, 800);
     };
 
-    // Main login handler
     const handleLogin = async () => {
       if (!isFormValid.value) {
         errorMessage.value = 'Please enter both username and password.';
@@ -481,28 +403,18 @@ export default {
       isLoading.value = true;
       errorMessage.value = '';
 
-      // Animate the login button
       anime({
         targets: '.login-button',
         scale: [1, 0.98, 1],
-        duration: 300,
+        duration: 200,
         easing: 'easeInOutQuad'
       });
 
       try {
-        // Call the authentication service
         const result = await AuthService.login(username.value, password.value);
-
-        // Check login result
         if (result.success) {
-          // Save username if "Remember me" is checked
           saveUsername();
-          
-          // Show success toast
           toast.success('Login successful!');
-
-          
-          // Track analytics
           if (analyzeContext) {
             analyzeContext({
               screen: 'login',
@@ -510,22 +422,14 @@ export default {
               user: username.value
             });
           }
-          
-          // Show success animation
           loginSuccess.value = true;
           await nextTick();
           playSuccessAnimation();
-          
-          // Emit the login success event
           emit('login-success', result.user);
-          window.location.href = '/dashboard';
         } else {
-          // Handle error case
           errorMessage.value = result.message || 'Invalid credentials. Please try again.';
           toast.error(errorMessage.value);
           animateError();
-          
-          // Track analytics
           if (analyzeContext) {
             analyzeContext({
               screen: 'login',
@@ -540,8 +444,6 @@ export default {
         errorMessage.value = errorMsg;
         toast.error(errorMsg);
         animateError();
-        
-        // Track analytics
         if (analyzeContext) {
           analyzeContext({
             screen: 'login',
@@ -558,11 +460,8 @@ export default {
       }
     };
 
-    // Navigation handlers
     const goToForgotPassword = () => {
       emit('forgot-password');
-      
-      // Track analytics
       if (analyzeContext) {
         analyzeContext({
           screen: 'login',
@@ -574,8 +473,6 @@ export default {
 
     const goToRegister = () => {
       emit('create-account');
-      
-      // Track analytics
       if (analyzeContext) {
         analyzeContext({
           screen: 'login',
@@ -584,57 +481,42 @@ export default {
         });
       }
     };
-    
-    // Animate floating shapes
+
     const animateFloatingShapes = () => {
       anime({
         targets: '.floating-shape',
-        translateX: () => anime.random(-20, 20),
-        translateY: () => anime.random(-20, 20),
-        rotate: () => anime.random(-15, 15),
-        opacity: () => anime.random(0.1, 0.3),
-        scale: () => anime.random(0.8, 1.2),
-        duration: () => anime.random(3000, 5000),
-        delay: anime.stagger(200),
+        translateX: () => anime.random(-15, 15),
+        translateY: () => anime.random(-15, 15),
+        rotate: () => anime.random(-10, 10),
+        opacity: () => anime.random(0.1, 0.2),
+        scale: () => anime.random(0.9, 1.1),
+        duration: () => anime.random(2000, 4000),
+        delay: anime.stagger(150),
         easing: 'easeInOutQuad',
-        complete: animateFloatingShapes,
-        loop: true
+        complete: animateFloatingShapes
       });
     };
-    
-    // Initial setup
+
     onMounted(() => {
       detectPreferredTheme();
-      
-      // Listen for system theme changes
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
         if (!localStorage.getItem('theme')) {
           isDarkMode.value = e.matches;
           applyTheme();
         }
       });
-      
-      // Restore remembered username
       const rememberedUsername = localStorage.getItem('rememberedUsername');
       if (rememberedUsername) {
         username.value = rememberedUsername;
         rememberMe.value = true;
       }
-      
-      // Auto-focus username field if empty
       if (!username.value && usernameInput.value) {
         setTimeout(() => {
           usernameInput.value.focus();
-        }, 500);
+        }, 300);
       }
-      
-      // Check if it's the first visit to show help tooltip
       checkFirstVisit();
-      
-      // Start background animations
       animateFloatingShapes();
-      
-      // Track page view
       setTimeout(() => {
         if (analyzeContext) {
           analyzeContext({
@@ -643,33 +525,29 @@ export default {
             isFirstTime: !localStorage.getItem('login_help_shown')
           });
         }
-      }, 500);
-      
-      // Entrance animation for login container
+      }, 300);
       anime({
         targets: '.login-container',
-        translateY: [20, 0],
+        translateY: [15, 0],
         opacity: [0, 1],
-        duration: 800,
+        duration: 600,
         easing: 'easeOutQuad'
       });
     });
-    
-    // Watch for form validation changes to animate button
+
     watch(isFormValid, (newVal) => {
       if (newVal) {
         anime({
           targets: '.login-button',
-          scale: [1, 1.05, 1],
-          backgroundColor: ['#5e72e4', '#324cdd', '#5e72e4'],
-          duration: 300,
+          scale: [1, 1.03, 1],
+          backgroundColor: ['#5e72e4', '#4a62d3', '#5e72e4'],
+          duration: 200,
           easing: 'easeOutQuad'
         });
       }
     });
 
     return {
-      // State
       username,
       password,
       rememberMe,
@@ -682,11 +560,7 @@ export default {
       showHelp,
       usernameHasFocus,
       passwordHasFocus,
-      
-      // Computed
       isFormValid,
-      
-      // Methods
       toggleTheme,
       togglePasswordVisibility,
       handleLogin,
@@ -695,92 +569,91 @@ export default {
       closeHelp,
       getGreeting,
       focusPassword,
-      
-      // Refs
       usernameInput,
       passwordInput,
       progressFill,
-      particleContainer
+      particleContainer,
+      redirectToDashboard
     };
   }
 };
 </script>
 
 <style scoped>
-/* Root variables for theming */
+/* Root variables with improved contrast */
 :root {
   --primary-color: #5e72e4;
   --primary-hover: #4a62d3;
-  --primary-dark: #324cdd;
-  --secondary-color: #8392ab;
+  --primary-dark: #3f51b5;
+  --secondary-color: #64748b;
   --success-color: #2dce89;
   --info-color: #11cdef;
   --warning-color: #fb6340;
-  --danger-color: #f5365c;
-  --background-color: #f9fafc;
+  --danger-color: #dc2626;
+  --background-color: #f8fafc;
   --surface-color: #ffffff;
-  --text-primary: #32325d;
-  --text-secondary: #8898aa;
-  --border-color: #e9ecef;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --border-color: #e2e8f0;
   --input-bg: #ffffff;
-  --input-focus-bg: #ffffff;
-  --shadow-color: rgba(0, 0, 0, 0.05);
-  --shadow-color-intense: rgba(50, 50, 93, 0.1);
-  --focus-ring-color: rgba(94, 114, 228, 0.25);
-  --error-bg: rgba(245, 54, 92, 0.1);
-  --hover-bg: rgba(0, 0, 0, 0.03);
-  --divider-color: rgba(0, 0, 0, 0.1);
-  --particle-color: rgba(94, 114, 228, 0.7);
-  --shape-color: rgba(94, 114, 228, 0.1);
+  --input-focus-bg: #f8fafc;
+  --shadow-color: rgba(0, 0, 0, 0.08);
+  --shadow-color-intense: rgba(0, 0, 0, 0.12);
+  --focus-ring-color: rgba(94, 114, 228, 0.3);
+  --error-bg: rgba(239, 68, 68, 0.1);
+  --hover-bg: rgba(0, 0, 0, 0.04);
+  --divider-color: rgba(0, 0, 0, 0.12);
+  --particle-color: rgba(94, 114, 228, 0.6);
+  --shape-color: rgba(94, 114, 228, 0.08);
   --tooltip-bg: #ffffff;
-  --tooltip-shadow: rgba(0, 0, 0, 0.1);
+  --tooltip-shadow: rgba(0, 0, 0, 0.12);
 }
 
-/* Dark theme variables */
+/* Dark theme with improved contrast */
 [data-theme="dark"] {
-  --primary-color: #7986e7;
-  --primary-hover: #6575e0;
-  --primary-dark: #5e72e4;
-  --secondary-color: #a0b0c8;
-  --success-color: #4dd4a0;
-  --info-color: #45d8f3;
-  --warning-color: #fc8b6a;
-  --danger-color: #f76d8c;
-  --background-color: #131929;
-  --surface-color: #1f2b3d;
-  --text-primary: #e2e4f3;
-  --text-secondary: #b3b9cc;
-  --border-color: #2e3344;
-  --input-bg: #2a2a3c;
-  --input-focus-bg: #323450;
-  --shadow-color: rgba(0, 0, 0, 0.2);
-  --shadow-color-intense: rgba(0, 0, 0, 0.25);
-  --focus-ring-color: rgba(126, 143, 241, 0.4);
-  --error-bg: rgba(245, 54, 92, 0.2);
-  --hover-bg: rgba(255, 255, 255, 0.05);
-  --divider-color: rgba(255, 255, 255, 0.15);
-  --particle-color: rgba(126, 143, 241, 0.7);
-  --shape-color: rgba(126, 143, 241, 0.1);
-  --tooltip-bg: #2a2a3c;
-  --tooltip-shadow: rgba(0, 0, 0, 0.3);
+  --primary-color: #818cf8;
+  --primary-hover: #6366f1;
+  --primary-dark: #4f46e5;
+  --secondary-color: #94a3b8;
+  --success-color: #4ade80;
+  --info-color: #22d3ee;
+  --warning-color: #f97316;
+  --danger-color: #ef4444;
+  --background-color: #0f172a;
+  --surface-color: #1e293b;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --border-color: #334155;
+  --input-bg: #1e293b;
+  --input-focus-bg: #293548;
+  --shadow-color: rgba(0, 0, 0, 0.25);
+  --shadow-color-intense: rgba(0, 0, 0, 0.3);
+  --focus-ring-color: rgba(129, 140, 248, 0.4);
+  --error-bg: rgba(239, 68, 68, 0.15);
+  --hover-bg: rgba(255, 255, 255, 0.06);
+  --divider-color: rgba(255, 255, 255, 0.12);
+  --particle-color: rgba(129, 140, 248, 0.6);
+  --shape-color: rgba(129, 140, 248, 0.08);
+  --tooltip-bg: #1e293b;
+  --tooltip-shadow: rgba(0, 0, 0, 0.25);
 }
 
-/* Base container styles */
+/* Base container with safe area insets */
 .mobile-login {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  padding: 1rem;
+  padding: env(safe-area-inset-top, 1rem) env(safe-area-inset-right, 1rem) env(safe-area-inset-bottom, 1rem) env(safe-area-inset-left, 1rem);
   background-color: var(--background-color);
   width: 100%;
   position: relative;
-  overflow: hidden;
-  transition: background-color 0.5s ease;
+  overflow-x: hidden;
+  transition: background-color 0.4s ease, color 0.4s ease;
 }
 
-/* Animated background elements */
+/* Optimized animated background */
 .animated-background {
   position: absolute;
   top: 0;
@@ -788,143 +661,102 @@ export default {
   width: 100%;
   height: 100%;
   z-index: 0;
-  overflow: hidden;
+  will-change: transform;
+  pointer-events: none;
 }
 
 .floating-shape {
   position: absolute;
-  width: 12rem;
-  height: 12rem;
-  border-radius: 50%;
-  background-color: var(--shape-color);
-  opacity: 0.2;
-}
-
-.floating-shape:nth-child(1) {
-  top: 5%;
-  left: 10%;
-  width: 15rem;
-  height: 15rem;
-  border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
-}
-
-.floating-shape:nth-child(2) {
-  top: 60%;
-  right: 5%;
   width: 10rem;
   height: 10rem;
-  border-radius: 50% 50% 50% 50% / 60% 40% 60% 40%;
+  border-radius: 40%;
+  background-color: var(--shape-color);
+  opacity: 0.15;
+  will-change: transform, opacity;
 }
 
-.floating-shape:nth-child(3) {
-  bottom: 10%;
-  left: 20%;
-  width: 8rem;
-  height: 8rem;
-  border-radius: 40% 60% 60% 40% / 40% 60% 40% 60%;
-}
+.floating-shape:nth-child(1) { top: 10%; left: 15%; width: 12rem; height: 12rem; }
+.floating-shape:nth-child(2) { top: 55%; right: 10%; width: 9rem; height: 9rem; }
+.floating-shape:nth-child(3) { bottom: 15%; left: 25%; width: 7rem; height: 7rem; }
+.floating-shape:nth-child(4) { top: 35%; left: 65%; width: 11rem; height: 11rem; }
+.floating-shape:nth-child(5) { bottom: 25%; right: 35%; width: 6rem; height: 6rem; }
 
-.floating-shape:nth-child(4) {
-  top: 30%;
-  left: 60%;
-  width: 12rem;
-  height: 12rem;
-  border-radius: 60% 40% 30% 70% / 50% 50% 50% 50%;
-}
-
-.floating-shape:nth-child(5) {
-  bottom: 30%;
-  right: 30%;
-  width: 6rem;
-  height: 6rem;
-  border-radius: 50% 50% 30% 70% / 50% 60% 40% 50%;
-}
-
-/* Theme toggle button */
+/* Theme toggle with improved accessibility */
 .theme-toggle {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
+  position: fixed;
+  top: calc(1rem + env(safe-area-inset-top));
+  right: calc(1rem + env(safe-area-inset-right));
   background-color: var(--surface-color);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
   border-radius: 50%;
-  width: 3rem;
-  height: 3rem;
+  width: 2.5rem;
+  height: 2.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   cursor: pointer;
-  z-index: 10;
-  box-shadow: 0 4px 12px var(--shadow-color);
-  transition: all 0.3s ease;
+  z-index: 20;
+  box-shadow: 0 2px 8px var(--shadow-color);
+  transition: all 0.2s ease;
 }
 
 .theme-toggle:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 7px 14px var(--shadow-color-intense);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px var(--shadow-color-intense);
 }
 
 .theme-toggle:focus-visible {
-  outline: 3px solid var(--focus-ring-color);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 
-.theme-toggle:active {
-  transform: translateY(1px);
-  box-shadow: 0 2px 8px var(--shadow-color);
-}
-
-/* Login container */
+/* Login container with consistent spacing */
 .login-container {
   width: 100%;
-  max-width: 400px;
+  max-width: 360px;
   background-color: var(--surface-color);
-  border-radius: 1.5rem;
-  box-shadow: 0 8px 32px var(--shadow-color-intense);
-  padding: 2rem;
+  border-radius: 1rem;
+  box-shadow: 0 4px 16px var(--shadow-color);
+  padding: 1.5rem;
   margin: 2rem 0;
   z-index: 1;
   position: relative;
-  transition: all 0.3s ease, transform 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+  transition: all 0.3s ease;
 }
 
 .login-container.shake {
-  animation: shake 0.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
-  transform: translate3d(0, 0, 0);
-  backface-visibility: hidden;
-  perspective: 1000px;
-}
-/* The CSS continues from where it was cut off - completing the shake animation */
-@keyframes shake {
-  10%, 90% { transform: translate3d(-1px, 0, 0); }
-  20%, 80% { transform: translate3d(2px, 0, 0); }
-  30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-  40%, 60% { transform: translate3d(4px, 0, 0); }
+  animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
 }
 
-/* Login header */
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-3px); }
+  40%, 60% { transform: translateX(3px); }
+}
+
+/* Login header with consistent typography */
 .login-header {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .login-title {
   color: var(--primary-color);
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-size: 1.5rem;
+  font-weight: 600;
   margin-bottom: 0.5rem;
   display: flex;
   flex-direction: column;
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .greeting {
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: var(--text-secondary);
   font-weight: 500;
-  margin-bottom: 0.25rem;
 }
 
 .title-text {
@@ -935,16 +767,15 @@ export default {
 
 .login-subtitle {
   color: var(--text-secondary);
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 400;
-  margin-top: 0.5rem;
 }
 
-/* Form styles */
+/* Form with consistent spacing */
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
 }
 
 .form-group {
@@ -954,26 +785,25 @@ export default {
 }
 
 .form-group label {
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 500;
   color: var(--text-primary);
-  padding-left: 0.25rem;
 }
 
 .input-container {
   position: relative;
   background-color: var(--input-bg);
   border: 1px solid var(--border-color);
-  border-radius: 0.75rem;
-  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
   display: flex;
   align-items: center;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .input-container.focus {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 4px var(--focus-ring-color);
+  box-shadow: 0 0 0 3px var(--focus-ring-color);
 }
 
 .input-container.filled {
@@ -982,9 +812,8 @@ export default {
 
 .input-icon {
   color: var(--text-secondary);
-  font-size: 1rem;
-  margin-right: 0.75rem;
-  transition: color 0.3s ease;
+  font-size: 0.9rem;
+  margin-right: 0.5rem;
 }
 
 .input-container.focus .input-icon {
@@ -996,19 +825,18 @@ input {
   background: transparent;
   border: none;
   color: var(--text-primary);
-  font-size: 1rem;
-  padding: 0;
+  font-size: 0.95rem;
   outline: none;
 }
 
 input::placeholder {
   color: var(--text-secondary);
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
 .validation-icon {
   color: var(--success-color);
-  font-size: 1rem;
+  font-size: 0.9rem;
   margin-left: 0.5rem;
 }
 
@@ -1018,10 +846,7 @@ input::placeholder {
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.3s ease;
+  transition: color 0.2s ease;
 }
 
 .toggle-password:hover {
@@ -1033,12 +858,12 @@ input::placeholder {
   border-radius: 0.25rem;
 }
 
-/* Form options */
+/* Form options with better alignment */
 .form-options {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.5rem;
+  margin: 0.5rem 0;
 }
 
 .remember-me {
@@ -1049,14 +874,14 @@ input::placeholder {
 
 .remember-me input[type="checkbox"] {
   appearance: none;
-  width: 1.125rem;
-  height: 1.125rem;
+  width: 1rem;
+  height: 1rem;
   border: 1px solid var(--border-color);
   border-radius: 0.25rem;
   background-color: var(--input-bg);
   cursor: pointer;
   position: relative;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .remember-me input[type="checkbox"]:checked {
@@ -1067,7 +892,7 @@ input::placeholder {
 .remember-me input[type="checkbox"]:checked::after {
   content: '✓';
   color: white;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   position: absolute;
   top: 50%;
   left: 50%;
@@ -1075,11 +900,11 @@ input::placeholder {
 }
 
 .remember-me input[type="checkbox"]:focus-visible {
-  box-shadow: 0 0 0 3px var(--focus-ring-color);
+  box-shadow: 0 0 0 2px var(--focus-ring-color);
 }
 
 .remember-me label {
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   color: var(--text-secondary);
   cursor: pointer;
 }
@@ -1088,11 +913,10 @@ input::placeholder {
   background: transparent;
   border: none;
   color: var(--primary-color);
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
-  transition: color 0.3s ease;
-  padding: 0;
+  transition: color 0.2s ease;
 }
 
 .forgot-password-link:hover {
@@ -1100,7 +924,12 @@ input::placeholder {
   text-decoration: underline;
 }
 
-/* Error message */
+.forgot-password-link:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  border-radius: 0.25rem;
+}
+
+/* Error message with better contrast */
 .error-message {
   display: flex;
   align-items: center;
@@ -1109,104 +938,99 @@ input::placeholder {
   color: var(--danger-color);
   padding: 0.75rem;
   border-radius: 0.5rem;
-  font-size: 0.875rem;
-  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
 }
 
 .error-icon {
-  font-size: 1.125rem;
+  font-size: 1rem;
 }
 
 .error-icon.pulse {
-  animation: pulse 2s infinite;
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 @keyframes pulse {
-  0% { opacity: 0.7; }
+  0%, 100% { opacity: 0.7; }
   50% { opacity: 1; }
-  100% { opacity: 0.7; }
 }
 
-/* Login button */
+/* Login button with improved feedback */
 .login-button {
   background-color: var(--primary-color);
   color: white;
   border: none;
-  border-radius: 0.75rem;
-  padding: 1rem;
-  font-size: 1rem;
-  font-weight: 600;
+  border-radius: 0.5rem;
+  padding: 0.875rem;
+  font-size: 0.95rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   display: flex;
   justify-content: center;
   align-items: center;
   width: 100%;
-  margin: 1rem 0;
-  position: relative;
-  overflow: hidden;
+  margin: 0.75rem 0;
 }
 
 .login-button:hover:not(:disabled) {
   background-color: var(--primary-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(94, 114, 228, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(94, 114, 228, 0.2);
 }
 
-.login-button:active:not(:disabled) {
-  transform: translateY(1px);
-  box-shadow: 0 2px 6px rgba(94, 114, 228, 0.2);
+.login-button:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
 }
 
 .login-button:disabled {
-  opacity: 0.7;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
 .login-button.button-ready {
-  animation: button-pulse 2s infinite;
+  animation: button-pulse 1.5s ease-in-out infinite;
 }
 
 @keyframes button-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(94, 114, 228, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(94, 114, 228, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(94, 114, 228, 0.3); }
+  70% { box-shadow: 0 0 0 8px rgba(94, 114, 228, 0); }
   100% { box-shadow: 0 0 0 0 rgba(94, 114, 228, 0); }
 }
 
 .spinner-container {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .spinner {
-  font-size: 1.125rem;
-}
-
-.loading-text {
   font-size: 1rem;
 }
 
-/* Register option */
+.loading-text {
+  font-size: 0.9rem;
+}
+
+/* Register option with better spacing */
 .register-option {
   text-align: center;
-  margin-top: 1rem;
-  padding-top: 1rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
   border-top: 1px solid var(--border-color);
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.85rem;
 }
 
 .register-link {
   background: none;
   border: none;
   color: var(--primary-color);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   padding: 0;
   margin-left: 0.5rem;
-  transition: color 0.3s ease;
+  transition: color 0.2s ease;
 }
 
 .register-link:hover {
@@ -1214,14 +1038,19 @@ input::placeholder {
   text-decoration: underline;
 }
 
-/* Success animation overlay */
+.register-link:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  border-radius: 0.25rem;
+}
+
+/* Success animation with optimized performance */
 .animation-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1230,36 +1059,33 @@ input::placeholder {
 
 .success-container {
   background-color: var(--surface-color);
-  border-radius: 1.5rem;
-  padding: 2.5rem;
+  border-radius: 1rem;
+  padding: 2rem;
   width: 90%;
-  max-width: 360px;
+  max-width: 320px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   position: relative;
-  overflow: hidden;
-  box-shadow: 0 12px 50px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 .checkmark {
-  width: 80px;
-  height: 80px;
-  margin-bottom: 1.5rem;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 1rem;
 }
 
 .checkmark-circle {
   stroke-dasharray: 166;
   stroke-dashoffset: 166;
   stroke-width: 2;
-  stroke-miterlimit: 10;
   stroke: var(--success-color);
   fill: none;
 }
 
 .checkmark-check {
-  transform-origin: 50% 50%;
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
   stroke-width: 3;
@@ -1268,32 +1094,28 @@ input::placeholder {
 
 .progress-bar {
   width: 100%;
-  height: 4px;
+  height: 3px;
   background-color: var(--border-color);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-bottom: 1.5rem;
+  border-radius: 1.5px;
+  margin-bottom: 1rem;
 }
 
 .progress-fill {
   height: 100%;
-  width: 0%;
+  width: 0;
   background-color: var(--success-color);
-  transition: width 2s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 .welcome-message {
   color: var(--primary-color);
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-size: 1.25rem;
+  font-weight: 600;
   margin-bottom: 0.5rem;
-  opacity: 0;
 }
 
 .redirect-message {
   color: var(--text-secondary);
-  font-size: 1rem;
-  opacity: 0;
+  font-size: 0.9rem;
 }
 
 .particle-container {
@@ -1302,7 +1124,6 @@ input::placeholder {
   left: 0;
   width: 100%;
   height: 100%;
-  overflow: hidden;
   pointer-events: none;
 }
 
@@ -1310,32 +1131,11 @@ input::placeholder {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   opacity: 0;
-}
-
-.particle.square {
-  border-radius: 2px;
-}
-
-.particle.triangle {
-  width: 0;
-  height: 0;
-  background-color: transparent !important;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-bottom: 12px solid var(--primary-color);
-}
-
-.particle.star {
-  clip-path: polygon(
-    50% 0%, 61% 35%, 98% 35%, 68% 57%,
-    79% 91%, 50% 70%, 21% 91%, 32% 57%,
-    2% 35%, 39% 35%
-  );
 }
 
 .transition-overlay {
@@ -1349,37 +1149,33 @@ input::placeholder {
   z-index: 10;
 }
 
-/* Help tooltip */
+/* Help tooltip with better positioning */
 .help-tooltip {
-  position: absolute;
-  bottom: 1.5rem;
+  position: fixed;
+  bottom: calc(1rem + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - 2rem);
-  max-width: 320px;
+  max-width: 300px;
   background-color: var(--tooltip-bg);
-  border-radius: 1rem;
-  padding: 1.25rem;
-  box-shadow: 0 8px 32px var(--tooltip-shadow);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  box-shadow: 0 4px 16px var(--tooltip-shadow);
   z-index: 10;
-  opacity: 0;
 }
 
 .close-tooltip {
   position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
+  top: 0.5rem;
+  right: 0.5rem;
   background: none;
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0.25rem;
-  font-size: 1rem;
+  font-size: 0.9rem;
   border-radius: 50%;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  transition: all 0.2s ease;
 }
 
 .close-tooltip:hover {
@@ -1387,41 +1183,62 @@ input::placeholder {
   background-color: var(--hover-bg);
 }
 
+.close-tooltip:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+}
+
 .help-tooltip h3 {
   color: var(--primary-color);
-  font-size: 1.25rem;
-  margin-bottom: 0.75rem;
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
 }
 
 .help-tooltip p {
   color: var(--text-secondary);
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
 }
 
 .tooltip-tips {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .tooltip-tip {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
-  font-size: 0.875rem;
+  gap: 0.5rem;
+  font-size: 0.85rem;
   color: var(--text-secondary);
 }
 
 .tooltip-tip svg {
   color: var(--info-color);
-  font-size: 1rem;
-  margin-top: 0.125rem;
+  font-size: 0.9rem;
+  margin-top: 0.1rem;
 }
 
-/* Transitions */
+/* Transitions with reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .fade-enter-active, .fade-leave-active,
+  .slide-fade-enter-active, .slide-fade-leave-active,
+  .theme-icon-enter-active, .theme-icon-leave-active {
+    transition: none;
+  }
+  
+  .login-button.button-ready,
+  .error-icon.pulse,
+  .floating-shape,
+  .theme-toggle,
+  .toggle-password,
+  .login-container.shake {
+    animation: none;
+  }
+}
+
 .fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity 0.2s ease;
 }
 
 .fade-enter-from, .fade-leave-to {
@@ -1429,62 +1246,61 @@ input::placeholder {
 }
 
 .slide-fade-enter-active {
-  transition: all 0.3s ease-out;
+  transition: all 0.2s ease-out;
 }
 
 .slide-fade-leave-active {
-  transition: all 0.2s cubic-bezier(1, 0.5, 0.8, 1);
+  transition: all 0.15s ease-in;
 }
 
 .slide-fade-enter-from,
 .slide-fade-leave-to {
-  transform: translateY(-10px);
+  transform: translateY(-8px);
   opacity: 0;
 }
 
 .theme-icon-enter-active,
 .theme-icon-leave-active {
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 .theme-icon-enter-from,
 .theme-icon-leave-to {
   opacity: 0;
-  transform: scale(0.7);
+  transform: scale(0.8);
 }
 
 /* Responsive adjustments */
-@media (max-width: 480px) {
+@media (max-width: 360px) {
   .login-container {
-    padding: 1.5rem;
+    padding: 1.25rem;
   }
   
   .login-title {
-    font-size: 1.5rem;
+    font-size: 1.3rem;
   }
   
   .form-options {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
   
   .forgot-password-link {
-    margin-left: 1.625rem;
+    margin-left: 1.5rem;
   }
   
   .success-container {
-    padding: 2rem 1.5rem;
+    padding: 1.5rem;
   }
 }
 
-@media (min-height: 700px) {
+@media (min-height: 800px) {
   .login-container {
     margin: 3rem 0;
   }
 }
 
-/* Handle devices with hover capability differently */
 @media (hover: hover) {
   .input-container:hover:not(.focus) {
     border-color: var(--secondary-color);

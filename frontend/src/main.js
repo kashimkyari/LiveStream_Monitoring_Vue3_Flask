@@ -27,7 +27,8 @@ import {
   faLink,
   faMoon, // Added for theme toggle
   faSun,
-  faWifi3  // Added for theme toggle
+  faWifi3,
+  faLightbulb  // Added for theme toggle
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import Toast from 'vue-toastification';
@@ -63,7 +64,8 @@ library.add(
   faTelegram,
   faGoogle,
   faApple,
-  faWifi3
+  faWifi3,
+  faLightbulb
 );
 
 // Create a single app instance
