@@ -139,18 +139,31 @@
                 Receive Updates
               </label>
             </div>
-            <div class="form-group">
+            <div class="form-group stream-assignment-group">
               <label for="edit-streams">Assigned Streams</label>
-              <select
-                id="edit-streams"
-                v-model="editAgent.streamIds"
-                multiple
-                class="form-input"
-              >
-                <option v-for="stream in allStreams" :key="stream.id" :value="stream.id">
-                  {{ stream.streamer_username }} ({{ stream.platform }})
-                </option>
-              </select>
+              <div class="stream-assignment-container">
+                <div class="stream-search">
+                  <input
+                    type="text"
+                    v-model="streamSearchQuery"
+                    placeholder="Search streams..."
+                    class="form-input stream-search-input"
+                    @input="filterStreams"
+                  />
+                </div>
+                <div class="stream-list-container">
+                  <div v-if="filteredStreams.length === 0" class="no-streams-message">
+                    No streams found
+                  </div>
+                  <div v-else class="stream-item" v-for="stream in filteredStreams" :key="stream.id" @click="toggleStreamAssignment(stream.id)">
+                    <div class="stream-info">
+                      <span class="stream-name">{{ stream.streamer_username }}</span>
+                      <span class="stream-platform" :class="stream.platform.toLowerCase()">{{ stream.platform }}</span>
+                    </div>
+                    <font-awesome-icon :icon="editAgent.streamIds.includes(stream.id) ? 'check-circle' : 'circle'" class="assignment-icon" :class="{ 'assigned': editAgent.streamIds.includes(stream.id) }" />
+                  </div>
+                </div>
+              </div>
             </div>
             <div class="form-actions">
               <button type="button" class="cancel-btn" @click="cancelEditing">Cancel</button>
@@ -225,6 +238,8 @@ export default {
     const isEditing = ref(false)
     const savingChanges = ref(false)
     const editAgent = ref({})
+    const streamSearchQuery = ref('')
+    const filteredStreams = ref([])
 
     const newAgent = ref({
       username: '',
@@ -240,6 +255,26 @@ export default {
       )
     })
 
+    const filterStreams = () => {
+      if (!streamSearchQuery.value) {
+        filteredStreams.value = allStreams.value
+      } else {
+        filteredStreams.value = allStreams.value.filter(stream =>
+          stream.streamer_username.toLowerCase().includes(streamSearchQuery.value.toLowerCase()) ||
+          stream.platform.toLowerCase().includes(streamSearchQuery.value.toLowerCase())
+        )
+      }
+    }
+
+    const toggleStreamAssignment = (streamId) => {
+      const index = editAgent.value.streamIds.indexOf(streamId)
+      if (index === -1) {
+        editAgent.value.streamIds.push(streamId)
+      } else {
+        editAgent.value.streamIds.splice(index, 1)
+      }
+    }
+
     const loadAgents = async () => {
       loading.value = true
       try {
@@ -248,9 +283,10 @@ export default {
           headers: { Authorization: `Bearer ${token}` }
         })
         agents.value = response.data
+        toast.success('Agents loaded successfully')
       } catch (error) {
-        toast.error('Failed to load agents')
-        console.error('Error loading agents:', error)
+        const message = error.response?.data?.message || 'Failed to load agents'
+        toast.error(message)
         agents.value = []
       } finally {
         loading.value = false
@@ -258,6 +294,7 @@ export default {
     }
 
     const loadAllStreams = async () => {
+      toast.info('Loading all streams...')
       try {
         const token = localStorage.getItem('token')
         const response = await axios.get('/api/streams', {
@@ -267,10 +304,13 @@ export default {
           ...stream,
           platform: stream.platform || 'Unknown'
         }))
+        filteredStreams.value = allStreams.value
+        toast.success('Streams loaded successfully')
       } catch (error) {
-        toast.error('Failed to load streams')
-        console.error('Error loading streams:', error)
+        const message = error.response?.data?.message || 'Failed to load streams'
+        toast.error(message)
         allStreams.value = []
+        filteredStreams.value = []
       }
     }
 
@@ -283,11 +323,26 @@ export default {
       newAgent.value = { username: '', email: '', password: '', receiveUpdates: false }
     }
 
+    // Helper for theme-based Swal classes
+    const swalThemeClass = () => ({
+      popup: props.isDarkTheme ? 'swal-dark' : 'swal-light',
+      title: 'swal-title',
+      content: 'swal-text',
+      confirmButton: 'swal-confirm',
+      cancelButton: 'swal-cancel'
+    })
+
     const showAgentDetails = async (agent) => {
       selectedAgent.value = agent
       showDetailsModal.value = true
       isEditing.value = false
-      await Promise.all([loadAssignedStreams(agent.id), loadAllStreams()])
+      toast.info('Loading agent details...')
+      try {
+        await Promise.all([loadAssignedStreams(agent.id), loadAllStreams()])
+        toast.success('Agent details loaded successfully')
+      } catch (error) {
+        toast.error('Failed to load agent details')
+      }
     }
 
     const closeDetailsModal = () => {
@@ -305,6 +360,8 @@ export default {
         receiveUpdates: selectedAgent.value.receiveUpdates,
         streamIds: assignedStreams.value.map(stream => stream.id)
       }
+      streamSearchQuery.value = ''
+      filteredStreams.value = allStreams.value
       isEditing.value = true
     }
 
@@ -315,6 +372,7 @@ export default {
 
     const saveAgentChanges = async () => {
       savingChanges.value = true
+      toast.info('Saving agent changes...')
       try {
         const token = localStorage.getItem('token')
         const response = await axios.patch(`/api/agents/${selectedAgent.value.id}`, {
@@ -325,8 +383,6 @@ export default {
         }, {
           headers: { Authorization: `Bearer ${token}` }
         })
-        toast.success('Agent updated successfully')
-        // Update local state
         agents.value = agents.value.map(agent =>
           agent.id === selectedAgent.value.id ? response.data : agent
         )
@@ -334,6 +390,7 @@ export default {
         await loadAssignedStreams(selectedAgent.value.id)
         isEditing.value = false
         editAgent.value = {}
+        toast.success('Agent updated successfully')
       } catch (error) {
         const message = error.response?.data?.message || 'Failed to update agent'
         toast.error(message)
@@ -344,6 +401,7 @@ export default {
 
     const loadAssignedStreams = async (agentId) => {
       assignedStreamsLoading.value = true
+      toast.info('Loading assigned streams...')
       try {
         const token = localStorage.getItem('token')
         const response = await axios.get(`/api/agents/${agentId}/assignments`, {
@@ -359,9 +417,10 @@ export default {
             ...stream,
             platform: stream.platform || 'Unknown'
           }))
+        toast.success('Assigned streams loaded successfully')
       } catch (error) {
-        toast.error('Failed to load assigned streams')
-        console.error('Error loading assigned streams:', error)
+        const message = error.response?.data?.message || 'Failed to load assigned streams'
+        toast.error(message)
         assignedStreams.value = []
       } finally {
         assignedStreamsLoading.value = false
@@ -370,6 +429,7 @@ export default {
 
     const addAgent = async () => {
       addingAgent.value = true
+      toast.info('Adding new agent...')
       try {
         const token = localStorage.getItem('token')
         const response = await axios.post('/api/register', {
@@ -380,9 +440,9 @@ export default {
         }, {
           headers: { Authorization: `Bearer ${token}` }
         })
-        toast.success('Agent created successfully')
         closeAddAgentModal()
         agents.value = [...agents.value, response.data.user]
+        toast.success('Agent created successfully')
       } catch (error) {
         const message = error.response?.data?.message || 'Failed to create agent'
         toast.error(message)
@@ -397,13 +457,10 @@ export default {
         text: 'This action will permanently delete the agent!',
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#e5383b',
-        cancelButtonColor: '#777777',
         confirmButtonText: 'Delete',
         cancelButtonText: 'Cancel',
-        customClass: {
-          popup: props.isDarkTheme ? 'swal-dark' : 'swal-light'
-        }
+        customClass: swalThemeClass(),
+        buttonsStyling: false
       })
 
       if (result.isConfirmed) {
@@ -412,17 +469,18 @@ export default {
     }
 
     const deleteAgent = async (agentId) => {
+      toast.info('Deleting agent...')
       try {
         const token = localStorage.getItem('token')
         if (!token) throw new Error('No authentication token found')
         await axios.delete(`/api/agents/${agentId}`, {
           headers: { Authorization: `Bearer ${token}` }
         })
-        toast.success('Agent deleted successfully')
         agents.value = agents.value.filter(agent => agent.id !== agentId)
         if (selectedAgent.value?.id === agentId) {
           closeDetailsModal()
         }
+        toast.success('Agent deleted successfully')
       } catch (error) {
         const message = error.response?.data?.message || 'Failed to delete agent'
         toast.error(message)
@@ -460,7 +518,11 @@ export default {
       addAgent,
       confirmDeleteAgent,
       deleteAgent,
-      loadAgents
+      loadAgents,
+      streamSearchQuery,
+      filteredStreams,
+      filterStreams,
+      toggleStreamAssignment
     }
   }
 }
@@ -911,24 +973,165 @@ export default {
   border: 1px solid #8b5cf640;
 }
 
-/* SweetAlert2 Custom Styles */
-:deep(.swal-light) {
+/* Stream Assignment Styles */
+.stream-assignment-group {
+  margin-bottom: 20px;
+}
+
+.stream-assignment-container {
+  background-color: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-sm);
+  padding: 10px;
+  max-height: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.stream-search {
+  margin-bottom: 10px;
+}
+
+.stream-search-input {
   background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
   color: var(--text-color);
 }
 
+.stream-search-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+.stream-list-container {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.stream-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1px solid transparent;
+}
+
+.stream-item:hover {
+  background-color: var(--primary-light);
+  border-color: var(--primary-color);
+}
+
+.stream-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stream-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.stream-platform {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.stream-platform.chaturbate {
+  background-color: #f59e0b20;
+  color: #f59e0b;
+  border: 1px solid #f59e0b40;
+}
+
+.stream-platform.stripchat {
+  background-color: #8b5cf620;
+  color: #8b5cf6;
+  border: 1px solid #8b5cf640;
+}
+
+.assignment-icon {
+  color: var(--text-light);
+  font-size: 1.2rem;
+  transition: var(--transition);
+}
+
+.assignment-icon.assigned {
+  color: var(--success-color);
+}
+
+.no-streams-message {
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  align-items: center;
+  color: var(--text-light);
+  font-style: italic;
+  font-size: 0.875rem;
+}
+
+/* SweetAlert2 Custom Styles */
+:deep(.swal-light),
 :deep(.swal-dark) {
   background-color: var(--card-bg);
   color: var(--text-color);
+  font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-md);
 }
 
-:deep(.swal2-confirm) {
+:deep(.swal-title) {
+  color: var(--text-color);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+:deep(.swal-text) {
+  color: var(--text-light);
+  font-size: 0.875rem;
+}
+
+:deep(.swal-confirm) {
   background-color: var(--danger-color) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: var(--border-radius-sm) !important;
+  padding: 12px 24px !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  transition: var(--transition) !important;
+  box-shadow: var(--shadow-sm) !important;
 }
 
-:deep(.swal2-cancel) {
+:deep(.swal-confirm:hover) {
+  background-color: #d32f2f !important;
+}
+
+:deep(.swal-cancel) {
   background-color: var(--border-color) !important;
   color: var(--text-color) !important;
+  border: none !important;
+  border-radius: var(--border-radius-sm) !important;
+  padding: 12px 24px !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  transition: var(--transition) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+:deep(.swal-cancel:hover) {
+  background-color: #d1d5db !important;
+}
+
+:deep(.swal2-loader) {
+  border-color: var(--primary-color) transparent var(--primary-color) transparent !important;
 }
 
 /* Responsive Adjustments */
