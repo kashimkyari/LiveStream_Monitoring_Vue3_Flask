@@ -1,50 +1,467 @@
 <template>
   <div class="mobile-admin-agents" :data-theme="isDarkTheme ? 'dark' : 'light'">
-    <div class="agents-header">
+    <!-- Header -->
+    <div class="view-controls">
       <h2>Agents</h2>
+      <div class="controls-right">
+        <button class="refresh-btn" @click="loadAgents" :disabled="loading">
+          <font-awesome-icon icon="sync" :class="{ 'fa-spin': loading }" />
+        </button>
+      </div>
     </div>
+
+    <!-- Search Filter -->
     <div class="search-filter">
       <input type="text" v-model="searchQuery" placeholder="Search agents..." class="search-input" />
     </div>
+
+    <!-- Agents List -->
     <div class="agents-list">
-      <div class="agent-item" v-for="agent in filteredAgents" :key="agent.id" @click="$emit('agent-selected', agent)">
+      <div class="agent-item" v-for="agent in filteredAgents" :key="agent.id" @click="showAgentDetails(agent)">
         <font-awesome-icon icon="users" class="agent-icon" />
         <div class="agent-content">
-          <p class="agent-name">{{ agent.name }}</p>
-          <span class="agent-status" :class="{ active: agent.status === 'active' }">
-            {{ agent.status }}
+          <p class="agent-name">{{ agent.username }}</p>
+          <span class="agent-status" :class="{ active: agent.online }">
+            {{ agent.online ? 'Online' : 'Offline' }}
           </span>
         </div>
+        <button class="delete-btn" @click.stop="confirmDeleteAgent(agent.id)">
+          <font-awesome-icon icon="trash" />
+        </button>
       </div>
       <p v-if="loading" class="loading-text">Loading agents...</p>
       <p v-else-if="!filteredAgents.length" class="no-data">No agents found</p>
     </div>
-    <button class="fab" @click="$emit('add-agent')">
+
+    <!-- Add Agent Button -->
+    <button class="fab" @click="showAddAgentModal">
       <font-awesome-icon icon="plus" />
     </button>
+
+    <!-- Add Agent Bottom Sheet -->
+    <div class="bottom-sheet" :class="{ active: showAddModal }">
+      <div class="bottom-sheet-content">
+        <div class="modal-header">
+          <h3>Add New Agent</h3>
+          <button class="close-btn" @click="closeAddAgentModal">
+            <font-awesome-icon icon="times" />
+          </button>
+        </div>
+        <form @submit.prevent="addAgent">
+          <div class="form-group">
+            <label for="add-username">Username</label>
+            <input
+              id="add-username"
+              v-model="newAgent.username"
+              type="text"
+              placeholder="Enter username"
+              required
+              class="form-input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="add-email">Email</label>
+            <input
+              id="add-email"
+              v-model="newAgent.email"
+              type="email"
+              placeholder="Enter email"
+              required
+              class="form-input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="add-password">Password</label>
+            <input
+              id="add-password"
+              v-model="newAgent.password"
+              type="password"
+              placeholder="Enter password"
+              required
+              class="form-input"
+            />
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="newAgent.receiveUpdates" />
+              Receive Updates
+            </label>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="cancel-btn" @click="closeAddAgentModal">Cancel</button>
+            <button type="submit" class="submit-btn" :disabled="addingAgent">Add Agent</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Agent Details Bottom Sheet -->
+    <div class="bottom-sheet" :class="{ active: showDetailsModal }">
+      <div class="bottom-sheet-content">
+        <div class="modal-header">
+          <h3>{{ isEditing ? 'Edit Agent' : 'Agent Details' }}</h3>
+          <div class="header-actions">
+            <button v-if="!isEditing" class="edit-btn" @click="startEditing">
+              <font-awesome-icon icon="edit" />
+            </button>
+            <button class="close-btn" @click="closeDetailsModal">
+              <font-awesome-icon icon="times" />
+            </button>
+          </div>
+        </div>
+        <div class="agent-details" v-if="selectedAgent">
+          <form v-if="isEditing" @submit.prevent="saveAgentChanges">
+            <div class="form-group">
+              <label for="edit-username">Username</label>
+              <input
+                id="edit-username"
+                v-model="editAgent.username"
+                type="text"
+                placeholder="Enter username"
+                required
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label for="edit-email">Email</label>
+              <input
+                id="edit-email"
+                v-model="editAgent.email"
+                type="email"
+                placeholder="Enter email"
+                required
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="editAgent.receiveUpdates" />
+                Receive Updates
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="edit-streams">Assigned Streams</label>
+              <select
+                id="edit-streams"
+                v-model="editAgent.streamIds"
+                multiple
+                class="form-input"
+              >
+                <option v-for="stream in allStreams" :key="stream.id" :value="stream.id">
+                  {{ stream.streamer_username }} ({{ stream.platform }})
+                </option>
+              </select>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="cancel-btn" @click="cancelEditing">Cancel</button>
+              <button type="submit" class="submit-btn" :disabled="savingChanges">Save Changes</button>
+            </div>
+          </form>
+          <div v-else>
+            <div class="detail-row">
+              <span class="detail-label">Username:</span>
+              <span class="detail-value">{{ selectedAgent.username }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Email:</span>
+              <span class="detail-value">{{ selectedAgent.email }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Status:</span>
+              <span class="detail-value" :class="{ active: selectedAgent.online }">
+                {{ selectedAgent.online ? 'Online' : 'Offline' }}
+              </span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Receive Updates:</span>
+              <span class="detail-value">{{ selectedAgent.receiveUpdates ? 'Yes' : 'No' }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Assigned Streams:</span>
+              <div class="assigned-streams">
+                <div v-if="assignedStreamsLoading" class="loading-text">Loading streams...</div>
+                <div v-else-if="!assignedStreams.length" class="no-data">No streams assigned</div>
+                <div v-else class="stream-list">
+                  <div v-for="stream in assignedStreams" :key="stream.id" class="stream-item">
+                    <span class="stream-name">{{ stream.streamer_username }}</span>
+                    <span class="stream-platform" :class="stream.platform.toLowerCase()">
+                      {{ stream.platform }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import axios from 'axios'
+import { useToast } from 'vue-toastification'
+import Swal from 'sweetalert2'
 
 export default {
   name: 'MobileAdminAgents',
   props: {
-    loading: Boolean,
-    agents: Array,
     isDarkTheme: Boolean
   },
-  emits: ['agent-selected', 'add-agent'],
+  emits: ['agent-selected'],
   setup(props) {
+    const toast = useToast()
     const searchQuery = ref('')
+    const showAddModal = ref(false)
+    const showDetailsModal = ref(false)
+    const addingAgent = ref(false)
+    const assignedStreamsLoading = ref(false)
+    const assignedStreams = ref([])
+    const allStreams = ref([])
+    const selectedAgent = ref(null)
+    const agents = ref([])
+    const loading = ref(false)
+    const isEditing = ref(false)
+    const savingChanges = ref(false)
+    const editAgent = ref({})
+
+    const newAgent = ref({
+      username: '',
+      email: '',
+      password: '',
+      receiveUpdates: false
+    })
+
     const filteredAgents = computed(() => {
-      if (!props.agents) return []
-      return props.agents.filter(agent =>
-        agent.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+      if (!agents.value) return []
+      return agents.value.filter(agent =>
+        agent.username.toLowerCase().includes(searchQuery.value.toLowerCase())
       )
     })
-    return { searchQuery, filteredAgents }
+
+    const loadAgents = async () => {
+      loading.value = true
+      try {
+        const token = localStorage.getItem('token')
+        const response = await axios.get('/api/agents', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        agents.value = response.data
+      } catch (error) {
+        toast.error('Failed to load agents')
+        console.error('Error loading agents:', error)
+        agents.value = []
+      } finally {
+        loading.value = false
+      }
+    }
+
+    const loadAllStreams = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const response = await axios.get('/api/streams', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        allStreams.value = Object.values(response.data).map(stream => ({
+          ...stream,
+          platform: stream.platform || 'Unknown'
+        }))
+      } catch (error) {
+        toast.error('Failed to load streams')
+        console.error('Error loading streams:', error)
+        allStreams.value = []
+      }
+    }
+
+    const showAddAgentModal = () => {
+      showAddModal.value = true
+    }
+
+    const closeAddAgentModal = () => {
+      showAddModal.value = false
+      newAgent.value = { username: '', email: '', password: '', receiveUpdates: false }
+    }
+
+    const showAgentDetails = async (agent) => {
+      selectedAgent.value = agent
+      showDetailsModal.value = true
+      isEditing.value = false
+      await Promise.all([loadAssignedStreams(agent.id), loadAllStreams()])
+    }
+
+    const closeDetailsModal = () => {
+      showDetailsModal.value = false
+      selectedAgent.value = null
+      assignedStreams.value = []
+      isEditing.value = false
+      editAgent.value = {}
+    }
+
+    const startEditing = () => {
+      editAgent.value = {
+        username: selectedAgent.value.username,
+        email: selectedAgent.value.email,
+        receiveUpdates: selectedAgent.value.receiveUpdates,
+        streamIds: assignedStreams.value.map(stream => stream.id)
+      }
+      isEditing.value = true
+    }
+
+    const cancelEditing = () => {
+      isEditing.value = false
+      editAgent.value = {}
+    }
+
+    const saveAgentChanges = async () => {
+      savingChanges.value = true
+      try {
+        const token = localStorage.getItem('token')
+        const response = await axios.patch(`/api/agents/${selectedAgent.value.id}`, {
+          username: editAgent.value.username,
+          email: editAgent.value.email,
+          receiveUpdates: editAgent.value.receiveUpdates,
+          streamIds: editAgent.value.streamIds
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        toast.success('Agent updated successfully')
+        // Update local state
+        agents.value = agents.value.map(agent =>
+          agent.id === selectedAgent.value.id ? response.data : agent
+        )
+        selectedAgent.value = response.data
+        await loadAssignedStreams(selectedAgent.value.id)
+        isEditing.value = false
+        editAgent.value = {}
+      } catch (error) {
+        const message = error.response?.data?.message || 'Failed to update agent'
+        toast.error(message)
+      } finally {
+        savingChanges.value = false
+      }
+    }
+
+    const loadAssignedStreams = async (agentId) => {
+      assignedStreamsLoading.value = true
+      try {
+        const token = localStorage.getItem('token')
+        const response = await axios.get(`/api/agents/${agentId}/assignments`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        const streamIds = response.data.map(assignment => assignment.stream_id)
+        const streamsResponse = await axios.get('/api/streams', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        assignedStreams.value = Object.values(streamsResponse.data)
+          .filter(stream => streamIds.includes(stream.id))
+          .map(stream => ({
+            ...stream,
+            platform: stream.platform || 'Unknown'
+          }))
+      } catch (error) {
+        toast.error('Failed to load assigned streams')
+        console.error('Error loading assigned streams:', error)
+        assignedStreams.value = []
+      } finally {
+        assignedStreamsLoading.value = false
+      }
+    }
+
+    const addAgent = async () => {
+      addingAgent.value = true
+      try {
+        const token = localStorage.getItem('token')
+        const response = await axios.post('/api/register', {
+          username: newAgent.value.username,
+          email: newAgent.value.email,
+          password: newAgent.value.password,
+          receiveUpdates: newAgent.value.receiveUpdates
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        toast.success('Agent created successfully')
+        closeAddAgentModal()
+        agents.value = [...agents.value, response.data.user]
+      } catch (error) {
+        const message = error.response?.data?.message || 'Failed to create agent'
+        toast.error(message)
+      } finally {
+        addingAgent.value = false
+      }
+    }
+
+    const confirmDeleteAgent = async (agentId) => {
+      const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: 'This action will permanently delete the agent!',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#e5383b',
+        cancelButtonColor: '#777777',
+        confirmButtonText: 'Delete',
+        cancelButtonText: 'Cancel',
+        customClass: {
+          popup: props.isDarkTheme ? 'swal-dark' : 'swal-light'
+        }
+      })
+
+      if (result.isConfirmed) {
+        await deleteAgent(agentId)
+      }
+    }
+
+    const deleteAgent = async (agentId) => {
+      try {
+        const token = localStorage.getItem('token')
+        if (!token) throw new Error('No authentication token found')
+        await axios.delete(`/api/agents/${agentId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        toast.success('Agent deleted successfully')
+        agents.value = agents.value.filter(agent => agent.id !== agentId)
+        if (selectedAgent.value?.id === agentId) {
+          closeDetailsModal()
+        }
+      } catch (error) {
+        const message = error.response?.data?.message || 'Failed to delete agent'
+        toast.error(message)
+      }
+    }
+
+    // Load agents on component mount
+    onMounted(() => {
+      loadAgents()
+    })
+
+    return {
+      searchQuery,
+      filteredAgents,
+      showAddModal,
+      showDetailsModal,
+      newAgent,
+      addingAgent,
+      selectedAgent,
+      assignedStreams,
+      assignedStreamsLoading,
+      allStreams,
+      loading,
+      agents,
+      isEditing,
+      editAgent,
+      savingChanges,
+      showAddAgentModal,
+      closeAddAgentModal,
+      showAgentDetails,
+      closeDetailsModal,
+      startEditing,
+      cancelEditing,
+      saveAgentChanges,
+      addAgent,
+      confirmDeleteAgent,
+      deleteAgent,
+      loadAgents
+    }
   }
 }
 </script>
@@ -55,6 +472,9 @@ export default {
   --primary-color: #4361ee;
   --primary-light: #4361ee20;
   --secondary-color: #3f37c9;
+  --danger-color: #e5383b;
+  --success-color: #38b000;
+  --warning-color: #ffb700;
   --text-color: #333333;
   --text-light: #777777;
   --background-color: #f8f9fa;
@@ -64,10 +484,12 @@ export default {
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
   --transition: all 0.3s ease;
   --border-radius: 12px;
+  --border-radius-sm: 8px;
   background-color: var(--background-color);
   color: var(--text-color);
-  padding: 12px;
+  padding: 16px;
   position: relative;
+  min-height: 100vh;
 }
 
 .mobile-admin-agents[data-theme="dark"] {
@@ -83,22 +505,473 @@ export default {
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
 }
 
-.agents-header h2 { font-size: 1.25rem; font-weight: 600; color: var(--text-color); margin: 0 0 12px; }
+/* View Controls */
+.view-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
 
-.search-filter { margin-bottom: 12px; }
-.search-input { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: var(--border-radius); background-color: var(--card-bg); color: var(--text-color); font-size: 0.875rem; box-shadow: var(--shadow-sm); }
-.search-input::placeholder { color: var(--text-light); }
+.view-controls h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-color);
+}
 
-.agents-list { display: flex; flex-direction: column; gap: 12px; }
-.agent-item { display: flex; align-items: center; gap: 12px; background-color: var(--card-bg); padding: 12px; border-radius: var(--border-radius); box-shadow: var(--shadow-sm); cursor: pointer; transition: var(--transition); border: 1px solid var(--border-color); }
-.agent-item:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
-.agent-icon { color: var(--primary-color); font-size: 1.2rem; }
-.agent-content { flex: 1; }
-.agent-name { margin: 0; font-size: 0.875rem; color: var(--text-color); }
-.agent-status { font-size: 0.75rem; color: var(--text-light); }
-.agent-status.active { color: var(--success-color); }
-.loading-text, .no-data { font-size: 0.875rem; color: var(--text-light); text-align: center; }
+.controls-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 
-.fab { position: fixed; bottom: 90px; right: 12px; background-color: var(--primary-color); color: white; border: none; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: var(--transition); box-shadow: var(--shadow-md); font-size: 1.2rem; }
-.fab:hover { background-color: var(--secondary-color); }
+.refresh-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--border-radius-sm);
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+
+.refresh-btn:hover {
+  background-color: var(--secondary-color);
+  transform: scale(1.05);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Search Filter */
+.search-filter {
+  margin-bottom: 16px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  font-size: 0.875rem;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.search-input::placeholder {
+  color: var(--text-light);
+}
+
+/* Agents List */
+.agents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: var(--card-bg);
+  padding: 12px;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1px solid var(--border-color);
+}
+
+.agent-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.agent-icon {
+  color: var(--primary-color);
+  font-size: 1.25rem;
+}
+
+.agent-content {
+  flex: 1;
+}
+
+.agent-name {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.agent-status {
+  font-size: 0.75rem;
+  color: var(--text-light);
+}
+
+.agent-status.active {
+  color: var(--success-color);
+}
+
+.delete-btn {
+  background-color: var(--danger-color);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+
+.delete-btn:hover {
+  background-color: #d32f2f;
+  transform: scale(1.05);
+}
+
+.loading-text,
+.no-data {
+  font-size: 0.875rem;
+  color: var(--text-light);
+  text-align: center;
+  padding: 16px;
+}
+
+/* Floating Action Button */
+.fab {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: var(--shadow-md);
+  font-size: 1.5rem;
+}
+
+.fab:hover {
+  background-color: var(--secondary-color);
+  transform: scale(1.1);
+}
+
+/* Bottom Sheet */
+.bottom-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--card-bg);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  box-shadow: var(--shadow-md);
+  transform: translateY(100%);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1000;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.bottom-sheet.active {
+  transform: translateY(0);
+}
+
+.bottom-sheet-content {
+  padding: 16px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.edit-btn,
+.close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--border-radius-sm);
+  border: none;
+  background-color: var(--border-color);
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.edit-btn:hover,
+.close-btn:hover {
+  background-color: var(--primary-light);
+}
+
+/* Form Styles */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: 8px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: var(--text-color);
+}
+
+.form-input,
+.form-input[multiple] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-size: 0.875rem;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-input[multiple] {
+  height: 100px;
+  overflow-y: auto;
+}
+
+.form-input:focus,
+.form-input[multiple]:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.form-input::placeholder {
+  color: var(--text-light);
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.cancel-btn,
+.submit-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--border-radius-sm);
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.cancel-btn {
+  background-color: var(--border-color);
+  color: var(--text-color);
+}
+
+.cancel-btn:hover {
+  background-color: #d1d5db;
+}
+
+.submit-btn {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.submit-btn:hover {
+  background-color: var(--secondary-color);
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Agent Details */
+.agent-details {
+  padding: 16px 0;
+}
+
+.detail-row {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.detail-label {
+  font-weight: 600;
+  color: var(--text-color);
+  min-width: 100px;
+}
+
+.detail-value {
+  color: var(--text-color);
+  word-break: break-word;
+}
+
+.detail-value.active {
+  color: var(--success-color);
+}
+
+.assigned-streams {
+  width: 100%;
+}
+
+.stream-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stream-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: var(--background-color);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.stream-name {
+  font-size: 0.875rem;
+  color: var(--text-color);
+}
+
+.stream-platform {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.stream-platform.chaturbate {
+  background-color: #f59e0b20;
+  color: #f59e0b;
+  border: 1px solid #f59e0b40;
+}
+
+.stream-platform.stripchat {
+  background-color: #8b5cf620;
+  color: #8b5cf6;
+  border: 1px solid #8b5cf640;
+}
+
+/* SweetAlert2 Custom Styles */
+:deep(.swal-light) {
+  background-color: var(--card-bg);
+  color: var(--text-color);
+}
+
+:deep(.swal-dark) {
+  background-color: var(--card-bg);
+  color: var(--text-color);
+}
+
+:deep(.swal2-confirm) {
+  background-color: var(--danger-color) !important;
+}
+
+:deep(.swal2-cancel) {
+  background-color: var(--border-color) !important;
+  color: var(--text-color) !important;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .mobile-admin-agents {
+    padding: 12px;
+  }
+
+  .bottom-sheet {
+    max-height: 95vh;
+  }
+
+  .agent-item {
+    padding: 10px;
+  }
+
+  .delete-btn {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+@media (max-width: 480px) {
+  .view-controls h2 {
+    font-size: 1.25rem;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .cancel-btn,
+  .submit-btn {
+    width: 100%;
+  }
+
+  .detail-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .detail-label {
+    min-width: auto;
+  }
+}
 </style>

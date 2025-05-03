@@ -463,6 +463,8 @@ watch(viewMode, (newMode) => {
   width: 100%;
   position: relative;
   top: 1rem;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 /* View Controls */
@@ -524,14 +526,14 @@ watch(viewMode, (newMode) => {
 /* Grid View */
 .stream-grid {
   display: grid;
-  gap: 1.5rem;
+  gap: 1rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .stream-grid-item {
   cursor: pointer;
   transition: transform 0.2s;
-  border-radius: 10px;
+  border-radius: 25px;
   overflow: hidden;
   background-color: var(--card-bg);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
@@ -982,7 +984,7 @@ watch(viewMode, (newMode) => {
   }
   
   .stream-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(1, minmax(0, 1fr));
   }
   
   .stream-list-item {

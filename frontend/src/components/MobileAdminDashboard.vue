@@ -58,10 +58,8 @@
       />
       <MobileAdminAgents
         v-else-if="activeTab === 2"
-        :loading="loading"
-        :agents="agents"
+        :is-dark-theme="isDarkTheme"
         @agent-selected="openAgentDetails"
-        @add-agent="openAddAgentModal"
       />
       <MobileAdminNotifications
         v-else-if="activeTab === 3"
@@ -119,11 +117,62 @@
       @agent-updated="handleAgentUpdated"
       @agent-deleted="handleAgentDeleted"
     />
-    <MobileAddAgentModal
-      v-if="showAddAgentModal"
-      @close="showAddAgentModal = false"
-      @agent-created="handleAgentCreated"
-    />
+    <!-- Add Agent Bottom Sheet -->
+    <div class="bottom-sheet" :class="{ active: showAddAgentModal }" :data-theme="isDarkTheme ? 'dark' : 'light'">
+      <div class="bottom-sheet-content">
+        <div class="modal-header">
+          <h3>Add New Agent</h3>
+          <button class="close-btn" @click="showAddAgentModal = false">
+            <font-awesome-icon icon="times" />
+          </button>
+        </div>
+        <form @submit.prevent="handleAgentCreated">
+          <div class="form-group">
+            <label for="username">Username</label>
+            <input
+              id="username"
+              v-model="newAgent.username"
+              type="text"
+              placeholder="Enter username"
+              required
+              class="form-input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input
+              id="email"
+              v-model="newAgent.email"
+              type="email"
+              placeholder="Enter email"
+              required
+              class="form-input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input
+              id="password"
+              v-model="newAgent.password"
+              type="password"
+              placeholder="Enter password"
+              required
+              class="form-input"
+            />
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="newAgent.receiveUpdates" />
+              Receive Updates
+            </label>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="cancel-btn" @click="showAddAgentModal = false">Cancel</button>
+            <button type="submit" class="submit-btn" :disabled="addingAgent">Add Agent</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -140,7 +189,6 @@ import MobileAdminSettings from './MobileAdminSettings.vue'
 import MobileStreamDetailsModal from './MobileStreamDetailsModal.vue'
 import MobileAddStreamModal from './MobileAddStreamModal.vue'
 import MobileAgentDetailsModal from './MobileAgentDetailsModal.vue'
-import MobileAddAgentModal from './MobileAddAgentModal.vue'
 import { useMobileDashboardData } from '../composables/useMobileDashboardData'
 import { useMobileNotifications } from '../composables/useMobileNotifications'
 
@@ -154,8 +202,7 @@ export default {
     MobileAdminSettings,
     MobileStreamDetailsModal,
     MobileAddStreamModal,
-    MobileAgentDetailsModal,
-    MobileAddAgentModal
+    MobileAgentDetailsModal
   },
   setup() {
     const router = useRouter()
@@ -171,7 +218,15 @@ export default {
     const selectedStream = ref(null)
     const selectedAgent = ref(null)
     const jobId = ref(null)
+    const addingAgent = ref(false)
     const refreshIntervalMinutes = ref(Math.round(settings.baseRefreshInterval / (60 * 1000)))
+
+    const newAgent = ref({
+      username: '',
+      email: '',
+      password: '',
+      receiveUpdates: false
+    })
 
     const tabs = [
       { label: 'Home', icon: 'house' },
@@ -192,7 +247,7 @@ export default {
 
     const displayStats = computed(() => [
       { label: 'Active Streams', value: dashboardStats.value.ongoing_streams || 0, icon: 'video' },
-      { label: 'Active Agents', value: agents.value || 0, icon: 'users' },
+      { label: 'Active Agents', value: agents.value.length || 0, icon: 'users' },
       { label: 'Detections', value: notifications.value.length || 0, icon: 'eye' }
     ])
 
@@ -286,10 +341,26 @@ export default {
       toast.success('Agent deleted')
     }
 
-    const handleAgentCreated = () => {
-      fetchDashboardData(false)
-      showAddAgentModal.value = false
-      toast.success('Agent created')
+    const handleAgentCreated = async () => {
+      addingAgent.value = true
+      try {
+        const response = await axios.post('/api/register', {
+          username: newAgent.value.username,
+          email: newAgent.value.email,
+          password: newAgent.value.password,
+          receiveUpdates: newAgent.value.receiveUpdates
+        })
+        agents.value = [...agents.value, response.data.user]
+        fetchDashboardData(false)
+        showAddAgentModal.value = false
+        newAgent.value = { username: '', email: '', password: '', receiveUpdates: false }
+        toast.success('Agent created')
+      } catch (error) {
+        const message = error.response?.data?.message || 'Failed to create agent'
+        toast.error(message)
+      } finally {
+        addingAgent.value = false
+      }
     }
 
     const logout = async () => {
@@ -347,6 +418,8 @@ export default {
       settings,
       displayStats,
       recentDetections,
+      newAgent,
+      addingAgent,
       refreshData: fetchDashboardData,
       refreshStream,
       openStreamDetails,
@@ -455,6 +528,147 @@ export default {
 .tab-label { font-size: 0.7rem; font-weight: 500; }
 
 .tab-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+/* Bottom Sheet */
+.bottom-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--card-bg);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  box-shadow: var(--shadow-md);
+  transform: translateY(100%);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1000;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.bottom-sheet.active {
+  transform: translateY(0);
+}
+
+.bottom-sheet-content {
+  padding: 16px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--border-radius-sm);
+  border: none;
+  background-color: var(--border-color);
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.close-btn:hover {
+  background-color: var(--primary-light);
+}
+
+/* Form Styles */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: 8px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: var(--text-color);
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-size: 0.875rem;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.form-input::placeholder {
+  color: var(--text-light);
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.cancel-btn,
+.submit-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--border-radius-sm);
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.cancel-btn {
+  background-color: var(--border-color);
+  color: var(--text-color);
+}
+
+.cancel-btn:hover {
+  background-color: #d1d5db;
+}
+
+.submit-btn {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.submit-btn:hover {
+  background-color: var(--secondary-color);
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 @media (max-width: 340px) {
   .stats-container { grid-template-columns: repeat(1, 1fr); }
