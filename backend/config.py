@@ -23,7 +23,6 @@ class Config:
     )
     # Handle Supabase PostgreSQL connection with SSL parameters if needed
     if 'DATABASE_URL' in os.environ and 'supabase' in os.getenv('DATABASE_URL').lower():
-        app.logger.info("Detected Supabase database URL")
         # Ensure the connection string has the correct SSL parameters
         if '?sslmode=' not in os.getenv('DATABASE_URL'):
             SQLALCHEMY_DATABASE_URI += "?sslmode=require"
