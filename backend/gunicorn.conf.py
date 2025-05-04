@@ -27,30 +27,30 @@ if enable_ssl:
 bind = "0.0.0.0:5000"
 
 # Worker Configuration
-worker_class = "gevent"
-workers = min(multiprocessing.cpu_count() * 2 + 1, 4)  # Adjusted for moderate load
-threads = 4  # Suitable for gevent async workers
+worker_class = "geventwebsocket.gunicorn.workers.GeventWebSocketWorker"
+workers = 4
+threads = 2
 
 # Connection settings
-worker_connections = 2000
+worker_connections = 1000
 backlog = 2048
 
 # Performance optimizations
-max_requests = 1000
-max_requests_jitter = 200
+max_requests = 0
+max_requests_jitter = 0
 preload_app = True
 reuse_port = True
 
 # Timeouts (in seconds)
 timeout = 30
 graceful_timeout = 15
-keepalive = 5
+keepalive = 2
 
 # Logging
 accesslog = "-"
 errorlog = "-"
 loglevel = "info"
-access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(L)s'
+access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"'
 capture_output = True
 
 # Security Headers
@@ -76,4 +76,10 @@ def pre_exec(server):
     server.log.info("Forked child, re-executing.")
 
 def when_ready(server):
-    server.log.info("Server is ready. Spawning workers")
+    print(f'Gunicorn server started with {server.cfg.workers} workers')
+
+# Additional configuration for WebSocket support
+raw_env = [
+    'FLASK_ENV=production',
+    'FLASK_DEBUG=False'
+]

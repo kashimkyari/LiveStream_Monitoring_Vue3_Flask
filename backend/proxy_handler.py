@@ -7,6 +7,7 @@ import os
 import random
 from datetime import datetime, timedelta
 from ssl_utils import fetch_proxyscrape_proxies
+import requests
 
 class ProxyManager:
     """Manages a pool of proxies with automatic rotation and refresh"""
@@ -64,7 +65,7 @@ class ProxyManager:
         """Fetch fresh proxies from API and update cache"""
         try:
             # Use our robust SSL utility to fetch proxies
-            new_proxies = fetch_proxyscrape_proxies()
+            new_proxies = self.fetch_proxies_from_api()
             
             if new_proxies and len(new_proxies) >= self.min_proxies:
                 self.proxies = new_proxies
@@ -83,6 +84,36 @@ class ProxyManager:
         except Exception as e:
             logging.error(f"Failed to update proxy list: {str(e)}")
             return False
+    
+    def fetch_proxies_from_api(self):
+        """
+        Fetch proxies from ProxyScrape API with a fallback to disable SSL verification if needed.
+        """
+        url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all"
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                proxies = response.text.splitlines()
+                return [proxy for proxy in proxies if proxy.strip()]
+            else:
+                logging.error(f"Failed to fetch proxies: Status code {response.status_code}")
+                return []
+        except requests.exceptions.SSLError as e:
+            logging.warning(f"SSL error occurred: {e}. Retrying with SSL verification disabled.")
+            try:
+                response = requests.get(url, timeout=10, verify=False)
+                if response.status_code == 200:
+                    proxies = response.text.splitlines()
+                    return [proxy for proxy in proxies if proxy.strip()]
+                else:
+                    logging.error(f"Failed to fetch proxies (no SSL): Status code {response.status_code}")
+                    return []
+            except Exception as e2:
+                logging.error(f"Failed to fetch proxies (no SSL): {e2}")
+                return []
+        except Exception as e:
+            logging.error(f"Failed to update proxy list: {e}")
+            return []
     
     def get_proxy(self):
         """
