@@ -2,7 +2,7 @@
 Description=LiveStream Monitoring Backend Service (Gevent Optimized)
 After=network.target
 Wants=network-online.target
-Documentation=https://live-stream-monitoring-vue3-flask.vercel.app/
+Documentation=https://monitor.jetcamstudio.com/
 
 [Service]
 Type=simple

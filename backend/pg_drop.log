@@ -110,3 +110,43 @@ PL/pgSQL function inline_code_block line 8 at EXECUTE
             ]
 (Background on this error at: https://sqlalche.me/e/20/e3q8)
 2025-05-02 02:27:53,929 [INFO] PostgreSQL table deletion process completed
+2025-05-04 01:23:41,276 [INFO] Starting PostgreSQL table deletion process
+2025-05-04 01:23:42,248 [INFO] SocketIO initialized with http scheme
+2025-05-04 01:23:52,884 [INFO] [Background] Updated proxy list with 499 proxies at 2025-05-04 01:23:52.884396
+2025-05-04 01:24:05,247 [INFO] Disabling triggers
+2025-05-04 01:24:06,735 [INFO] Working with schema: public
+2025-05-04 01:24:07,185 [INFO] Found 14 tables: assignments, chat_keywords, chat_messages, chaturbate_streams, detection_logs, flagged_objects, logs, message_attachments, password_reset_tokens, password_resets, streams, stripchat_streams, telegram_recipients, users
+2025-05-04 01:24:07,186 [INFO] Dropping all foreign key constraints...
+2025-05-04 01:24:07,651 [INFO] Foreign key constraints dropped
+2025-05-04 01:24:07,651 [INFO] Dropping table: assignments
+2025-05-04 01:24:08,111 [INFO] Successfully dropped table: assignments
+2025-05-04 01:24:08,111 [INFO] Dropping table: chat_keywords
+2025-05-04 01:24:08,780 [INFO] Successfully dropped table: chat_keywords
+2025-05-04 01:24:08,780 [INFO] Dropping table: chat_messages
+2025-05-04 01:24:09,289 [INFO] Successfully dropped table: chat_messages
+2025-05-04 01:24:09,289 [INFO] Dropping table: chaturbate_streams
+2025-05-04 01:24:09,761 [INFO] Successfully dropped table: chaturbate_streams
+2025-05-04 01:24:09,762 [INFO] Dropping table: detection_logs
+2025-05-04 01:24:10,528 [INFO] Successfully dropped table: detection_logs
+2025-05-04 01:24:10,530 [INFO] Dropping table: flagged_objects
+2025-05-04 01:24:11,387 [INFO] Successfully dropped table: flagged_objects
+2025-05-04 01:24:11,389 [INFO] Dropping table: logs
+2025-05-04 01:24:11,855 [INFO] Successfully dropped table: logs
+2025-05-04 01:24:11,856 [INFO] Dropping table: message_attachments
+2025-05-04 01:24:12,443 [INFO] Successfully dropped table: message_attachments
+2025-05-04 01:24:12,443 [INFO] Dropping table: password_reset_tokens
+2025-05-04 01:24:13,044 [INFO] Successfully dropped table: password_reset_tokens
+2025-05-04 01:24:13,044 [INFO] Dropping table: password_resets
+2025-05-04 01:24:13,536 [INFO] Successfully dropped table: password_resets
+2025-05-04 01:24:13,538 [INFO] Dropping table: streams
+2025-05-04 01:24:14,157 [INFO] Successfully dropped table: streams
+2025-05-04 01:24:14,157 [INFO] Dropping table: stripchat_streams
+2025-05-04 01:24:14,634 [INFO] Successfully dropped table: stripchat_streams
+2025-05-04 01:24:14,635 [INFO] Dropping table: telegram_recipients
+2025-05-04 01:24:15,439 [INFO] Successfully dropped table: telegram_recipients
+2025-05-04 01:24:15,442 [INFO] Dropping table: users
+2025-05-04 01:24:16,425 [INFO] Successfully dropped table: users
+2025-05-04 01:24:16,426 [INFO] Resetting sequences...
+2025-05-04 01:24:17,277 [INFO] Dropping any remaining views...
+2025-05-04 01:24:19,836 [INFO] Success! All tables have been dropped from the database.
+2025-05-04 01:24:20,349 [INFO] PostgreSQL table deletion process completed

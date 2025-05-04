@@ -36,9 +36,12 @@ socketio = init_socketio(app)
 
 # Parse allowed origins from environment
 allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else ['*']
+# Ensure https://monitor.jetcamstudio.com/ is in allowed origins
+if 'https://monitor.jetcamstudio.com/' not in allowed_origins and '*' not in allowed_origins:
+    allowed_origins.append('https://monitor.jetcamstudio.com/')
 logging.info(f"Allowed origins configured: {allowed_origins}")
 
-# === CORS Configuration for Flask ===
+# Configure CORS for Flask app
 CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
 
 # Register a before_request handler for CORS
