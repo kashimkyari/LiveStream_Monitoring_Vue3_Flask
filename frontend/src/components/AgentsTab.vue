@@ -3,13 +3,18 @@
     <div class="tab-header">
       <h2>Agent Management</h2>
       <div class="controls">
+        <div class="search-box">
+          <font-awesome-icon icon="search" class="search-icon" />
+          <input 
+            type="text" 
+            v-model="searchQuery" 
+            placeholder="Search agents..." 
+          />
+        </div>
         <button @click="openCreateModal" class="create-button" v-wave>
           <font-awesome-icon icon="plus" /> Add Agent
         </button>
       </div>
-    </div>
-    <div class="search-container">
-      <input type="text" v-model="searchQuery" placeholder="Search agents..." class="form-control" />
     </div>
     <div class="agents-table">
       <div class="table-wrapper">
@@ -37,7 +42,7 @@
                 <div class="agent-email">{{ agent.email || 'N/A' }}</div>
               </td>
               <td>
-                <div class="agent-status" :class="{'online': agent.is_active, 'offline': !agent.is_active}" v-if="agent.hasOwnProperty('is_active')">{{ agent.is_active ? 'Online' : 'Offline' }}</div>
+                <div class="agent-status" :class="{'online': agent.online, 'offline': !agent.online}" v-if="agent.hasOwnProperty('online')">{{ agent.online ? 'Online' : 'Offline' }}</div>
                 <div class="agent-status unknown" v-else>Unknown</div>
               </td>
               <td class="count-col" @mouseenter="showStreamsList(agent)" @mouseleave="hideStreamsList">
@@ -46,7 +51,11 @@
                   <div class="tooltip-header">Assigned Streams</div>
                   <div v-if="getStreamCount(agent) > 0" class="stream-list">
                     <div v-for="assignment in agent.assignments" :key="assignment.id" class="stream-item">
-                      {{ getStreamInfo(assignment) }}
+                      <span v-if="assignment.stream">
+                        {{ assignment.stream.streamer_username }} ({{ assignment.stream.platform }}) - 
+                        <a :href="assignment.stream.room_url" target="_blank" class="stream-link">View Stream</a>
+                      </span>
+                      <span v-else>Stream details unavailable</span>
                     </div>
                   </div>
                   <div v-else class="empty-streams">No streams assigned</div>
@@ -76,13 +85,13 @@
       </div>
     </div>
     <div class="mobile-cards">
-      <div v-for="agent in agents" :key="agent.agent_id || agent.id" class="agent-card">
+      <div v-for="agent in filteredAgents" :key="agent.agent_id || agent.id" class="agent-card">
         <div class="card-header">
           <div class="agent-info">
             <div class="avatar">{{ agent.username.charAt(0).toUpperCase() }}</div>
             <div class="agent-name">{{ agent.username }}</div>
           </div>
-          <div class="agent-status" :class="{'online': agent.is_active, 'offline': !agent.is_active}" v-if="agent.hasOwnProperty('is_active')">{{ agent.is_active ? 'Online' : 'Offline' }}</div>
+          <div class="agent-status" :class="{'online': agent.online, 'offline': !agent.online}" v-if="agent.hasOwnProperty('online')">{{ agent.online ? 'Online' : 'Offline' }}</div>
           <div class="agent-status unknown" v-else>Unknown</div>
         </div>
         <div class="card-details">
@@ -102,7 +111,11 @@
           <div v-if="expandedAgent === (agent.agent_id || agent.id)" class="stream-list-mobile">
             <div v-if="getStreamCount(agent) > 0" class="stream-items">
               <div v-for="assignment in agent.assignments" :key="assignment.id" class="stream-item-mobile">
-                {{ getStreamInfo(assignment) }}
+                <span v-if="assignment.stream">
+                  {{ assignment.stream.streamer_username }} ({{ assignment.stream.platform }}) - 
+                  <a :href="assignment.stream.room_url" target="_blank" class="stream-link">View Stream</a>
+                </span>
+                <span v-else>Stream details unavailable</span>
               </div>
             </div>
             <div v-else class="empty-streams">No streams assigned</div>
@@ -179,8 +192,6 @@ export default {
       isEditing: false,
       editingAgent: null,
       agentToDelete: null,
-      streams: {},
-      newlyAddedAgentId: null,
       deletingAgentId: null,
       searchQuery: '',
       highlightedAgentId: null
@@ -204,49 +215,14 @@ export default {
     getStreamCount(agent) {
       return agent.assignments?.length || 0;
     },
-    getStreamInfo(assignment) {
-      if (this.streams[assignment.stream_id]) {
-        const stream = this.streams[assignment.stream_id];
-        return `${stream.streamer_username} (${stream.type})`;
-      }
-      return `Stream #${assignment.stream_id}`;
-    },
     showStreamsList(agent) {
       this.activeAgent = agent.agent_id || agent.id;
-      if (agent.assignments && agent.assignments.length > 0) {
-        agent.assignments.forEach(assignment => {
-          if (!this.streams[assignment.stream_id]) {
-            this.fetchStreamInfo(assignment.stream_id);
-          }
-        });
-      }
     },
     hideStreamsList() {
       this.activeAgent = null;
     },
     toggleStreamsList(agent) {
       this.expandedAgent = this.expandedAgent === (agent.agent_id || agent.id) ? null : (agent.agent_id || agent.id);
-      if (this.expandedAgent && agent.assignments && agent.assignments.length > 0) {
-        agent.assignments.forEach(assignment => {
-          if (!this.streams[assignment.stream_id]) {
-            this.fetchStreamInfo(assignment.stream_id);
-          }
-        });
-      }
-    },
-    fetchStreamInfo(streamId) {
-      axios.get(`/api/streams/${streamId}`)
-        .then(response => {
-          const stream = response.data;
-          this.$set(this.streams, streamId, stream);
-        })
-        .catch(error => {
-          console.error('Error fetching stream info:', error);
-          this.$set(this.streams, streamId, { 
-            streamer_username: 'Unknown', 
-            type: 'unknown' 
-          });
-        });
     },
     openCreateModal() {
       this.isEditing = false;
@@ -272,10 +248,10 @@ export default {
         email: formData.email
       };
       if (formData.password) {
-        payload.password = formData.password;
+        payload.password = formData.password
       }
       if (formData.receiveUpdates !== undefined) {
-        payload.receiveUpdates = formData.receiveUpdates;
+        payload.receiveUpdates = formData.receiveUpdates
       }
       if (this.isEditing) {
         const agentId = this.editingAgent.agent_id || this.editingAgent.id;
@@ -287,9 +263,9 @@ export default {
               position: "top-center",
               icon: true
             });
-            this.newlyAddedAgentId = response.data.agent.agent_id || response.data.agent.id;
+            this.highlightedAgentId = response.data.agent.agent_id || response.data.agent.id;
             setTimeout(() => {
-              this.newlyAddedAgentId = null;
+              this.highlightedAgentId = null;
             }, 3000);
             this.closeCreateModal();
             this.reloadAgents();
@@ -311,9 +287,9 @@ export default {
               position: "top-center",
               icon: true
             });
-            this.newlyAddedAgentId = response.data.user.agent_id || response.data.user.id;
+            this.highlightedAgentId = response.data.user.agent_id || response.data.user.id;
             setTimeout(() => {
-              this.newlyAddedAgentId = null;
+              this.highlightedAgentId = null;
             }, 3000);
             this.closeCreateModal();
             this.reloadAgents();
@@ -390,6 +366,9 @@ export default {
     reloadAgents() {
       this.$emit('reloadAgents');
     }
+  },
+  mounted() {
+    this.reloadAgents();
   }
 }
 </script>
@@ -424,6 +403,26 @@ export default {
   display: flex;
   gap: 15px;
   align-items: center;
+}
+
+.search-box {
+  position: relative;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+}
+
+.search-box input {
+  padding: 8px 16px 8px 30px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background-color: var(--background-color);
+  font-size: 0.95rem;
 }
 
 .create-button {
@@ -961,5 +960,13 @@ tbody td {
 @keyframes trashShake {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(10deg); }
+}
+
+.stream-link {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+.stream-link:hover {
+  text-decoration: underline;
 }
 </style>

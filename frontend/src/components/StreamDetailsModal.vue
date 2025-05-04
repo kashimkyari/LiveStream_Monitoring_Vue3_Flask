@@ -10,7 +10,7 @@
           <span class="tag platform">{{ stream.platform }}</span>
           <!-- Updated agent tags to properly display usernames -->
           <div class="agent-tags">
-            <span v-if="!hasAssignedAgents" class="tag agent unassigned">
+            <span v-if="!hasAssignments" class="tag agent unassigned">
               Unassigned
             </span>
             <span 
@@ -104,6 +104,10 @@ export default {
     isRefreshing: {
       type: Boolean,
       default: false
+    },
+    show: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['close', 'assign', 'refresh'],
@@ -114,23 +118,15 @@ export default {
     const isLoading = ref(true)
     
     // Computed property to check if there are any assigned agents
-    const hasAssignedAgents = computed(() => {
+    const hasAssignments = computed(() => {
       return props.stream.assignments && props.stream.assignments.length > 0;
     })
 
     // Helper function to get agent username from assignment
     const getAgentUsername = (assignment) => {
-      // Check if agent username is directly available in assignment
-      if (assignment.agent_username) {
-        return assignment.agent_username;
-      }
-      
-      // Check if agent object is available
       if (assignment.agent && assignment.agent.username) {
         return assignment.agent.username;
       }
-      
-      // Fallback to Unknown Agent with ID
       return `Agent ${assignment.agent_id}`;
     }
 
@@ -307,7 +303,7 @@ export default {
       refreshError,
       videoPlayer,
       isLoading,
-      hasAssignedAgents,
+      hasAssignments,
       getAgentUsername
     }
   }

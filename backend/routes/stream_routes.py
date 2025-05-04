@@ -500,3 +500,32 @@ def refresh_stripchat_route():
         }), 200
     else:
         return jsonify({"message": "Failed to refresh stream"}), 500
+
+# Endpoint to update stream status
+@stream_bp.route('/api/streams/<int:stream_id>/status', methods=['POST'])
+@login_required(role='admin')
+def update_stream_status(stream_id):
+    stream = Stream.query.get(stream_id)
+    if not stream:
+        return jsonify({'message': 'Stream not found'}), 404
+    
+    data = request.get_json()
+    status = data.get('status')
+    if status not in ['online', 'offline']:
+        return jsonify({'message': 'Invalid status. Use online or offline'}), 400
+    
+    stream.status = status
+    db.session.commit()
+    
+    # Emit update to connected clients
+    stream_data = {
+        'id': stream.id,
+        'type': stream.type,
+        'room_url': stream.room_url,
+        'streamer_username': stream.streamer_username,
+        'status': stream.status,
+        'action': 'status_update'
+    }
+    emit_stream_update(stream_data)
+    
+    return jsonify({'message': f'Stream status updated to {status}', 'stream': stream.serialize()}), 200

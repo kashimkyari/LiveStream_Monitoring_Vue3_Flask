@@ -67,8 +67,8 @@
                   </div>
                 </td>
                 <td class="text-center">
-                  <span class="status-badge" :class="isStreamActive(stream) ? 'active' : 'inactive'">
-                    {{ isStreamActive(stream) ? 'Active' : 'Inactive' }}
+                  <span class="status-badge" :class="stream.status === 'online' ? 'active' : 'inactive'">
+                    {{ stream.status === 'online' ? 'Online' : 'Offline' }}
                   </span>
                 </td>
                 <td class="actions">
@@ -116,8 +116,8 @@
               <div class="streamer-url">{{ formatUrl(stream.room_url) }}</div>
             </div>
           </div>
-          <span class="status-badge" :class="isStreamActive(stream) ? 'active' : 'inactive'">
-            {{ isStreamActive(stream) ? 'Active' : 'Inactive' }}
+          <span class="status-badge" :class="stream.status === 'online' ? 'active' : 'inactive'">
+            {{ stream.status === 'online' ? 'Online' : 'Offline' }}
           </span>
         </div>
         <div class="card-details">

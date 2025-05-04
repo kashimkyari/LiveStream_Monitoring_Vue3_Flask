@@ -82,8 +82,8 @@
             <div class="live-badge">
               <span class="live-dot"></span>LIVE
             </div>
-            <div class="detection-badge" v-if="stream.detection_status">
-              {{ stream.detection_status }}
+            <div class="detection-badge" v-if="hasDetections(stream.id)">
+              Detected
             </div>
           </div>
           <div class="stream-duration">
@@ -106,11 +106,11 @@
           <div class="stream-controls">
             <button 
               class="control-btn detection-btn" 
-              :class="{ 'active': stream.detection_active }"
+              :class="{ 'active': hasDetections(stream.id) }"
               @click.stop="toggleDetection(stream)"
             >
-              <font-awesome-icon :icon="stream.detection_active ? 'stop' : 'play'" />
-              {{ stream.detection_active ? 'Stop Detection' : 'Start Detection' }}
+              <font-awesome-icon :icon="hasDetections(stream.id) ? 'stop' : 'play'" />
+              {{ hasDetections(stream.id) ? 'Stop Detection' : 'Start Detection' }}
             </button>
             <button class="control-btn refresh-btn" @click.stop="refreshStreamUrl(stream)">
               <font-awesome-icon icon="sync" />
@@ -151,9 +151,9 @@
               <font-awesome-icon icon="clock" /> 
               <span>{{ formatStreamTime(stream.stream_start_time) }}</span>
             </span>
-            <span class="list-detail-item detection-status" v-if="stream.detection_status">
+            <span class="list-detail-item detection-status" v-if="hasDetections(stream.id)">
               <font-awesome-icon icon="chart-bar" /> 
-              <span>{{ stream.detection_status }}</span>
+              <span>Detected</span>
             </span>
           </div>
         </div>
@@ -163,11 +163,11 @@
           </button>
           <button 
             class="detection-toggle-btn" 
-            :class="{ 'active': stream.detection_active }"
+            :class="{ 'active': hasDetections(stream.id) }"
             @click.stop="toggleDetection(stream)"
-            :title="stream.detection_active ? 'Stop detection' : 'Start detection'"
+            :title="hasDetections(stream.id) ? 'Stop detection' : 'Start detection'"
           >
-            <font-awesome-icon :icon="stream.detection_active ? 'binoculars' : 'binoculars'" />
+            <font-awesome-icon :icon="hasDetections(stream.id) ? 'binoculars' : 'binoculars'" />
           </button>
           <button 
             class="refresh-stream-btn" 
@@ -192,25 +192,27 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue'
 import { formatDistance } from 'date-fns'
 import axios from 'axios'
 import Hls from 'hls.js'
 import { useToast } from 'vue-toastification'
 import VideoPlayerModal from './VideoPlayerModal.vue'
+import { useAgentStore } from '@/stores/agent'
 
 const toast = useToast()
-
-// State variables
+const agentStore = useAgentStore()
+const currentAgentId = computed(() => agentStore.currentAgent ? agentStore.currentAgent.id : null)
 const viewMode = ref('list') // 'grid' or 'list'
 const selectedStream = ref(null)
 const assignments = ref([])
 const isLoading = ref(false)
-const currentAgentId = ref(null)
 const hlsInstances = ref({})
+const detectionStatuses = ref({})
 
 onMounted(() => {
   loadAssignments()
+  window.addEventListener('focus', loadAssignments)
   
   // Set up auto-refresh interval (every 5 minutes)
   const refreshInterval = setInterval(() => {
@@ -223,6 +225,7 @@ onMounted(() => {
   onUnmounted(() => {
     clearInterval(refreshInterval)
     destroyAllHlsInstances()
+    window.removeEventListener('focus', loadAssignments)
   })
 })
 
@@ -237,30 +240,18 @@ const destroyAllHlsInstances = () => {
 }
 
 const loadAssignments = async () => {
+  if (!currentAgentId.value) return
   isLoading.value = true
   
   try {
-    // Get current agent ID
-    const sessionResponse = await axios.get('/api/session')
-    currentAgentId.value = sessionResponse.data.user.id
-    
     // Get streams
     const streamsResponse = await axios.get('/api/streams')
     
     // Filter for assigned streams
-    assignments.value = Object.values(streamsResponse.data)
-      .filter(stream => {
-        return stream.assignments?.some(a => a.agent_id === currentAgentId.value) && 
-               (stream.platform === 'Chaturbate' || stream.platform === 'Stripchat')
-      })
-      .map(stream => ({
-        ...stream,
-        video_url: stream.platform === 'Chaturbate' 
-          ? stream.chaturbate_m3u8_url 
-          : stream.stripchat_m3u8_url,
-        detection_active: false,
-        detection_status: null
-      }))
+    assignments.value = streamsResponse.data.filter(stream => {
+      return stream.assignments?.some(a => a.agent_id === currentAgentId.value) && 
+             (stream.platform === 'Chaturbate' || stream.platform === 'Stripchat')
+    })
     
     // Clean up any existing HLS instances
     destroyAllHlsInstances()
@@ -339,12 +330,15 @@ const initializeMiniPlayers = () => {
 
 const checkDetectionStatus = async (stream) => {
   try {
-    const response = await axios.get(`/api/detection-status?stream_id=${stream.id}`)
-    stream.detection_active = response.data.active
-    stream.detection_status = response.data.status
+    const response = await axios.get(`/api/streams/${stream.id}/detections`)
+    if (response.data && response.data.length > 0) {
+      detectionStatuses.value[stream.id] = true
+    } else {
+      detectionStatuses.value[stream.id] = false
+    }
   } catch (error) {
-    stream.detection_active = false
-    stream.detection_status = null
+    console.error(`Error checking detection status for stream ${stream.id}:`, error)
+    detectionStatuses.value[stream.id] = false
   }
 }
 
@@ -353,16 +347,15 @@ const toggleDetection = async (stream) => {
     await axios.post('/api/trigger-detection', {
       stream_id: stream.id,
       stream_url: stream.video_url,
-      action: stream.detection_active ? 'stop' : 'start'
+      action: hasDetections(stream.id) ? 'stop' : 'start'
     })
     
     // Update stream detection status
-    stream.detection_active = !stream.detection_active
-    stream.detection_status = stream.detection_active ? 'Running...' : 'Stopped'
+    detectionStatuses.value[stream.id] = !hasDetections(stream.id)
     
-    toast.success(`Detection ${stream.detection_active ? 'started' : 'stopped'} for ${stream.streamer_username}`)
+    toast.success(`Detection ${hasDetections(stream.id) ? 'stopped' : 'started'} for ${stream.streamer_username}`)
   } catch (error) {
-    toast.error(`Failed to ${stream.detection_active ? 'stop' : 'start'} detection`)
+    toast.error(`Failed to ${hasDetections(stream.id) ? 'stop' : 'start'} detection`)
   }
 }
 
@@ -453,6 +446,10 @@ const formatStreamTime = (timestamp) => {
   } catch {
     return 'Unknown'
   }
+}
+
+const hasDetections = (streamId) => {
+  return detectionStatuses.value[streamId] === true
 }
 
 // Watch for view mode changes to initialize mini players when switching to grid

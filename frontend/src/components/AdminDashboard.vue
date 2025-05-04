@@ -46,6 +46,11 @@
           @create="showCreateStreamModal = true"
           @edit="editStream"
           @delete="confirmDeleteStream"
+          @view="openStreamDetails"
+          @refresh="refreshStream"
+          @stream-updated="handleStreamUpdated"
+          @stream-created="handleStreamCreated"
+          @stream-deleted="handleStreamDeleted"
         />
 
         <AgentsTab
@@ -410,6 +415,15 @@ export default {
       });
     })
 
+    // Add computed properties for filtering streams
+    const onlineStreams = computed(() => {
+      return allStreams.value.filter(stream => stream.status === 'online');
+    });
+
+    const offlineStreams = computed(() => {
+      return allStreams.value.filter(stream => stream.status === 'offline');
+    });
+
     return {
       // State
       isDarkTheme,
@@ -459,7 +473,11 @@ export default {
       deleteAgent,
       confirmAction,
       handleSidebarToggle,
-      enhanceStreamWithUsername // Export the function so it's available in templates
+      enhanceStreamWithUsername, // Export the function so it's available in templates
+
+      // Computed properties
+      onlineStreams,
+      offlineStreams
     }
   }
 }

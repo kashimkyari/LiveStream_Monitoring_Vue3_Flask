@@ -118,6 +118,25 @@
             </div>
           </div>
         </div>
+        <div class="streams-section">
+          <div class="section-header">
+            <h3>Assigned Streams</h3>
+            <button class="view-all-button">View All</button>
+          </div>
+          
+          <div class="streams-list">
+            <div v-if="assignedStreams.length === 0" class="empty-state">
+              <p>No streams assigned</p>
+            </div>
+            <div v-else v-for="stream in assignedStreams" :key="stream.id" class="stream-card">
+              <div class="stream-info">
+                <h4 class="stream-title">{{ stream.streamer_username }}</h4>
+                <p class="stream-meta">{{ stream.platform }} • <a :href="stream.room_url" target="_blank">View Stream</a></p>
+              </div>
+              <button class="stream-action-btn">View Details</button>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -136,7 +155,8 @@ export default {
   
   data() {
     return {
-      username: 'Agent Smith'
+      username: 'Agent Smith',
+      assignedStreams: []
     };
   },
   
@@ -365,6 +385,143 @@ export default {
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.streams-section {
+  background-color: #1e1e1e;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  margin-top: 24px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.view-all-button {
+  background-color: transparent;
+  color: #007bff;
+  border: 1px solid #007bff;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-all-button:hover {
+  background-color: rgba(0,123,255,0.1);
+}
+
+.tickets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ticket-card {
+  background-color: #252525;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ticket-priority {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #6c757d;
+}
+
+.ticket-info {
+  flex: 1;
+}
+
+.ticket-title {
+  margin-top: 0;
+  margin-bottom: 8px;
+  font-size: 1rem;
+  color: #f8f8f8;
+}
+
+.ticket-meta {
+  margin: 0;
+  color: rgba(255,255,255,0.8);
+}
+
+.ticket-action-btn {
+  background-color: transparent;
+  color: #007bff;
+  border: 1px solid #007bff;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ticket-action-btn:hover {
+  background-color: rgba(0,123,255,0.1);
+}
+
+.streams-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stream-card {
+  background-color: #252525;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stream-info {
+  flex: 1;
+}
+
+.stream-title {
+  margin-top: 0;
+  margin-bottom: 8px;
+  font-size: 1rem;
+  color: #f8f8f8;
+}
+
+.stream-meta {
+  margin: 0;
+  color: rgba(255,255,255,0.8);
+}
+
+.stream-action-btn {
+  background-color: transparent;
+  color: #007bff;
+  border: 1px solid #007bff;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stream-action-btn:hover {
+  background-color: rgba(0,123,255,0.1);
+}
+
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  color: rgba(255,255,255,0.8);
 }
 
 @media (max-width: 768px) {

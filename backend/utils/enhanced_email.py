@@ -246,11 +246,20 @@ def send_welcome_email(user_email, username):
         <meta name="color-scheme" content="light dark">
         <meta name="supported-color-schemes" content="light dark">
         <title>Welcome to JetCam Studio</title>
-        <style>
+        <style type="text/css">
+            /* Gmail and client-specific styles */
+            body { width: 100% !important; margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+            table { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+            td { border-collapse: collapse; }
+            img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }
+            a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; font-size: inherit !important; font-family: inherit !important; font-weight: inherit !important; line-height: inherit !important; }
+            .button:hover { background-color: #1567c9 !important; }
             @media only screen and (max-width: 600px) {{
-                .container {{ width: 100% !important; padding: 16px !important; }}
-                .button {{ width: 100% !important; }}
-                .header img {{ max-width: 120px !important; }}
+                .container { width: 100% !important; padding: 10px !important; }
+                .button { width: 100% !important; display: block !important; }
+                .header img { max-width: 120px !important; }
+                .content { padding: 20px !important; }
+                .footer { padding: 10px !important; font-size: 11px !important; }
             }}
         </style>
     </head>
@@ -258,52 +267,52 @@ def send_welcome_email(user_email, username):
         <table role="presentation" width="100%" style="background-color: #f5f5f5;" cellpadding="0" cellspacing="0">
             <tr>
                 <td align="center">
-                    <table role="presentation" class="container" width="600" style="margin: 24px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden;" cellpadding="0" cellspacing="0">
+                    <table role="presentation" class="container" width="600" style="margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden;" cellpadding="0" cellspacing="0">
                         <!-- Header -->
                         <tr>
-                            <td class="header" style="background-color: #1a73e8; padding: 24px; text-align: center;">
+                            <td class="header" style="background-color: #1a73e8; padding: 20px; text-align: center;">
                                 <img src="https://jetcamstudio.com/wp-content/uploads/2023/04/Untitled-9-1-2.png" alt="JetCam Studio Logo" style="max-width: 150px; height: auto; border: 0;">
                             </td>
                         </tr>
                         <!-- Content -->
                         <tr>
-                            <td style="padding: 32px;">
-                                <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 600; color: #202124;">Welcome, {username}!</h1>
-                                <p style="margin: 0 0 24px; font-size: 16px; line-height: 24px;">Your JetCam Studio account is ready. Start monitoring your streams by accessing your dashboard.</p>
+                            <td class="content" style="padding: 30px;">
+                                <h1 style="margin: 0 0 15px; font-size: 24px; font-weight: 600; color: #202124;">Welcome, {username}!</h1>
+                                <p style="margin: 0 0 20px; font-size: 16px; line-height: 24px; color: #444444;">We're thrilled to have you on board at JetCam Studio. Your account is ready, and you can now start monitoring your streams by accessing your dashboard.</p>
                                 <!-- CTA Button -->
                                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                                     <tr>
-                                        <td align="center">
-                                            <a href="http://live-stream-monitoring-vue3-flask.vercel.app/login" class="button" style="display: inline-block; padding: 12px 24px; background-color: #1a73e8; color: #ffffff; text-decoration: none; border-radius: 4px; font-size: 16px; font-weight: 500; min-width: 180px; text-align: center;">Go to Dashboard</a>
+                                        <td align="center" style="padding: 10px 0;">
+                                            <a href="https://monitor-backend.jetcamstudio.com:5000" class="button" style="display: inline-block; padding: 12px 24px; background-color: #1a73e8; color: #ffffff; text-decoration: none; border-radius: 4px; font-size: 16px; font-weight: 500; min-width: 180px; text-align: center; transition: background-color 0.3s ease;">Go to Dashboard</a>
                                         </td>
                                     </tr>
                                 </table>
                                 <!-- Features -->
-                                <table role="presentation" style="margin: 24px 0; width: 100%;" cellpadding="0" cellspacing="0">
+                                <table role="presentation" style="margin: 20px 0; width: 100%;" cellpadding="0" cellspacing="0">
                                     <tr>
-                                        <td style="padding: 8px 0; font-size: 16px;">
+                                        <td style="padding: 10px 0; font-size: 16px; color: #444444;">
                                             <strong style="color: #1a73e8;">🔍 Stream Monitoring:</strong> Detect policy violations to keep your channel safe.
                                         </td>
                                     </tr>
                                     <tr>
-                                        <td style="padding: 8px 0; font-size: 16px;">
+                                        <td style="padding: 10px 0; font-size: 16px; color: #444444;">
                                             <strong style="color: #1a73e8;">💬 Chat Analysis:</strong> Filter inappropriate content in real-time.
                                         </td>
                                     </tr>
                                     <tr>
-                                        <td style="padding: 8px 0; font-size: 16px;">
+                                        <td style="padding: 10px 0; font-size: 16px; color: #444444;">
                                             <strong style="color: #1a73e8;">🚨 Instant Alerts:</strong> Stay informed with immediate notifications.
                                         </td>
                                     </tr>
                                 </table>
-                                <p style="margin: 24px 0 0; font-size: 14px;">Need help? Contact us at <a href="mailto:support@jetcamstudio.com" style="color: #1a73e8; text-decoration: none;">support@jetcamstudio.com</a>.</p>
+                                <p style="margin: 20px 0 0; font-size: 14px; color: #666666;">Need help? Contact us at <a href="mailto:support@jetcamstudio.com" style="color: #1a73e8; text-decoration: none;">support@jetcamstudio.com</a>.</p>
                             </td>
                         </tr>
                         <!-- Footer -->
                         <tr>
-                            <td style="padding: 16px; background-color: #f5f5f5; text-align: center; font-size: 12px; color: #666666;">
+                            <td class="footer" style="padding: 15px; background-color: #f5f5f5; text-align: center; font-size: 12px; color: #666666;">
                                 <p style="margin: 0;">© {current_year} JetCam Studio. All rights reserved.</p>
-                                <p style="margin: 4px 0 0;">This is an automated message. Please do not reply.</p>
+                                <p style="margin: 5px 0 0;">This is an automated message. Please do not reply.</p>
                             </td>
                         </tr>
                     </table>
@@ -335,12 +344,21 @@ def send_password_reset_email(user_email, token):
         <meta name="color-scheme" content="light dark">
         <meta name="supported-color-schemes" content="light dark">
         <title>Password Reset Code</title>
-        <style>
+        <style type="text/css">
+            /* Gmail and client-specific styles */
+            body { width: 100% !important; margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+            table { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+            td { border-collapse: collapse; }
+            img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }
+            a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; font-size: inherit !important; font-family: inherit !important; font-weight: inherit !important; line-height: inherit !important; }
+            .button:hover { background-color: #b71c1c !important; }
             @media only screen and (max-width: 600px) {{
-                .container {{ width: 100% !important; padding: 16px !important; }}
-                .button {{ width: 100% !important; }}
-                .code-box {{ font-size: 24px !important; letter-spacing: 3px !important; }}
-                .header img {{ max-width: 120px !important; }}
+                .container { width: 100% !important; padding: 10px !important; }
+                .button { width: 100% !important; display: block !important; }
+                .code-box { font-size: 24px !important; letter-spacing: 3px !important; }
+                .header img { max-width: 120px !important; }
+                .content { padding: 20px !important; }
+                .footer { padding: 10px !important; font-size: 11px !important; }
             }}
         </style>
     </head>
@@ -348,42 +366,42 @@ def send_password_reset_email(user_email, token):
         <table role="presentation" width="100%" style="background-color: #f5f5f5;" cellpadding="0" cellspacing="0">
             <tr>
                 <td align="center">
-                    <table role="presentation" class="container" width="600" style="margin: 24px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden;" cellpadding="0" cellspacing="0">
+                    <table role="presentation" class="container" width="600" style="margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden;" cellpadding="0" cellspacing="0">
                         <!-- Header -->
                         <tr>
-                            <td class="header" style="background-color: #d32f2f; padding: 24px; text-align: center;">
+                            <td class="header" style="background-color: #d32f2f; padding: 20px; text-align: center;">
                                 <img src="https://jetcamstudio.com/wp-content/uploads/2023/04/Untitled-9-1-2.png" alt="JetCam Studio Logo" style="max-width: 150px; height: auto; border: 0;">
                             </td>
                         </tr>
                         <!-- Content -->
                         <tr>
-                            <td style="padding: 32px;">
-                                <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 600; color: #202124;">Password Reset Code</h1>
-                                <p style="margin: 0 0 24px; font-size: 16px; line-height: 24px;">Use the code below to reset your JetCam Studio account password. This code expires in 1 hour.</p>
+                            <td class="content" style="padding: 30px;">
+                                <h1 style="margin: 0 0 15px; font-size: 24px; font-weight: 600; color: #202124;">Password Reset Code</h1>
+                                <p style="margin: 0 0 20px; font-size: 16px; line-height: 24px; color: #444444;">Use the code below to reset your JetCam Studio account password. This code expires in 1 hour.</p>
                                 <!-- Code Box -->
                                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                                     <tr>
-                                        <td align="center" style="padding: 16px; background-color: #f1f3f4; border-radius: 4px;">
+                                        <td align="center" style="padding: 15px; background-color: #f1f3f4; border-radius: 4px; margin-bottom: 20px;">
                                             <div class="code-box" style="font-size: 32px; font-weight: bold; letter-spacing: 5px; font-family: 'Courier New', monospace; color: #202124;">{token}</div>
                                         </td>
                                     </tr>
                                 </table>
                                 <!-- CTA Button -->
-                                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 24px 0;">
+                                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0;">
                                     <tr>
                                         <td align="center">
-                                            <a href="http://live-stream-monitoring-vue3-flask.vercel.app/reset-password" class="button" style="display: inline-block; padding: 12px 24px; background-color: #d32f2f; color: #ffffff; text-decoration: none; border-radius: 4px; font-size: 16px; font-weight: 500; min-width: 180px; text-align: center;">Reset Password</a>
+                                            <a href="https://monitor-backend.jetcamstudio.com:5000/reset-password" class="button" style="display: inline-block; padding: 12px 24px; background-color: #d32f2f; color: #ffffff; text-decoration: none; border-radius: 4px; font-size: 16px; font-weight: 500; min-width: 180px; text-align: center; transition: background-color 0.3s ease;">Reset Password</a>
                                         </td>
                                     </tr>
                                 </table>
-                                <p style="margin: 24px 0 0; font-size: 14px;">If you didn’t request this, please ignore this email or contact <a href="mailto:support@jetcamstudio.com" style="color: #d32f2f; text-decoration: none;">support@jetcamstudio.com</a>.</p>
+                                <p style="margin: 20px 0 0; font-size: 14px; color: #666666;">If you didn't request this, please ignore this email or contact <a href="mailto:support@jetcamstudio.com" style="color: #d32f2f; text-decoration: none;">support@jetcamstudio.com</a>.</p>
                             </td>
                         </tr>
                         <!-- Footer -->
                         <tr>
-                            <td style="padding: 16px; background-color: #f5f5f5; text-align: center; font-size: 12px; color: #666666;">
+                            <td class="footer" style="padding: 15px; background-color: #f5f5f5; text-align: center; font-size: 12px; color: #666666;">
                                 <p style="margin: 0;">© {current_year} JetCam Studio. All rights reserved.</p>
-                                <p style="margin: 4px 0 0;">This is an automated message. Please do not reply.</p>
+                                <p style="margin: 5px 0 0;">This is an automated message. Please do not reply.</p>
                             </td>
                         </tr>
                     </table>

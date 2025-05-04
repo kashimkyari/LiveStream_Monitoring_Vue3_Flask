@@ -364,6 +364,7 @@ def reset_password():
         
         try:
             email_subject = "Your Password Has Been Reset"
+            current_year = datetime.now().year
             html_content = f"""
             <!DOCTYPE html>
             <html lang="en">
@@ -371,19 +372,59 @@ def reset_password():
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <meta name="x-apple-disable-message-reformatting">
+                <meta name="color-scheme" content="light dark">
+                <meta name="supported-color-schemes" content="light dark">
                 <title>Password Reset Confirmation</title>
+                <style type="text/css">
+                    /* Gmail and client-specific styles */
+                    body {{ width: 100% !important; margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
+                    table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
+                    td {{ border-collapse: collapse; }}
+                    img {{ border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }}
+                    a[x-apple-data-detectors] {{ color: inherit !important; text-decoration: none !important; font-size: inherit !important; font-family: inherit !important; font-weight: inherit !important; line-height: inherit !important; }}
+                    .button:hover {{ background-color: #388e3c !important; }}
+                    @media only screen and (max-width: 600px) {{
+                        .container {{ width: 100% !important; padding: 10px !important; }}
+                        .button {{ width: 100% !important; display: block !important; }}
+                        .header img {{ max-width: 120px !important; }}
+                        .content {{ padding: 20px !important; }}
+                        .footer {{ padding: 10px !important; font-size: 11px !important; }}
+                    }}
+                </style>
             </head>
-            <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-                <table width="100%" cellpadding="0" cellspacing="0">
+            <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f5; color: #333333;">
+                <table role="presentation" width="100%" style="background-color: #f5f5f5;" cellpadding="0" cellspacing="0">
                     <tr>
                         <td align="center">
-                            <table width="600" style="margin: 20px auto; background-color: #ffffff; border-radius: 8px;">
+                            <table role="presentation" class="container" width="600" style="margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden;" cellpadding="0" cellspacing="0">
+                                <!-- Header -->
                                 <tr>
-                                    <td style="padding: 20px;">
-                                        <h2>Password Reset Successful</h2>
-                                        <p>Your JetCam Studio account password has been successfully reset.</p>
-                                        <p>You can now log in with your new password.</p>
-                                        <p>If you did not initiate this change, please contact <a href="mailto:support@jetcamstudio.com">support@jetcamstudio.com</a>.</p>
+                                    <td class="header" style="background-color: #4caf50; padding: 20px; text-align: center;">
+                                        <img src="https://jetcamstudio.com/wp-content/uploads/2023/04/Untitled-9-1-2.png" alt="JetCam Studio Logo" style="max-width: 150px; height: auto; border: 0;">
+                                    </td>
+                                </tr>
+                                <!-- Content -->
+                                <tr>
+                                    <td class="content" style="padding: 30px;">
+                                        <h1 style="margin: 0 0 15px; font-size: 24px; font-weight: 600; color: #202124;">Password Reset Successful</h1>
+                                        <p style="margin: 0 0 20px; font-size: 16px; line-height: 24px; color: #444444;">Your JetCam Studio account password has been successfully reset.</p>
+                                        <p style="margin: 0 0 20px; font-size: 16px; line-height: 24px; color: #444444;">You can now log in with your new password.</p>
+                                        <p style="margin: 0 0 20px; font-size: 14px; color: #666666;">If you did not initiate this change, please contact <a href="mailto:support@jetcamstudio.com" style="color: #4caf50; text-decoration: none;">support@jetcamstudio.com</a> immediately.</p>
+                                        <!-- CTA Button -->
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0;">
+                                            <tr>
+                                                <td align="center">
+                                                    <a href="https://monitor-backend.jetcamstudio.com:5000" class="button" style="display: inline-block; padding: 12px 24px; background-color: #4caf50; color: #ffffff; text-decoration: none; border-radius: 4px; font-size: 16px; font-weight: 500; min-width: 180px; text-align: center; transition: background-color 0.3s ease;">Log In Now</a>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                <!-- Footer -->
+                                <tr>
+                                    <td class="footer" style="padding: 15px; background-color: #f5f5f5; text-align: center; font-size: 12px; color: #666666;">
+                                        <p style="margin: 0;">© {current_year} JetCam Studio. All rights reserved.</p>
+                                        <p style="margin: 5px 0 0;">This is an automated message. Please do not reply.</p>
                                     </td>
                                 </tr>
                             </table>
@@ -441,6 +482,7 @@ def change_password():
         
         try:
             email_subject = "Your Password Has Been Changed"
+            current_year = datetime.now().year
             html_content = f"""
             <!DOCTYPE html>
             <html lang="en">
@@ -448,18 +490,50 @@ def change_password():
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <meta name="x-apple-disable-message-reformatting">
+                <meta name="color-scheme" content="light dark">
+                <meta name="supported-color-schemes" content="light dark">
                 <title>Password Change Confirmation</title>
+                <style type="text/css">
+                    /* Gmail and client-specific styles */
+                    body {{ width: 100% !important; margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
+                    table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
+                    td {{ border-collapse: collapse; }}
+                    img {{ border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }}
+                    a[x-apple-data-detectors] {{ color: inherit !important; text-decoration: none !important; font-size: inherit !important; font-family: inherit !important; font-weight: inherit !important; line-height: inherit !important; }}
+                    .button:hover {{ background-color: #388e3c !important; }}
+                    @media only screen and (max-width: 600px) {{
+                        .container {{ width: 100% !important; padding: 10px !important; }}
+                        .button {{ width: 100% !important; display: block !important; }}
+                        .header img {{ max-width: 120px !important; }}
+                        .content {{ padding: 20px !important; }}
+                        .footer {{ padding: 10px !important; font-size: 11px !important; }}
+                    }}
+                </style>
             </head>
-            <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-                <table width="100%" cellpadding="0" cellspacing="0">
+            <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f5; color: #333333;">
+                <table role="presentation" width="100%" style="background-color: #f5f5f5;" cellpadding="0" cellspacing="0">
                     <tr>
                         <td align="center">
-                            <table width="600" style="margin: 20px auto; background-color: #ffffff; border-radius: 8px;">
+                            <table role="presentation" class="container" width="600" style="margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden;" cellpadding="0" cellspacing="0">
+                                <!-- Header -->
                                 <tr>
-                                    <td style="padding: 20px;">
-                                        <h2>Password Changed Successfully</h2>
-                                        <p>Your JetCam Studio account password has been successfully changed.</p>
-                                        <p>If you did not initiate this change, please contact <a href="mailto:support@jetcamstudio.com">support@jetcamstudio.com</a>.</p>
+                                    <td class="header" style="background-color: #4caf50; padding: 20px; text-align: center;">
+                                        <img src="https://jetcamstudio.com/wp-content/uploads/2023/04/Untitled-9-1-2.png" alt="JetCam Studio Logo" style="max-width: 150px; height: auto; border: 0;">
+                                    </td>
+                                </tr>
+                                <!-- Content -->
+                                <tr>
+                                    <td class="content" style="padding: 30px;">
+                                        <h1 style="margin: 0 0 15px; font-size: 24px; font-weight: 600; color: #202124;">Password Changed Successfully</h1>
+                                        <p style="margin: 0 0 20px; font-size: 16px; line-height: 24px; color: #444444;">Your JetCam Studio account password has been successfully changed.</p>
+                                        <p style="margin: 0 0 20px; font-size: 14px; color: #666666;">If you did not initiate this change, please contact <a href="mailto:support@jetcamstudio.com" style="color: #4caf50; text-decoration: none;">support@jetcamstudio.com</a> immediately.</p>
+                                    </td>
+                                </tr>
+                                <!-- Footer -->
+                                <tr>
+                                    <td class="footer" style="padding: 15px; background-color: #f5f5f5; text-align: center; font-size: 12px; color: #666666;">
+                                        <p style="margin: 0;">© {current_year} JetCam Studio. All rights reserved.</p>
+                                        <p style="margin: 5px 0 0;">This is an automated message. Please do not reply.</p>
                                     </td>
                                 </tr>
                             </table>

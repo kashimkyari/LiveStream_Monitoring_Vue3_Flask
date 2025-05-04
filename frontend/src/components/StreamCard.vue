@@ -120,6 +120,10 @@ export default {
     const isBookmarked = ref(false)
     const isFullscreen = ref(false)
     
+    // Add missing variables for stream status
+    const isOnline = ref(true)
+    const isLoading = ref(true)
+    
     // Detection state variables
     const isDetectionActive = ref(false)
     const isDetectionLoading = ref(false)
@@ -135,6 +139,9 @@ export default {
     
     // Get the theme from parent component
     const isDarkTheme = inject('theme', ref(true))
+    
+    // Add interval for checking stream status if offline
+    let streamStatusCheckInterval = ref(null)
     
     // Computed property to determine if compact view should be used
     const isCompactView = computed(() => {
@@ -226,18 +233,25 @@ export default {
         })
         
         hls.on(Hls.Events.ERROR, (event, data) => {
-          console.error('HLS error:', data)
           if (data.fatal) {
-            switch(data.type) {
+            switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                hls.startLoad()
-                break
+                console.error('HLS network error:', data);
+                isOnline.value = false;
+                isLoading.value = false;
+                hls.stopLoad();
+                hls.detachMedia();
+                // Report to backend that stream is offline
+                reportStreamOffline(props.stream.id);
+                break;
               case Hls.ErrorTypes.MEDIA_ERROR:
-                hls.recoverMediaError()
-                break
+                console.error('HLS media error:', data);
+                hls.recoverMediaError();
+                break;
               default:
-                destroyHls()
-                break
+                console.error('Unrecoverable HLS error:', data);
+                hls.destroy();
+                break;
             }
           }
         })
@@ -504,6 +518,9 @@ export default {
       // Set up interval to check detection status
       checkStatusInterval.value = setInterval(checkDetectionStatus, 30000)
       
+      // Set up interval to check stream status if offline
+      streamStatusCheckInterval.value = setInterval(checkStreamStatus, 120000) // Check every 2 minutes
+      
       // Set up viewer count refresh for Stripchat
       setupViewerCountRefresh()
       
@@ -519,17 +536,19 @@ export default {
     })
 
     onBeforeUnmount(() => {
-      destroyHls()
-      
-      // Clear detection status interval
+      if (hls) {
+        hls.destroy()
+        hls = null
+      }
       if (checkStatusInterval.value) {
         clearInterval(checkStatusInterval.value)
       }
-      
-      // Clear viewer count refresh interval
-      cleanupViewerCountRefresh()
-      
-      // Clean up event listeners
+      if (streamStatusCheckInterval.value) {
+        clearInterval(streamStatusCheckInterval.value)
+      }
+      if (viewersRefreshInterval.value) {
+        clearInterval(viewersRefreshInterval.value)
+      }
       if (eventBus) {
         eventBus.$off('muteAllStreams')
       }
@@ -547,6 +566,38 @@ export default {
         setupViewerCountRefresh()
       }
     })
+
+    // Add method to report stream offline
+    const reportStreamOffline = async (streamId) => {
+      try {
+        await axios.post(`/api/streams/${streamId}/status`, { status: 'offline' });
+        console.log(`Reported stream ${streamId} as offline`);
+      } catch (error) {
+        console.error('Failed to report stream offline:', error);
+      }
+    };
+
+    // Function to check stream status and attempt reconnection
+    const checkStreamStatus = async () => {
+      if (!isOnline.value) {
+        isLoading.value = true
+        try {
+          // Attempt to reload the stream
+          initializeVideo()
+          // Check with backend if stream is available
+          const response = await axios.get(`/api/streams/${props.stream.id}`)
+          if (response.data && response.data.status === 'online') {
+            isOnline.value = true
+            console.log(`Stream ${props.stream.id} is back online`)
+            await axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' });
+          }
+        } catch (error) {
+          console.error('Failed to check stream status:', error)
+        } finally {
+          isLoading.value = false
+        }
+      }
+    }
 
     return {
       streamCard,
@@ -568,7 +619,9 @@ export default {
       toggleBookmark,
       toggleFullscreen,
       toggleDetection,
-      getDetectionButtonText
+      getDetectionButtonText,
+      reportStreamOffline,
+      checkStreamStatus
     }
   }
 }

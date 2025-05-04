@@ -337,8 +337,9 @@ const hideSpinner = () => {
 
 const handleAuthSuccess = (user) => {
   isLoggedIn.value = true
-  userRole.value = user.role
-  localStorage.setItem(USER_ROLE_KEY, user.role)
+  // Set role based on username for admin, otherwise default to agent
+  userRole.value = user.username === 'admin' ? 'admin' : 'agent'
+  localStorage.setItem(USER_ROLE_KEY, userRole.value)
   animateControls()
   
   // Store session info

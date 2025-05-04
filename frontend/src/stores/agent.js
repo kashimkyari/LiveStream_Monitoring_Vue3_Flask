@@ -54,6 +54,29 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  const setCurrentAgent = async (agentId) => {
+    try {
+      const response = await fetch(`/api/agents/${agentId}`)
+      const data = await response.json()
+      currentAgent.value = data
+      if (data.assignments) {
+        setAssignments(data.assignments)
+      }
+    } catch (error) {
+      console.error('Error fetching agent:', error)
+    }
+  }
+  
+  const loadAgents = async () => {
+    try {
+      const response = await fetch('/api/agents')
+      return await response.json()
+    } catch (error) {
+      console.error('Error loading agents:', error)
+      return []
+    }
+  }
+
   const setAssignments = (assignmentsData) => {
     assignments.value = assignmentsData
   }
@@ -68,6 +91,8 @@ export const useAgentStore = defineStore('agent', () => {
     notifications,
     initialized,
     setAgent,
+    setCurrentAgent,
+    loadAgents,
     setAssignments,
     addNotification,
     hasAgent,

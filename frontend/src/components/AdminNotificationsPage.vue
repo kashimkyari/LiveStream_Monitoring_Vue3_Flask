@@ -19,9 +19,6 @@
         <button class="icon-btn refresh-btn" @click="fetchNotifications" title="Refresh">
           <span class="icon">↻</span>
         </button>
-        <button class="icon-btn" @click="toggleDarkMode" :title="isDarkMode ? 'Light Mode' : 'Dark Mode'">
-          <span class="icon">{{ isDarkMode ? '☀️' : '🌙' }}</span>
-        </button>
         <button class="icon-btn menu-btn" @click="isMenuOpen = !isMenuOpen" title="More Actions">
           <span class="icon">⋮</span>
         </button>
@@ -802,11 +799,6 @@ export default {
       isMenuOpen.value = false
     }
 
-    const toggleDarkMode = () => {
-      isDarkMode.value = !isDarkMode.value
-      localStorage.setItem('darkMode', isDarkMode.value)
-    }
-
     const openImageModal = (src) => {
       imageModalSrc.value = src
     }
@@ -836,6 +828,8 @@ export default {
       setupSocketConnection()
       window.addEventListener('resize', handleResize)
       window.addEventListener('online', setupSocketConnection)
+      // Set dark mode based on system preference
+      isDarkMode.value = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
     })
 
     onBeforeUnmount(() => {
@@ -891,7 +885,6 @@ export default {
       submitNotificationForm,
       forwardNotification,
       toggleSound,
-      toggleDarkMode,
       openImageModal,
       showToast,
       safeSocketEmit
@@ -906,8 +899,8 @@ export default {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: #f8f9fa;
-  color: #333;
+  background-color: var(--background-color);
+  color: var(--text-color);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
@@ -975,8 +968,8 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 12px 20px;
-  background-color: #fff;
-  border-bottom: 1px solid #e1e4e8;
+  background-color: var(--input-bg);
+  border-bottom: 1px solid var(--input-border);
   z-index: 10;
   position: relative;
 }
@@ -987,25 +980,26 @@ export default {
 }
 
 .tab-btn {
-  padding: 6px 12px;
+  padding: 8px 16px;
   border: none;
   background: none;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
-  color: #555;
+  color: var(--text-color);
   transition: all 0.2s ease;
   position: relative;
 }
 
 .tab-btn:hover {
-  background-color: #f0f0f0;
+  background-color: rgba(var(--primary-rgb), 0.1);
+  color: var(--primary-color);
 }
 
 .tab-btn.active {
-  background-color: #ebf5fe;
-  color: #0366d6;
+  background-color: rgba(var(--primary-rgb), 0.1);
+  color: var(--primary-color);
 }
 
 .dark-mode .tab-btn:hover {
@@ -1039,8 +1033,8 @@ export default {
 }
 
 .icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   border: none;
   background-color: transparent;
@@ -1049,10 +1043,12 @@ export default {
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
+  color: var(--text-color);
 }
 
 .icon-btn:hover {
-  background-color: #f0f0f0;
+  background-color: rgba(var(--primary-rgb), 0.1);
+  color: var(--primary-color);
 }
 
 .dark-mode .icon-btn:hover {
@@ -1197,22 +1193,24 @@ export default {
   padding: 12px;
   border-radius: 8px;
   margin-bottom: 8px;
-  background-color: #fff;
-  border: 1px solid #e1e4e8;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
+  animation: fadeIn 0.3s ease;
 }
 
 .notification-card:hover {
-  background-color: #f6f8fa;
+  background-color: var(--hover-bg);
   transform: translateY(-1px);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  animation: pulse 0.5s ease-in-out;
 }
 
 .notification-card.selected {
-  background-color: #f0f6ff;
-  border-color: #79b8ff;
+  background-color: rgba(var(--primary-rgb), 0.1);
+  border-color: var(--primary-color);
 }
 
 .notification-card.unread {
@@ -1451,15 +1449,16 @@ export default {
 .detail-actions button {
   padding: 6px 12px;
   background: none;
-  border: 1px solid #e1e4e8;
-  border-radius: 4px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 0.9rem;
   transition: all 0.2s ease;
+  color: var(--text-color);
 }
 
 .detail-actions button:hover {
-  background-color: #f6f8fa;
+  background-color: var(--hover-bg);
 }
 
 .detail-actions .delete-btn {
@@ -1751,9 +1750,9 @@ export default {
 }
 
 .confirm-btn {
-  background-color: #0366d6;
+  background-color: var(--primary-color);
   color: white;
-  border-color: #0366d6;
+  border-color: var(--primary-color);
 }
 
 .delete-modal .confirm-btn {
