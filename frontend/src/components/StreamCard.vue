@@ -127,6 +127,7 @@ export default {
     // Detection state variables
     const isDetectionActive = ref(false)
     const isDetectionLoading = ref(false)
+    const canToggleDetection = ref(true)
     const checkStatusInterval = ref(null)
     
     // Viewer count for Stripchat streams
@@ -276,33 +277,37 @@ export default {
 
     // Detection toggle and status functions
     const toggleDetection = async () => {
-      if (isDetectionActive.value) {
-        try {
-          await axios.post(`/api/stop-detection/${props.stream.id}`);
-          isDetectionActive.value = false;
-          emit('detection-toggled', { streamId: props.stream.id, active: false });
-        } catch (error) {
-          console.error('Error stopping detection:', error);
-          // Temporary notification placeholder until proper notification system is implemented
-          alert('Failed to stop detection');
+      if (!canToggleDetection.value) return;
+
+      try {
+        // First check current status
+        const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`);
+        const currentlyActive = statusResponse.data.active;
+        
+        if (currentlyActive) {
+          // Detection is already running, inform user
+          alert('Detection is already active for this stream');
+          isDetectionActive.value = true;
+          return;
         }
-      } else {
-        try {
-          const response = await axios.get(`/api/detection-status/${props.stream.id}`);
-          if (response.data.active) {
-            // Temporary notification placeholder until proper notification system is implemented
-            alert('Detection is already active for this stream');
-            isDetectionActive.value = true;
-            return;
-          }
-          await axios.post(`/api/start-detection/${props.stream.id}`);
+        
+        // Detection is not active, start it
+        const response = await axios.post('/api/trigger-detection', {
+          stream_url: props.stream.room_url,
+          enable: true
+        });
+        
+        if (response.data.status === 'success') {
           isDetectionActive.value = true;
           emit('detection-toggled', { streamId: props.stream.id, active: true });
-        } catch (error) {
-          console.error('Error starting detection:', error);
-          // Temporary notification placeholder until proper notification system is implemented
-          alert('Failed to start detection');
+        } else {
+          alert('Failed to start detection: ' + response.data.message);
+          isDetectionActive.value = false;
         }
+      } catch (error) {
+        console.error('Error toggling detection:', error);
+        alert('Error toggling detection: ' + error.message);
+        isDetectionActive.value = false;
       }
     }
     
@@ -310,12 +315,9 @@ export default {
       try {
         const response = await axios.get(`/api/detection-status/${props.stream.id}`);
         isDetectionActive.value = response.data.active;
-        // Ensure detection toggle remains in detecting state if active
-        if (response.data.active) {
-          isDetectionActive.value = true;
-        }
       } catch (error) {
         console.error('Error checking detection status:', error);
+        isDetectionActive.value = false;
       }
     }
     

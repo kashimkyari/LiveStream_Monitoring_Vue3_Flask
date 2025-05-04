@@ -61,7 +61,7 @@
 </template>
 
 <script>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import MobileVideoPlayer from './MobileVideoPlayer.vue'
 import axios from 'axios'
 
@@ -150,47 +150,57 @@ export default {
     }
     
     const isDetecting = ref(false)
+    const canToggleDetection = ref(true)
 
     const checkDetectionStatus = async () => {
       try {
         const response = await axios.get(`/api/detection-status/${props.stream.id}`);
         isDetecting.value = response.data.active;
-        // Ensure detection toggle remains in detecting state if active
-        if (response.data.active) {
-          isDetecting.value = true;
-        }
       } catch (error) {
         console.error('Error checking detection status:', error);
+        isDetecting.value = false;
       }
     };
 
     const toggleDetection = async () => {
-      if (isDetecting.value) {
-        try {
-          await axios.post(`/api/stop-detection/${props.stream.id}`);
-          isDetecting.value = false;
-          emit('detectionToggled', { streamId: props.stream.id, active: false });
-        } catch (error) {
-          console.error('Error stopping detection:', error);
-          showNotification('Failed to stop detection', 'error');
-        }
-      } else {
-        try {
-          const response = await axios.get(`/api/detection-status/${props.stream.id}`);
-          if (response.data.active) {
-            showNotification('Detection is already active for this stream', 'info');
-            isDetecting.value = true;
-            return;
-          }
-          await axios.post(`/api/start-detection/${props.stream.id}`);
+      if (!canToggleDetection.value) return;
+
+      try {
+        // First check current status
+        const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`);
+        const currentlyActive = statusResponse.data.active;
+        
+        if (currentlyActive) {
+          // Detection is already running, inform user
+          alert('Detection is already active for this stream');
           isDetecting.value = true;
-          emit('detectionToggled', { streamId: props.stream.id, active: true });
-        } catch (error) {
-          console.error('Error starting detection:', error);
-          showNotification('Failed to start detection', 'error');
+          return;
         }
+        
+        // Detection is not active, start it
+        const response = await axios.post('/api/trigger-detection', {
+          stream_url: props.stream.room_url,
+          enable: true
+        });
+        
+        if (response.data.status === 'success') {
+          isDetecting.value = true;
+          emit('detectionToggled', props.stream.id, true);
+        } else {
+          alert('Failed to start detection: ' + response.data.message);
+          isDetecting.value = false;
+        }
+      } catch (error) {
+        console.error('Error toggling detection:', error);
+        alert('Error toggling detection: ' + error.message);
+        isDetecting.value = false;
       }
     };
+    
+    // Check status on component mount
+    onMounted(() => {
+      checkDetectionStatus();
+    });
     
     return {
       streamType,

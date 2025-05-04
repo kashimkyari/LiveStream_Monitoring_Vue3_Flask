@@ -106,14 +106,7 @@ def trigger_detection():
     if stream_url in detection_threads:
         return jsonify({"message": "Detection already running for this stream"}), 200
 
-    # Verify the stream is accessible
-    try:
-        response = requests.get(stream_url, timeout=10)
-        if response.status_code != 200:
-            return jsonify({"error": "Stream appears offline"}), 400
-    except Exception as e:
-        return jsonify({"error": f"Error accessing stream: {str(e)}"}), 500
-
+    # Removed strict HTTP status code check to allow detection start even if direct access fails
     try:
         # Import detection modules
         from detection import process_combined_detection, chat_detection_loop
@@ -150,10 +143,10 @@ def detection_status(stream_id):
     # Find the stream by ID
     stream = Stream.query.get_or_404(stream_id)
     # Check if detection is active for this stream
-    is_active = stream.room_url in detection_threads
+    is_active = stream.stream_url in detection_threads
     return jsonify({
         "stream_id": stream_id,
-        "stream_url": stream.room_url,
+        "stream_url": stream.stream_url,
         "active": is_active
     })
 
