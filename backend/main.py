@@ -35,21 +35,11 @@ app = create_app()
 socketio = init_socketio(app)
 
 # Parse allowed origins from environment
-allowed_origins = os.getenv('ALLOWED_ORIGINS', 'https://monitor.jetcamstudio.com,http://localhost:8080').split(',')
-
-# Log CORS configuration
-app.config['CORS_ALLOWED_ORIGINS'] = allowed_origins
-logging.info("Configured for CORS with credentials support and HTTPS compatibility")
-logging.info(f"Configured allowed origins: {allowed_origins}")
+allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else ['*']
+logging.info(f"Allowed origins configured: {allowed_origins}")
 
 # === CORS Configuration for Flask ===
-CORS(app,
-     origins=allowed_origins,
-     supports_credentials=True,
-     allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Cache-Control"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-     expose_headers=["Content-Length", "X-JSON"],
-     max_age=600)
+CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
 
 # Register a before_request handler for CORS
 @app.before_request
