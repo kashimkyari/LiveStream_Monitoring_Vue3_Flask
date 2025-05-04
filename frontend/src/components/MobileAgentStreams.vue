@@ -249,9 +249,9 @@ const loadAssignments = async () => {
     
     // Filter for assigned streams
     assignments.value = streamsResponse.data.filter(stream => {
-      return stream.assignments?.some(a => a.agent_id === currentAgentId.value) && 
-             (stream.platform === 'Chaturbate' || stream.platform === 'Stripchat')
-    })
+        return stream.assignments?.some(a => a.agent_id === currentAgentId.value) && 
+               (stream.platform === 'Chaturbate' || stream.platform === 'Stripchat')
+      })
     
     // Clean up any existing HLS instances
     destroyAllHlsInstances()

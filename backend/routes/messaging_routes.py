@@ -13,23 +13,10 @@ messaging_bp = Blueprint('messaging', __name__)
 @messaging_bp.route("/api/messages", methods=["POST"])
 @login_required()
 def send_message():
-    message_data = {
-        "id": new_message.id,
-        "sender_id": new_message.sender_id,
-        "receiver_id": new_message.receiver_id,
-        "message": new_message.message,
-        "timestamp": new_message.timestamp.isoformat(),
-        "is_system": new_message.is_system,
-        "read": new_message.read
-    }
     data = request.get_json()
     receiver_id = data.get("receiver_id")
     message_text = data.get("message")
     attachment_id = data.get("attachment_id")
-
-    if hasattr(new_message, 'attachment_id') and new_message.attachment_id:
-        message_data["attachment_id"] = new_message.attachment_id
-
 
     if not receiver_id:
         return jsonify({"error": "Missing receiver_id"}), 400
@@ -55,12 +42,24 @@ def send_message():
             
         db.session.add(new_message)
         db.session.commit()
-        
-        # Serialize with attachment
-        result = new_message.serialize()
+
+        # Serialize after commit to ensure ID exists
+        message_data = {
+            "id": new_message.id,
+            "sender_id": new_message.sender_id,
+            "receiver_id": new_message.receiver_id,
+            "message": new_message.message,
+            "timestamp": new_message.timestamp.isoformat(),
+            "is_system": new_message.is_system,
+            "read": new_message.read
+        }
+
+        if new_message.attachment_id:
+            message_data["attachment_id"] = new_message.attachment_id
+
         emit_message_update(message_data)
         
-        return jsonify(result), 201
+        return jsonify(message_data), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500

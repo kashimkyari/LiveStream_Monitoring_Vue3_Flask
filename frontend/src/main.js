@@ -29,7 +29,8 @@ import {
   faSun,
   faWifi3,
   faLightbulb,  // Added for theme toggle
-  faPlusCircle
+  faPlusCircle,
+  faRocket
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import Toast from 'vue-toastification';
@@ -67,7 +68,8 @@ library.add(
   faApple,
   faWifi3,
   faLightbulb,
-  faPlusCircle
+  faPlusCircle,
+  faRocket
 );
 
 // Create a single app instance

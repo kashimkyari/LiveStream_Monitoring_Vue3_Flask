@@ -907,7 +907,7 @@ export default {
 /* Dark Mode */
 .dark-mode {
   background-color: #121212;
-  color: #e4e4e4;
+  color: #f0f0f0;
 }
 
 .dark-mode .top-bar,
@@ -946,7 +946,7 @@ export default {
 .dark-mode .error-state,
 .dark-mode .state-container {
   background-color: #2a2a2a;
-  color: #ccc;
+  color: #ddd;
 }
 
 .dark-mode .detection-item,
@@ -955,7 +955,7 @@ export default {
 }
 
 .dark-mode a {
-  color: #4dabf7;
+  color: #6ab0f3;
 }
 
 .dark-mode .modal-overlay {
@@ -984,7 +984,7 @@ export default {
   border: none;
   background: none;
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
   color: var(--text-color);
@@ -1219,7 +1219,7 @@ export default {
 }
 
 .notification-card.read {
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .dark-mode .notification-card.selected {
@@ -1246,19 +1246,20 @@ export default {
 }
 
 .notification-type {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: #0366d6;
 }
 
 .notification-time {
-  font-size: 12px;
+  font-size: 13px;
   color: #888;
 }
 
 .notification-message {
-  font-size: 14px;
+  font-size: 15px;
   margin-bottom: 4px;
+  line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1267,7 +1268,7 @@ export default {
 .notification-meta {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 13px;
   color: #888;
 }
 
@@ -1364,6 +1365,7 @@ export default {
   text-align: center;
   height: 100%;
   color: #888;
+  font-size: 15px;
 }
 
 .empty-icon {
@@ -1521,15 +1523,17 @@ export default {
   width: 100px;
   font-weight: 500;
   color: #666;
+  font-size: 15px;
 }
 
 .dark-mode .detail-field label {
-  color: #aaa;
+  color: #bbb;
 }
 
 .url-link {
   color: #0366d6;
   text-decoration: none;
+  font-size: 15px;
 }
 
 .url-link:hover {
@@ -1558,7 +1562,7 @@ export default {
 }
 
 .dark-mode .type-details h4 {
-  color: #aaa;
+  color: #bbb;
 }
 
 .detections-grid {
@@ -1572,7 +1576,7 @@ export default {
   padding: 8px;
   border-radius: 4px;
   background-color: #f6f8fa;
-  font-size: 13px;
+  font-size: 14px;
   display: flex;
   flex-direction: column;
 }
@@ -1583,7 +1587,7 @@ export default {
 
 .detection-confidence {
   color: #2ecc71;
-  font-size: 12px;
+  font-size: 13px;
   margin-top: 4px;
 }
 
@@ -1611,8 +1615,8 @@ export default {
   padding: 12px;
   border-radius: 4px;
   margin: 0;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 .dark-mode .audio-transcript p,
@@ -1631,7 +1635,7 @@ export default {
   background-color: #e1e4e8;
   padding: 4px 8px;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: 13px;
   display: inline-block;
 }
 
@@ -1654,7 +1658,7 @@ export default {
   background-color: #f6f8fa;
   border: 1px solid #e1e4e8;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   margin-bottom: 8px;
 }
@@ -1669,7 +1673,7 @@ export default {
   padding: 12px;
   border-radius: 4px;
   overflow-x: auto;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
   max-height: 300px;
 }
@@ -1763,6 +1767,7 @@ export default {
 .warning {
   color: #dc3545;
   font-weight: 500;
+  font-size: 14px;
 }
 
 .dark-mode .modal-container {
@@ -1790,7 +1795,7 @@ export default {
   display: block;
   margin-bottom: 6px;
   font-weight: 500;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .form-group input,
@@ -1800,14 +1805,14 @@ export default {
   padding: 8px 12px;
   border: 1px solid #e1e4e8;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .dark-mode .form-group input,
 .dark-mode .form-group select,
 .dark-mode .form-group textarea {
   background-color: #2a2a2a;
-  color: #e4e4e4;
+  color: #f0f0f0;
   border-color: #444;
 }
 
@@ -1856,11 +1861,11 @@ export default {
 
 .agent-name {
   font-weight: 500;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .agent-email {
-  font-size: 12px;
+  font-size: 13px;
   color: #888;
 }
 
@@ -1909,7 +1914,7 @@ export default {
   padding: 12px 16px;
   border-radius: 4px;
   color: white;
-  font-size: 14px;
+  font-size: 15px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   min-width: 250px;
 }
@@ -1997,12 +2002,12 @@ export default {
   }
   
   .notification-message {
-    font-size: 13px;
+    font-size: 14px;
   }
   
   .notification-meta,
   .notification-time {
-    font-size: 11px;
+    font-size: 12px;
   }
 }
 </style>
