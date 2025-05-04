@@ -463,8 +463,8 @@ watch(viewMode, (newMode) => {
   width: 100%;
   position: relative;
   top: 1rem;
-  padding-left: 4px;
-  padding-right: 4px;
+  padding: 0 1rem;
+  box-sizing: border-box;
 }
 
 /* View Controls */
@@ -476,8 +476,9 @@ watch(viewMode, (newMode) => {
 }
 
 .view-controls h2 {
-  font-size: 1.3rem;
+  font-size: 1.5rem;
   margin: 0;
+  color: var(--text-color);
 }
 
 .controls-right {
@@ -489,17 +490,19 @@ watch(viewMode, (newMode) => {
 .view-toggle {
   display: flex;
   background-color: var(--input-bg);
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .toggle-btn {
   border: none;
   background: transparent;
-  padding: 0.5rem 0.8rem;
+  padding: 0.6rem 1rem;
   cursor: pointer;
   color: var(--text-light);
   transition: all 0.2s ease;
+  font-size: 1rem;
 }
 
 .toggle-btn.active {
@@ -508,40 +511,43 @@ watch(viewMode, (newMode) => {
 }
 
 .refresh-button {
-  width: 1.2rem;
-  height: 2rem;
-  border-radius: 100%;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
   background-color: var(--primary-color);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  color: white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .refresh-button:hover {
   transform: rotate(360deg);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 /* Grid View */
 .stream-grid {
   display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 }
 
 .stream-grid-item {
   cursor: pointer;
-  transition: transform 0.2s;
-  border-radius: 25px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  border-radius: 12px;
   overflow: hidden;
   background-color: var(--card-bg);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
 }
 
 .stream-grid-item:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-6px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
 }
 
 .video-thumbnail {
@@ -550,6 +556,7 @@ watch(viewMode, (newMode) => {
   height: 0;
   padding-bottom: 56.25%; /* 16:9 aspect ratio */
   overflow: hidden;
+  background-color: #000;
 }
 
 .player-overlay {
@@ -558,12 +565,12 @@ watch(viewMode, (newMode) => {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: var(--input-bg);
+  background-color: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.3s;
+  transition: opacity 0.3s ease;
   color: white;
   z-index: 2;
 }
@@ -578,20 +585,21 @@ watch(viewMode, (newMode) => {
   right: 10px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   z-index: 3;
 }
 
 .live-badge {
   background-color: #f44336;
   color: white;
-  font-size: 0.7rem;
-  padding: 2px 8px;
-  border-radius: 4px;
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 6px;
   font-weight: bold;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .live-dot {
@@ -605,17 +613,18 @@ watch(viewMode, (newMode) => {
 
 @keyframes pulse {
   0% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.4; }
   100% { opacity: 1; }
 }
 
 .detection-badge {
   background-color: #2196F3;
   color: white;
-  font-size: 0.7rem;
-  padding: 2px 8px;
-  border-radius: 4px;
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 6px;
   font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .stream-duration {
@@ -625,35 +634,36 @@ watch(viewMode, (newMode) => {
   background-color: rgba(0, 0, 0, 0.7);
   color: white;
   font-size: 0.8rem;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
   z-index: 3;
 }
 
 .stream-info {
-  padding: 1rem;
+  padding: 1.2rem;
 }
 
 .stream-title-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.6rem;
 }
 
 .stream-title {
-  font-size: 1rem;
+  font-size: 1.1rem;
   margin: 0;
   font-weight: 600;
   max-width: 70%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-color);
 }
 
 .stream-platform {
-  font-size: 0.7rem;
-  padding: 0.1rem 0.5rem;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
   border-radius: 12px;
   font-weight: 500;
   text-transform: uppercase;
@@ -674,26 +684,27 @@ watch(viewMode, (newMode) => {
 .stream-details {
   display: flex;
   justify-content: space-between;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--text-light);
-  margin-bottom: 0.8rem;
+  margin-bottom: 0.9rem;
 }
 
 .stream-controls {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
 .control-btn {
-  padding: 0.3rem 0.6rem;
-  font-size: 0.8rem;
-  border-radius: 4px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  border-radius: 6px;
   cursor: pointer;
   border: none;
   display: flex;
   align-items: center;
-  gap: 4px;
-  transition: all 0.2s;
+  gap: 5px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .detection-btn {
@@ -709,8 +720,8 @@ watch(viewMode, (newMode) => {
 .refresh-btn {
   background-color: #2196F3;
   color: white;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -719,37 +730,39 @@ watch(viewMode, (newMode) => {
 
 .control-btn:hover {
   filter: brightness(1.1);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
 }
 
 /* List View */
 .stream-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.2rem;
 }
 
 .stream-list-item {
   display: flex;
   align-items: center;
-  padding: 1rem;
-  border-radius: 8px;
+  padding: 1.2rem;
+  border-radius: 10px;
   background-color: var(--card-bg);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
   border: 1px solid var(--border-color);
   position: relative;
   overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
 .stream-list-item:hover {
   background-color: var(--card-bg-hover);
-  transform: translateX(4px);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  transform: translateX(5px);
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.1);
 }
 
 .stream-list-item.selected {
-  border-left: 4px solid var(--primary-color);
-  padding-left: calc(1rem - 3px);
+  border-left: 5px solid var(--primary-color);
+  padding-left: calc(1.2rem - 4px);
   background-color: var(--card-bg-hover);
 }
 
@@ -757,28 +770,28 @@ watch(viewMode, (newMode) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 48px;
+  min-width: 50px;
   position: relative;
 }
 
 .status-indicator {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   position: relative;
 }
 
 .status-indicator {
   background-color: #4CAF50;
-  box-shadow: 0 0 6px #4CAF50;
+  box-shadow: 0 0 8px #4CAF50;
 }
 
 .status-pulse {
   position: absolute;
-  top: -4px;
-  left: -4px;
-  width: 22px;
-  height: 22px;
+  top: -5px;
+  left: -5px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background-color: rgba(76, 175, 80, 0.3);
   animation: pulse-ring 2s ease-out infinite;
@@ -786,28 +799,28 @@ watch(viewMode, (newMode) => {
 
 @keyframes pulse-ring {
   0% { transform: scale(0.8); opacity: 0.8; }
-  80%, 100% { transform: scale(1.5); opacity: 0; }
+  80%, 100% { transform: scale(1.6); opacity: 0; }
 }
 
 .list-live-badge {
   position: absolute;
-  top: -18px;
-  left: 20px;
-  font-size: 0.65rem;
+  top: -20px;
+  left: 22px;
+  font-size: 0.7rem;
   font-weight: bold;
   color: #fff;
   background-color: #f44336;
-  padding: 2px 6px;
-  border-radius: 3px;
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 
 .list-info {
   flex-grow: 1;
-  margin-left: 1rem;
+  margin-left: 1.2rem;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 
 .list-title-row {
@@ -819,7 +832,7 @@ watch(viewMode, (newMode) => {
 
 .list-title-row h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -831,15 +844,15 @@ watch(viewMode, (newMode) => {
 .list-details {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
-  font-size: 0.8rem;
+  gap: 1.2rem;
+  font-size: 0.85rem;
   color: var(--text-light);
 }
 
 .list-detail-item {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 
 .list-detail-item svg {
@@ -848,24 +861,24 @@ watch(viewMode, (newMode) => {
 }
 
 .list-actions {
-  margin-left: 1rem;
+  margin-left: 1.2rem;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
 }
 
 .play-btn, .detection-toggle-btn, .refresh-stream-btn {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
   color: white;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .play-btn {
@@ -885,14 +898,14 @@ watch(viewMode, (newMode) => {
 }
 
 .play-btn:hover, .detection-toggle-btn:hover, .refresh-stream-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+  transform: scale(1.08);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
 }
 
 /* Light/dark mode specific adjustments */
 @media (prefers-color-scheme: dark) {
   .play-btn, .detection-toggle-btn, .refresh-stream-btn {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   }
   
   .list-detail-item svg {
@@ -901,13 +914,13 @@ watch(viewMode, (newMode) => {
   }
   
   .stream-list-item {
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   }
 }
 
 @media (prefers-color-scheme: light) {
   .status-indicator {
-    box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
+    box-shadow: 0 0 10px rgba(76, 175, 80, 0.6);
   }
   
   .list-detail-item svg {
@@ -925,81 +938,99 @@ watch(viewMode, (newMode) => {
   align-items: center;
   justify-content: center;
   color: var(--text-light);
+  background-color: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
 }
 
 .empty-state svg {
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 2.5rem;
+  color: var(--text-light);
 }
 
 .empty-state p {
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 1rem;
 }
 
 .empty-state .refresh-btn {
   width: auto;
   height: auto;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.empty-state .refresh-btn:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
 }
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .stream-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1.2rem;
   }
   
   .list-details {
-    gap: 8px;
+    gap: 10px;
     flex-wrap: wrap;
   }
   
   .stream-list-item {
-    padding: 0.8rem;
+    padding: 1rem;
   }
 }
 
 @media (max-width: 640px) {
   .list-actions {
-    margin-left: 0.5rem;
-    gap: 6px;
+    margin-left: 0.8rem;
+    gap: 8px;
   }
   
   .play-btn, .detection-toggle-btn, .refresh-stream-btn {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
   }
   
   .list-info {
-    margin-left: 0.75rem;
+    margin-left: 0.9rem;
   }
   
   .list-title-row h3 {
-    font-size: 0.9rem;
+    font-size: 0.95rem;
   }
 }
 
 @media (max-width: 480px) {
   .view-controls h2 {
-    font-size: 1.1rem;
+    font-size: 1.2rem;
   }
   
   .stream-grid {
-    grid-template-columns: repeat(1, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(100%, 1fr));
+    gap: 1rem;
   }
   
   .stream-list-item {
     flex-direction: column;
     align-items: flex-start;
+    padding: 0.9rem;
   }
   
   .list-info {
     width: 100%;
     margin-left: 0;
-    margin-top: 0.5rem;
+    margin-top: 0.6rem;
   }
   
   .list-actions {
-    margin-top: 0.8rem;
+    margin-top: 0.9rem;
     margin-left: 0;
     width: 100%;
     justify-content: flex-start;
@@ -1012,20 +1043,20 @@ watch(viewMode, (newMode) => {
   
   .status-indicator {
     display: block;
-    margin-right: 0.5rem;
+    margin-right: 0.6rem;
   }
   
   .list-live-badge {
     position: static;
-    margin-left: 0.5rem;
+    margin-left: 0.6rem;
   }
   
   .list-title-row {
-    margin-top: 0.5rem;
+    margin-top: 0.6rem;
   }
   
   .list-details {
-    margin-top: 0.4rem;
+    margin-top: 0.5rem;
   }
 }
 
@@ -1038,6 +1069,5 @@ watch(viewMode, (newMode) => {
   height: 100%;
   z-index: 1;
   object-fit: fill;
-
 }
 </style>
