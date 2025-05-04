@@ -152,8 +152,24 @@ class Assignment(db.Model):
             "created_at": self.created_at.isoformat(),
         }
         if include_relationships:
-            data["agent"] = self.agent.serialize(include_relationships=False) if self.agent else None
-            data["stream"] = self.stream.serialize(include_relationships=False) if self.stream else None
+            if self.agent:
+                data["agent"] = {
+                    "id": self.agent.id,
+                    "username": self.agent.username,
+                    "email": self.agent.email,
+                    "role": self.agent.role
+                }
+            else:
+                data["agent"] = None
+            if self.stream:
+                data["stream"] = {
+                    "id": self.stream.id,
+                    "room_url": self.stream.room_url,
+                    "streamer_username": self.stream.streamer_username,
+                    "platform": self.stream.type.capitalize() if self.stream.type else None
+                }
+            else:
+                data["stream"] = None
         return data
 
 

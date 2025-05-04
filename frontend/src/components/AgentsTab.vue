@@ -8,6 +8,9 @@
         </button>
       </div>
     </div>
+    <div class="search-container">
+      <input type="text" v-model="searchQuery" placeholder="Search agents..." class="form-control" />
+    </div>
     <div class="agents-table">
       <div class="table-wrapper">
         <table>
@@ -15,17 +18,27 @@
             <tr>
               <th class="avatar-col"></th>
               <th>Agent</th>
+              <th>Email</th>
+              <th>Status</th>
               <th class="count-col">Streams</th>
               <th class="actions-col">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="agent in agents" :key="agent.agent_id || agent.id" class="agent-row" :class="{'highlight': newlyAddedAgentId === (agent.agent_id || agent.id)}">
+            <tr v-for="agent in filteredAgents" :key="agent.agent_id || agent.id" class="agent-row" :class="{'highlight': (agent.agent_id || agent.id) === highlightedAgentId}">
               <td class="avatar-col">
                 <div class="avatar">{{ agent.username.charAt(0).toUpperCase() }}</div>
               </td>
               <td>
                 <div class="agent-name">{{ agent.username }}</div>
+                <div class="agent-role" v-if="agent.role">{{ agent.role }}</div>
+              </td>
+              <td>
+                <div class="agent-email">{{ agent.email || 'N/A' }}</div>
+              </td>
+              <td>
+                <div class="agent-status" :class="{'online': agent.is_active, 'offline': !agent.is_active}" v-if="agent.hasOwnProperty('is_active')">{{ agent.is_active ? 'Online' : 'Offline' }}</div>
+                <div class="agent-status unknown" v-else>Unknown</div>
               </td>
               <td class="count-col" @mouseenter="showStreamsList(agent)" @mouseleave="hideStreamsList">
                 <div class="stream-count">{{ getStreamCount(agent) }}</div>
@@ -51,7 +64,7 @@
               </td>
             </tr>
             <tr v-if="agents.length === 0">
-              <td colspan="4" class="empty-state">
+              <td colspan="6" class="empty-state">
                 <div class="empty-content">
                   <font-awesome-icon icon="user-circle" class="empty-icon" />
                   <p>No agents found</p>
@@ -69,8 +82,18 @@
             <div class="avatar">{{ agent.username.charAt(0).toUpperCase() }}</div>
             <div class="agent-name">{{ agent.username }}</div>
           </div>
+          <div class="agent-status" :class="{'online': agent.is_active, 'offline': !agent.is_active}" v-if="agent.hasOwnProperty('is_active')">{{ agent.is_active ? 'Online' : 'Offline' }}</div>
+          <div class="agent-status unknown" v-else>Unknown</div>
         </div>
         <div class="card-details">
+          <div class="detail-row" v-if="agent.email">
+            <span class="detail-label">Email:</span>
+            <span class="detail-value">{{ agent.email }}</span>
+          </div>
+          <div class="detail-row" v-if="agent.role">
+            <span class="detail-label">Role:</span>
+            <span class="detail-value">{{ agent.role }}</span>
+          </div>
           <div class="detail-row" @click="toggleStreamsList(agent)">
             <span class="detail-label">Assigned Streams:</span>
             <span class="detail-value">{{ getStreamCount(agent) }}</span>
@@ -135,6 +158,7 @@
 import axios from 'axios';
 import { useToast } from 'vue-toastification';
 import CreateAgentModal from './CreateAgentModal.vue';
+
 export default {
   name: 'AgentsTab',
   components: {
@@ -157,13 +181,24 @@ export default {
       agentToDelete: null,
       streams: {},
       newlyAddedAgentId: null,
-      deletingAgentId: null
+      deletingAgentId: null,
+      searchQuery: '',
+      highlightedAgentId: null
     };
   },
   emits: ['edit', 'delete', 'agentUpdated', 'reloadAgents'],
   setup() {
     const toast = useToast();
     return { toast };
+  },
+  computed: {
+    filteredAgents() {
+      return this.agents.filter(agent => {
+        const usernameMatch = agent.username && agent.username.toLowerCase().includes(this.searchQuery.toLowerCase());
+        const emailMatch = agent.email && agent.email.toLowerCase().includes(this.searchQuery.toLowerCase());
+        return usernameMatch || emailMatch;
+      });
+    }
   },
   methods: {
     getStreamCount(agent) {
@@ -222,6 +257,10 @@ export default {
       this.isEditing = true;
       this.editingAgent = agent;
       this.showCreateModal = true;
+      this.highlightedAgentId = agent.agent_id || agent.id;
+      setTimeout(() => {
+        this.highlightedAgentId = null;
+      }, 3000);
     },
     closeCreateModal() {
       this.showCreateModal = false;

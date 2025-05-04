@@ -77,23 +77,35 @@ export default {
     
     onMounted(() => {
       // Animate modal appearance
-      anime({
-        targets: modalContent.value,
-        scale: [0.9, 1],
-        opacity: [0, 1],
-        duration: 400,
-        easing: 'easeOutElastic(1, .8)'
-      })
+      if (modalContent.value) {
+        anime({
+          targets: modalContent.value,
+          scale: [0.9, 1],
+          opacity: [0, 1],
+          duration: 400,
+          easing: 'easeOutElastic(1, .8)'
+        })
+      }
       
       // Staggered animation for form elements
-      anime({
-        targets: [usernameGroup.value, emailGroup.value, passwordGroup.value, receiveUpdatesGroup.value, submitButton.value],
-        translateY: [20, 0],
-        opacity: [0, 1],
-        delay: anime.stagger(100, {start: 300}),
-        duration: 500,
-        easing: 'easeOutQuad'
-      })
+      const targets = [
+        usernameGroup.value,
+        emailGroup.value,
+        passwordGroup.value,
+        receiveUpdatesGroup.value,
+        submitButton.value
+      ].filter(el => el); // Filter out null/undefined elements
+      
+      if (targets.length > 0) {
+        anime({
+          targets: targets,
+          translateY: [20, 0],
+          opacity: [0, 1],
+          delay: anime.stagger(100, {start: 300}),
+          duration: 500,
+          easing: 'easeOutQuad'
+        })
+      }
     })
     
     const submitForm = () => {

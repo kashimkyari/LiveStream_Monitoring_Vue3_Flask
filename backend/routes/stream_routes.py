@@ -42,37 +42,9 @@ def get_streams():
 @stream_bp.route("/api/streams", methods=["POST"])
 @login_required(role="admin")
 def create_stream():
-    # Inside the create_stream function within stream_routes.py
-    # After creating the DetectionLog entry:
-
-    # Prepare notification data for Socket.IO
-    detection_log_data = {
-        "id": detection_log.id,
-        "event_type": "stream_created",
-        "timestamp": detection_log.timestamp.isoformat(),
-        "details": detection_log.details,
-        "read": False,
-        "room_url": room_url,
-        "streamer": streamer_username,
-        "platform": platform.lower()
-    }
-
-    
-
-   
-
-    # Also emit stream update event
-    stream_data = {
-        "id": stream.id,
-        "type": stream.type,
-        "room_url": stream.room_url,
-        "streamer_username": stream.streamer_username,
-        "action": "created"
-    }
-    emit_stream_update(stream_data)
     data = request.get_json()
-    room_url = data.get("room_url", "").strip().lower()
     platform = data.get("platform", "Chaturbate").strip()
+    room_url = data.get("room_url", "").strip().lower()
     if not room_url:
         return jsonify({"message": "Room URL required"}), 400
     if platform.lower() == "chaturbate" and "chaturbate.com/" not in room_url:
@@ -109,10 +81,39 @@ def create_stream():
     db.session.add(stream)
     db.session.commit()
 
+    # Auto-assign to agent with least assignments and online if possible
+    agents = User.query.filter_by(role="agent").all()
+    if agents:
+        # Calculate workload for each agent
+        agent_workload = {}
+        for agent in agents:
+            assignment_count = Assignment.query.filter_by(agent_id=agent.id).count()
+            agent_workload[agent.id] = {
+                "count": assignment_count,
+                "online": agent.online
+            }
+        # Find agent with least assignments, prioritizing online agents
+        selected_agent_id = None
+        min_assignments = float('inf')
+        for agent_id, workload in agent_workload.items():
+            if workload["online"] and workload["count"] < min_assignments:
+                selected_agent_id = agent_id
+                min_assignments = workload["count"]
+        if not selected_agent_id:  # If no online agents, pick the one with least assignments
+            for agent_id, workload in agent_workload.items():
+                if workload["count"] < min_assignments:
+                    selected_agent_id = agent_id
+                    min_assignments = workload["count"]
+        if selected_agent_id:
+            assignment = Assignment(agent_id=selected_agent_id, stream_id=stream.id)
+            db.session.add(assignment)
+            db.session.commit()
+            # Optionally notify the agent here
 
-    # Log a new stream creation event in the notifications table.
-    # Here, we log using the DetectionLog model with event_type "stream_created".
-    from models import DetectionLog  # Ensure DetectionLog is imported from your models.
+    # Inside the create_stream function within stream_routes.py
+    # After creating the DetectionLog entry:
+
+    # Prepare notification data for Socket.IO
     detection_log = DetectionLog(
         room_url=room_url,
         event_type="stream_created",
@@ -126,8 +127,30 @@ def create_stream():
     )
     db.session.add(detection_log)
     db.session.commit()
+
+    detection_log_data = {
+        "id": detection_log.id,
+        "event_type": "stream_created",
+        "timestamp": detection_log.timestamp.isoformat(),
+        "details": detection_log.details,
+        "read": False,
+        "room_url": room_url,
+        "streamer": streamer_username,
+        "platform": platform.lower()
+    }
+
     # Emit notification about new stream
     emit_notification(detection_log_data)
+
+    # Also emit stream update event
+    stream_data = {
+        "id": stream.id,
+        "type": stream.type,
+        "room_url": stream.room_url,
+        "streamer_username": stream.streamer_username,
+        "action": "created"
+    }
+    emit_stream_update(stream_data)
 
     # Send Telegram alert to all recipients about the new stream.
     try:
