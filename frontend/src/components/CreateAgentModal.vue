@@ -5,7 +5,7 @@
         <font-awesome-icon icon="times" />
       </button>
       <div class="modal-header">
-        <h3>Add New Agent</h3>
+        <h3>{{ isEditing ? 'Edit Agent' : 'Add New Agent' }}</h3>
       </div>
       <div class="modal-body">
         <form @submit.prevent="submitForm">
@@ -14,9 +14,19 @@
             <input id="username" v-model="form.username" required />
           </div>
           
-          <div class="form-group" ref="passwordGroup">
+          <div class="form-group" ref="emailGroup">
+            <label for="email">Email</label>
+            <input id="email" v-model="form.email" type="email" required />
+          </div>
+          
+          <div class="form-group" ref="passwordGroup" v-if="!isEditing">
             <label for="password">Password</label>
             <input id="password" v-model="form.password" type="password" required />
+          </div>
+          
+          <div class="form-group" ref="receiveUpdatesGroup" v-if="!isEditing">
+            <label for="receiveUpdates">Receive Updates</label>
+            <input id="receiveUpdates" v-model="form.receiveUpdates" type="checkbox" />
           </div>
           
           <div class="form-actions">
@@ -24,7 +34,7 @@
               Cancel
             </button>
             <button type="submit" class="submit-button" v-wave ref="submitButton">
-              Create Agent
+              {{ isEditing ? 'Update Agent' : 'Create Agent' }}
             </button>
           </div>
         </form>
@@ -39,16 +49,30 @@ import anime from 'animejs/lib/anime.es.js'
 
 export default {
   name: 'CreateAgentModal',
+  props: {
+    isEditing: {
+      type: Boolean,
+      default: false
+    },
+    agent: {
+      type: Object,
+      default: null
+    }
+  },
   emits: ['close', 'submit'],
   setup(props, { emit }) {
     const form = ref({
-      username: '',
-      password: ''
+      username: props.agent ? props.agent.username : '',
+      email: props.agent ? props.agent.email : '',
+      password: '',
+      receiveUpdates: props.agent ? props.agent.receiveUpdates : false
     })
     
     const modalContent = ref(null)
     const usernameGroup = ref(null)
+    const emailGroup = ref(null)
     const passwordGroup = ref(null)
+    const receiveUpdatesGroup = ref(null)
     const submitButton = ref(null)
     
     onMounted(() => {
@@ -63,7 +87,7 @@ export default {
       
       // Staggered animation for form elements
       anime({
-        targets: [usernameGroup.value, passwordGroup.value, submitButton.value],
+        targets: [usernameGroup.value, emailGroup.value, passwordGroup.value, receiveUpdatesGroup.value, submitButton.value],
         translateY: [20, 0],
         opacity: [0, 1],
         delay: anime.stagger(100, {start: 300}),
@@ -91,7 +115,9 @@ export default {
               emit('submit', form.value)
               form.value = {
                 username: '',
-                password: ''
+                email: '',
+                password: '',
+                receiveUpdates: false
               }
             }
           })
@@ -104,7 +130,9 @@ export default {
       submitForm,
       modalContent,
       usernameGroup,
+      emailGroup,
       passwordGroup,
+      receiveUpdatesGroup,
       submitButton
     }
   }

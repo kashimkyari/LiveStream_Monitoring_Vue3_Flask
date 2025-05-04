@@ -24,7 +24,6 @@
             v-if="mobileAuthView === 'login'"
             @login-success="handleLoginSuccess"
             @forgot-password="mobileAuthView = 'forgot-password'"
-            @create-account="mobileAuthView = 'create-account'"
             :is-offline="isOffline"
             key="mobile-login"
           />
@@ -32,12 +31,6 @@
             v-else-if="mobileAuthView === 'forgot-password'"
             @back="mobileAuthView = 'login'"
             key="mobile-forgot-password"
-          />
-          <MobileCreateAccount
-            v-else-if="mobileAuthView === 'create-account'"
-            @back="mobileAuthView = 'login'"
-            @account-created="handleAccountCreated"
-            key="mobile-create-account"
           />
         </template>
         
@@ -118,7 +111,6 @@ import AgentDashboard from './components/AgentDashboard.vue'
 import MobileAdminDashboard from './components/MobileAdminDashboard.vue'
 import MobileAgentDashboard from './components/MobileAgentDashboard.vue'
 import MobileLoginComponent from './components/MobileLogin.vue'
-import MobileCreateAccount from './components/MobileCreateAccount.vue'
 import MobileForgotPassword from './components/MobileForgotPassword.vue'
 
 // Toasts & utilities
@@ -201,6 +193,9 @@ const handleSpinnerLeave = () => {
 // Provide theme state and updater
 provide('theme', isDarkTheme)
 provide('updateTheme', (isDark) => { isDarkTheme.value = isDark })
+
+// Provide toast to child components
+provide('toast', toast)
 
 // Theme handling - follow system preference
 const detectSystemTheme = () => {
@@ -564,6 +559,13 @@ const handleLoginSuccess = (userData) => {
   
   handleAuthSuccess(userData)
   
+  // Show toast notification for successful login
+  toast.success("Welcome back!", {
+    timeout: 2000,
+    position: "top-center",
+    icon: true
+  })
+  
   // Start session refresh
   const sessionInterval = startSessionRefresh()
   
@@ -573,12 +575,6 @@ const handleLoginSuccess = (userData) => {
       clearInterval(sessionInterval)
     }
   })
-}
-
-const handleAccountCreated = (username) => {
-  toast.success(`Account created for ${username}!`)
-  mobileAuthView.value = 'login'
-  setTimeout(animateControls, 100)
 }
 
 const logout = (showAlert = true) => {
@@ -594,7 +590,14 @@ const logout = (showAlert = true) => {
   sessionExpiry.value = null
   delete axios.defaults.headers.common['Authorization']
   
-  showAlert && toast.info("You have been logged out")
+  // Show toast notification for logout
+  if (showAlert) {
+    toast.info("You have been logged out", {
+      timeout: 2000,
+      position: "top-center",
+      icon: true
+    })
+  }
 }
 
 // Lifecycle hooks

@@ -123,18 +123,6 @@
             </div>
           </transition>
         </button>
-        
-        <div class="register-option">
-          <span>Don't have an account?</span>
-          <button 
-            type="button" 
-            class="register-link"
-            @click="goToRegister"
-            :disabled="isLoading"
-          >
-            Create Account
-          </button>
-        </div>
       </form>
     </div>
     
@@ -173,7 +161,7 @@ import anime from 'animejs/lib/anime.es.js';
 
 export default {
   name: 'MobileLogin',
-  emits: ['login-success', 'forgot-password', 'create-account'],
+  emits: ['login-success', 'forgot-password'],
   setup(props, { emit }) {
     const router = useRouter();
     const username = ref('');
@@ -471,17 +459,6 @@ export default {
       }
     };
 
-    const goToRegister = () => {
-      emit('create-account');
-      if (analyzeContext) {
-        analyzeContext({
-          screen: 'login',
-          action: 'navigate',
-          destination: 'register'
-        });
-      }
-    };
-
     const animateFloatingShapes = () => {
       anime({
         targets: '.floating-shape',
@@ -565,7 +542,6 @@ export default {
       togglePasswordVisibility,
       handleLogin,
       goToForgotPassword,
-      goToRegister,
       closeHelp,
       getGreeting,
       focusPassword,
@@ -1010,37 +986,6 @@ input::placeholder {
 
 .loading-text {
   font-size: 0.9rem;
-}
-
-/* Register option with better spacing */
-.register-option {
-  text-align: center;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-}
-
-.register-link {
-  background: none;
-  border: none;
-  color: var(--primary-color);
-  font-weight: 500;
-  cursor: pointer;
-  padding: 0;
-  margin-left: 0.5rem;
-  transition: color 0.2s ease;
-}
-
-.register-link:hover {
-  color: var(--primary-hover);
-  text-decoration: underline;
-}
-
-.register-link:focus-visible {
-  outline: 2px solid var(--focus-ring-color);
-  border-radius: 0.25rem;
 }
 
 /* Success animation with optimized performance */

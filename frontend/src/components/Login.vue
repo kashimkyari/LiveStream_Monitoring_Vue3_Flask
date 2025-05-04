@@ -60,7 +60,6 @@
       <div class="additional-links" ref="additionalLinks">
         <a href="#" class="link-text" @click.prevent="forgotPassword">Forgot password?</a>
         <span class="separator">•</span>
-        <a href="#" class="link-text" @click.prevent="createAccount">Create account</a>
       </div>
       
       <div class="decorative-circles">
@@ -74,10 +73,6 @@
       v-else-if="showForgotPassword" 
       @back="showForgotPassword = false" 
     />
-    <CreateAccountComponent 
-      v-else-if="showCreateAccount" 
-      @back="showCreateAccount = false" 
-    />
   </div>
 </template>
 
@@ -88,14 +83,12 @@ import "vue-toastification/dist/index.css"
 import anime from 'animejs/lib/anime.es.js';
 import api from '@/services/api'
 import ForgotPasswordComponent from './ForgotPassword.vue'
-import CreateAccountComponent from './CreateAccount.vue'
 
 export default {
   name: 'LoginComponent',
   components: { 
     FontAwesomeIcon,
-    ForgotPasswordComponent,
-    CreateAccountComponent
+    ForgotPasswordComponent
   },
   emits: ['login-success'],
   setup() {
@@ -109,7 +102,6 @@ export default {
       loading: false,
       error: null,
       showForgotPassword: false,
-      showCreateAccount: false,
       sessionChecking: false
     }
   },
@@ -381,11 +373,6 @@ export default {
     forgotPassword() {
       // Show the ForgotPassword component
       this.showForgotPassword = true;
-    },
-    
-    createAccount() {
-      // Show the CreateAccount component
-      this.showCreateAccount = true;
     },
     
     showError(message) {

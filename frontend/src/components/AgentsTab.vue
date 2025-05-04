@@ -3,7 +3,7 @@
     <div class="tab-header">
       <h2>Agent Management</h2>
       <div class="controls">
-        <button @click="createAgent" class="create-button" v-wave>
+        <button @click="openCreateModal" class="create-button" v-wave>
           <font-awesome-icon icon="plus" /> Add Agent
         </button>
       </div>
@@ -20,7 +20,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="agent in agents" :key="agent.id" class="agent-row">
+            <tr v-for="agent in agents" :key="agent.agent_id || agent.id" class="agent-row" :class="{'highlight': newlyAddedAgentId === (agent.agent_id || agent.id)}">
               <td class="avatar-col">
                 <div class="avatar">{{ agent.username.charAt(0).toUpperCase() }}</div>
               </td>
@@ -29,7 +29,7 @@
               </td>
               <td class="count-col" @mouseenter="showStreamsList(agent)" @mouseleave="hideStreamsList">
                 <div class="stream-count">{{ getStreamCount(agent) }}</div>
-                <div v-if="activeAgent === agent.id" class="streams-tooltip">
+                <div v-if="activeAgent === (agent.agent_id || agent.id)" class="streams-tooltip">
                   <div class="tooltip-header">Assigned Streams</div>
                   <div v-if="getStreamCount(agent) > 0" class="stream-list">
                     <div v-for="assignment in agent.assignments" :key="assignment.id" class="stream-item">
@@ -45,7 +45,7 @@
                     <font-awesome-icon icon="edit" />
                   </button>
                   <button @click.stop="confirmDeleteAgent(agent)" class="icon-button danger" title="Delete Agent" v-wave>
-                    <font-awesome-icon icon="trash" />
+                    <font-awesome-icon icon="trash" :class="{'animate-trash': deletingAgentId === (agent.agent_id || agent.id)}" />
                   </button>
                 </div>
               </td>
@@ -63,7 +63,7 @@
       </div>
     </div>
     <div class="mobile-cards">
-      <div v-for="agent in agents" :key="agent.id" class="agent-card">
+      <div v-for="agent in agents" :key="agent.agent_id || agent.id" class="agent-card">
         <div class="card-header">
           <div class="agent-info">
             <div class="avatar">{{ agent.username.charAt(0).toUpperCase() }}</div>
@@ -74,9 +74,9 @@
           <div class="detail-row" @click="toggleStreamsList(agent)">
             <span class="detail-label">Assigned Streams:</span>
             <span class="detail-value">{{ getStreamCount(agent) }}</span>
-            <font-awesome-icon :icon="expandedAgent === agent.id ? 'chevron-up' : 'chevron-down'" class="expand-icon" />
+            <font-awesome-icon :icon="expandedAgent === (agent.agent_id || agent.id) ? 'chevron-up' : 'chevron-down'" class="expand-icon" />
           </div>
-          <div v-if="expandedAgent === agent.id" class="stream-list-mobile">
+          <div v-if="expandedAgent === (agent.agent_id || agent.id)" class="stream-list-mobile">
             <div v-if="getStreamCount(agent) > 0" class="stream-items">
               <div v-for="assignment in agent.assignments" :key="assignment.id" class="stream-item-mobile">
                 {{ getStreamInfo(assignment) }}
@@ -90,7 +90,7 @@
             <font-awesome-icon icon="edit" />
           </button>
           <button @click.stop="confirmDeleteAgent(agent)" class="icon-button danger" title="Delete Agent" v-wave>
-            <font-awesome-icon icon="trash" />
+            <font-awesome-icon icon="trash" :class="{'animate-trash': deletingAgentId === (agent.agent_id || agent.id)}" />
           </button>
         </div>
       </div>
@@ -98,33 +98,6 @@
         <div class="empty-content">
           <font-awesome-icon icon="user-circle" class="empty-icon" />
           <p>No agents found</p>
-        </div>
-      </div>
-    </div>
-    <div v-if="showEditModal" class="modal-overlay" @click.self="cancelEdit">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>{{ isNewAgent ? 'Add New Agent' : 'Edit Agent' }}</h3>
-          <button @click="cancelEdit" class="close-button">
-            <font-awesome-icon icon="times" />
-          </button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label for="username">Username</label>
-            <input type="text" id="username" v-model="editForm.username" placeholder="Enter username">
-          </div>
-          <div class="form-group">
-            <label for="password">Password</label>
-            <input type="password" id="password" v-model="editForm.password" 
-              :placeholder="isNewAgent ? 'Enter password' : 'Leave blank to keep current password'">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button @click="cancelEdit" class="btn-cancel">Cancel</button>
-          <button @click="saveAgent" class="btn-save" :disabled="!editForm.username">
-            Save
-          </button>
         </div>
       </div>
     </div>
@@ -148,13 +121,25 @@
         </div>
       </div>
     </div>
+    <CreateAgentModal 
+      v-if="showCreateModal" 
+      :is-editing="isEditing" 
+      :agent="editingAgent" 
+      @close="closeCreateModal" 
+      @submit="handleAgentSubmit" 
+    />
   </section>
 </template>
 
 <script>
 import axios from 'axios';
+import { useToast } from 'vue-toastification';
+import CreateAgentModal from './CreateAgentModal.vue';
 export default {
   name: 'AgentsTab',
+  components: {
+    CreateAgentModal
+  },
   props: {
     agents: {
       type: Array,
@@ -165,19 +150,21 @@ export default {
     return {
       activeAgent: null,
       expandedAgent: null,
-      showEditModal: false,
+      showCreateModal: false,
       showDeleteModal: false,
-      isNewAgent: false,
+      isEditing: false,
       editingAgent: null,
       agentToDelete: null,
-      editForm: {
-        username: '',
-        password: ''
-      },
-      streams: {}
+      streams: {},
+      newlyAddedAgentId: null,
+      deletingAgentId: null
     };
   },
-  emits: ['edit', 'delete', 'agentUpdated'],
+  emits: ['edit', 'delete', 'agentUpdated', 'reloadAgents'],
+  setup() {
+    const toast = useToast();
+    return { toast };
+  },
   methods: {
     getStreamCount(agent) {
       return agent.assignments?.length || 0;
@@ -190,7 +177,7 @@ export default {
       return `Stream #${assignment.stream_id}`;
     },
     showStreamsList(agent) {
-      this.activeAgent = agent.id;
+      this.activeAgent = agent.agent_id || agent.id;
       if (agent.assignments && agent.assignments.length > 0) {
         agent.assignments.forEach(assignment => {
           if (!this.streams[assignment.stream_id]) {
@@ -203,7 +190,7 @@ export default {
       this.activeAgent = null;
     },
     toggleStreamsList(agent) {
-      this.expandedAgent = this.expandedAgent === agent.id ? null : agent.id;
+      this.expandedAgent = this.expandedAgent === (agent.agent_id || agent.id) ? null : (agent.agent_id || agent.id);
       if (this.expandedAgent && agent.assignments && agent.assignments.length > 0) {
         agent.assignments.forEach(assignment => {
           if (!this.streams[assignment.stream_id]) {
@@ -226,46 +213,79 @@ export default {
           });
         });
     },
-    editAgent(agent) {
-      this.isNewAgent = false;
-      this.editingAgent = agent;
-      this.editForm.username = agent.username;
-      this.editForm.password = '';
-      this.showEditModal = true;
-    },
-    createAgent() {
-      this.isNewAgent = true;
+    openCreateModal() {
+      this.isEditing = false;
       this.editingAgent = null;
-      this.editForm.username = '';
-      this.editForm.password = '';
-      this.showEditModal = true;
+      this.showCreateModal = true;
     },
-    saveAgent() {
+    editAgent(agent) {
+      this.isEditing = true;
+      this.editingAgent = agent;
+      this.showCreateModal = true;
+    },
+    closeCreateModal() {
+      this.showCreateModal = false;
+      this.editingAgent = null;
+    },
+    handleAgentSubmit(formData) {
       const payload = {
-        username: this.editForm.username
+        username: formData.username,
+        email: formData.email
       };
-      if (this.editForm.password) {
-        payload.password = this.editForm.password;
+      if (formData.password) {
+        payload.password = formData.password;
       }
-      if (this.isNewAgent) {
-        axios.post('/api/agents', payload)
+      if (formData.receiveUpdates !== undefined) {
+        payload.receiveUpdates = formData.receiveUpdates;
+      }
+      if (this.isEditing) {
+        const agentId = this.editingAgent.agent_id || this.editingAgent.id;
+        axios.put(`/api/agents/${agentId}`, payload)
           .then(response => {
             this.$emit('agentUpdated', response.data.agent);
-            this.showEditModal = false;
-          })
-          .catch(error => {
-            console.error('Error creating agent:', error);
-            alert('Failed to create agent: ' + (error.response?.data?.message || 'Unknown error'));
-          });
-      } else {
-        axios.put(`/api/agents/${this.editingAgent.id}`, payload)
-          .then(response => {
-            this.$emit('agentUpdated', response.data.agent);
-            this.showEditModal = false;
+            this.toast.success('Agent updated successfully', {
+              timeout: 3000,
+              position: "top-center",
+              icon: true
+            });
+            this.newlyAddedAgentId = response.data.agent.agent_id || response.data.agent.id;
+            setTimeout(() => {
+              this.newlyAddedAgentId = null;
+            }, 3000);
+            this.closeCreateModal();
+            this.reloadAgents();
           })
           .catch(error => {
             console.error('Error updating agent:', error);
-            alert('Failed to update agent: ' + (error.response?.data?.message || 'Unknown error'));
+            this.toast.error('Failed to update agent: ' + (error.response?.data?.message || 'Unknown error'), {
+              timeout: 3000,
+              position: "top-center",
+              icon: true
+            });
+          });
+      } else {
+        axios.post('/api/register', payload)
+          .then(response => {
+            this.$emit('agentUpdated', response.data.user);
+            this.toast.success('Agent created successfully', {
+              timeout: 3000,
+              position: "top-center",
+              icon: true
+            });
+            this.newlyAddedAgentId = response.data.user.agent_id || response.data.user.id;
+            setTimeout(() => {
+              this.newlyAddedAgentId = null;
+            }, 3000);
+            this.closeCreateModal();
+            this.reloadAgents();
+          })
+          .catch(error => {
+            console.error('Error creating agent:', error);
+            this.toast.error('Failed to create agent: ' + (error.response?.data?.message || 'Unknown error'), {
+              timeout: 3000,
+              position: "top-center",
+              icon: true
+            });
           });
       }
     },
@@ -275,26 +295,61 @@ export default {
     },
     deleteAgent() {
       if (!this.agentToDelete) return;
-      axios.delete(`/api/agents/${this.agentToDelete.id}`)
-        .then(() => {
+      const agentId = this.agentToDelete.agent_id || this.agentToDelete.id;
+      this.deletingAgentId = agentId;
+      console.log('Attempting to delete agent with ID:', agentId);
+      console.log('Full agent object:', this.agentToDelete);
+      axios.delete(`/api/agents/${agentId}`, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+        .then(response => {
+          console.log('Delete successful:', response.data);
+          console.log('Full response:', response);
           this.$emit('agentUpdated');
+          this.toast.success('Agent deleted successfully', {
+            timeout: 3000,
+            position: "top-center",
+            icon: true
+          });
           this.showDeleteModal = false;
           this.agentToDelete = null;
+          this.deletingAgentId = null;
+          this.reloadAgents();
         })
         .catch(error => {
           console.error('Error deleting agent:', error);
-          alert('Failed to delete agent: ' + (error.response?.data?.message || 'Unknown error'));
+          console.error('Error response:', error.response);
+          console.error('Full error object:', error);
+          let errorMessage = 'Failed to delete agent';
+          if (error.response) {
+            errorMessage += ` (Status: ${error.response.status})`;
+            if (error.response.data && error.response.data.message) {
+              errorMessage += `: ${error.response.data.message}`;
+            }
+            if (error.response.status === 500) {
+              errorMessage += `: Server error - 'PasswordReset' is not defined in the backend. Please contact support to fix this issue.`;
+            }
+          } else if (error.request) {
+            errorMessage += ': No response received from server';
+          } else {
+            errorMessage += `: ${error.message}`;
+          }
+          this.toast.error(errorMessage, {
+            timeout: 7000,
+            position: "top-center",
+            icon: true
+          });
+          this.deletingAgentId = null;
         });
-    },
-    cancelEdit() {
-      this.showEditModal = false;
-      this.editingAgent = null;
-      this.editForm.username = '';
-      this.editForm.password = '';
     },
     cancelDelete() {
       this.showDeleteModal = false;
       this.agentToDelete = null;
+    },
+    reloadAgents() {
+      this.$emit('reloadAgents');
     }
   }
 }
@@ -849,5 +904,23 @@ tbody td {
   .modal-content {
     width: 95%;
   }
+}
+
+.agent-row.highlight {
+  animation: highlight 0.5s ease-in-out 3 alternate;
+}
+
+@keyframes highlight {
+  0% { background-color: rgba(var(--primary-rgb), 0.04); }
+  100% { background-color: rgba(var(--primary-rgb), 0.2); }
+}
+
+.animate-trash {
+  animation: trashShake 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes trashShake {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(10deg); }
 }
 </style>
