@@ -14,6 +14,7 @@ from werkzeug.security import generate_password_hash
 import secrets
 import string
 from flask_cors import CORS
+from flask_migrate import upgrade, current
 
 # Configure logging
 logging.basicConfig(
@@ -172,6 +173,17 @@ def configure_ssl_context():
             
     return ssl_context
 
+def run_migrations(app):
+    '''Run Alembic migrations to ensure database schema is up to date.'''
+    with app.app_context():
+        try:
+            current()  # Check current migration version
+            upgrade()  # Apply any pending migrations
+            app.logger.info('Database migrations applied successfully.')
+        except Exception as e:
+            app.logger.error(f'Failed to apply database migrations: {e}')
+            raise
+
 # === Main Execution ===
 if __name__ == "__main__":
     ssl_context = configure_ssl_context()
@@ -179,6 +191,8 @@ if __name__ == "__main__":
     debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
     logging.info(f"Starting server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
     
+    app = create_app()
+    run_migrations(app)  # Run migrations before starting the app
     socketio.run(
         app,
         host='0.0.0.0',

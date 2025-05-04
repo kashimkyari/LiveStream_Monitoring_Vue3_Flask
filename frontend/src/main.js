@@ -113,11 +113,8 @@ inject(); // Call inject() outside of app.use to initialize analytics
 
 app.use(createPinia());
 
-// Minimal Vue Router setup to provide injection
-const router = createRouter({
-  history: createWebHistory(),
-  routes: []
-});
+// Import and use the router configuration
+import router from './router/index.js';
 app.use(router);
 
 // Initialize mobile detector
