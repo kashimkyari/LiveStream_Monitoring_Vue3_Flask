@@ -274,7 +274,7 @@ def process_audio_realtime(stream_url, cancel_event):
 def process_audio_segment(audio_data, stream_url):
     """Process an audio segment for transcription and analysis"""
     try:
-        model = load_whisper_model()
+    model = load_whisper_model()
         if model is None:
             logger.error("Whisper model not loaded")
             return None
@@ -296,13 +296,13 @@ def process_audio_segment(audio_data, stream_url):
             f.write(transcript)
         logger.info(f"Transcript saved to {transcript_file}")
         # Check for keywords
-        keywords = refresh_flagged_keywords()
+    keywords = refresh_flagged_keywords()
         detected_keywords = []
         for kw in keywords:
             if kw in transcript.lower():
                 detected_keywords.append(kw)
         if detected_keywords:
-            sentiment = _sentiment_analyzer.polarity_scores(transcript)
+        sentiment = _sentiment_analyzer.polarity_scores(transcript)
             compound_score = sentiment.get("compound", 0.0)
             detection = {
                 "timestamp": datetime.now().isoformat(),
@@ -642,7 +642,7 @@ def log_chat_detection(detections, stream_url):
                 "platform": platform,
                 "assigned_agent": agent or "Unassigned"
             }
-            emit_notification(notification_data)
+        emit_notification(notification_data)
 
 def handle_audio_detection(stream_url, transcript, keyword, sentiment_score, platform, streamer_name):
     try:
@@ -866,10 +866,10 @@ def start_monitoring(stream_url):
             return True
         stream.is_monitored = True
         db.session.commit()
-        logger.info(f"Starting monitoring for {stream_url}")
-        cancel_event = threading.Event()
+    logger.info(f"Starting monitoring for {stream_url}")
+    cancel_event = threading.Event()
         thread = threading.Thread(
-            target=process_combined_detection,
+        target=process_combined_detection,
             args=(stream_url, cancel_event)
         )
         thread.daemon = True
@@ -892,12 +892,12 @@ def stop_monitoring(stream_url, cancel_event=None, thread=None):
             db.session.commit()
         if stream_url in stream_processors:
             cancel_event, thread = stream_processors.get(stream_url, (None, None))
-            if cancel_event:
-                cancel_event.set()
+    if cancel_event:
+        cancel_event.set()
             if thread:
                 thread.join(timeout=2.0)
-            del stream_processors[stream_url]
-        logger.info(f"Stopped monitoring {stream_url}")
+        del stream_processors[stream_url]
+    logger.info(f"Stopped monitoring {stream_url}")
         emit_stream_update({
             'id': stream.id if stream else 0,
             'url': stream_url,

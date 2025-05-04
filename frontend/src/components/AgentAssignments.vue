@@ -39,7 +39,8 @@
 </template>
 
 <script>
-import { ref, onMounted, reactive } from 'vue'
+// eslint-disable-next-line no-unused-vars
+import { ref, onMounted } from 'vue'
 import anime from 'animejs/lib/anime.es.js'
 
 export default {
@@ -50,7 +51,7 @@ export default {
       required: true
     }
   },
-  setup(props, { emit }) {
+  setup(props) {
     const assignments = ref([])
     const loading = ref(true)
     const assignmentsContainer = ref(null)

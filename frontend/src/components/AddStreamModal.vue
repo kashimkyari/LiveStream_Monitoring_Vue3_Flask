@@ -20,8 +20,9 @@
   </template>
   
   <script>
+  // Comment out the import for the non-existent component
+  // import AddStreamForm from './AddStreamForm.vue';
   import { defineComponent } from 'vue';
-  import AddStreamForm from './AddStreamForm.vue';
   import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
   import { library } from '@fortawesome/fontawesome-svg-core';
   import { faTimes } from '@fortawesome/free-solid-svg-icons';
@@ -31,7 +32,7 @@
   export default defineComponent({
     name: 'AddStreamModal',
     components: {
-      AddStreamForm,
+      // AddStreamForm,
       FontAwesomeIcon
     },
     props: {

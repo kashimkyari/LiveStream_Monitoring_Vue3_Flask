@@ -356,7 +356,6 @@ export default {
     const selectedFile = ref(null);
     const viewingAttachment = ref(null);
     const pendingMessages = ref([]);
-    const isScrolling = ref(false);
     const hasMoreMessages = ref(true);
     const page = ref(1);
     const messagesPerPage = ref(20);
@@ -534,8 +533,7 @@ export default {
         // Maintain scroll position
         await nextTick();
         if (messagesContainer.value && oldMessages.length > 0) {
-          const scrollHeight = messagesContainer.value.scrollHeight;
-          messagesContainer.value.scrollTop = 200; // Scroll a bit down to show new messages loaded
+          messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight - messagesContainer.value.clientHeight;
         }
       } catch (error) {
         console.error('Error fetching more messages:', error);

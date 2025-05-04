@@ -68,6 +68,11 @@
         </div>
       </div>
     </teleport>
+
+    <div class="viewer-count" v-if="viewerCount !== null">
+      <font-awesome-icon icon="eye" />
+      <span>{{ viewerCount }}</span>
+    </div>
   </div>
 </template>
 
@@ -76,6 +81,7 @@ import { ref, onMounted, defineComponent, watch, onBeforeUnmount, nextTick, inje
 import axios from 'axios';
 import { useToast } from 'vue-toastification';
 import anime from 'animejs/lib/anime.es.js';
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 
 // HLS Player Component
 const HlsPlayer = defineComponent({
@@ -596,7 +602,8 @@ const HlsPlayer = defineComponent({
 export default defineComponent({
   name: 'VideoPlayer',
   components: {
-    HlsPlayer
+    HlsPlayer,
+    FontAwesomeIcon
   },
   props: {
     platform: {
@@ -639,6 +646,7 @@ export default defineComponent({
     const thumbnailEl = ref(null);
     const modalOverlay = ref(null);
     const modalContent = ref(null);
+    const viewerCount = ref(null);
     
     let refreshTimeout = null;
     
@@ -1042,7 +1050,8 @@ export default defineComponent({
       modalContent,
       toggleModal,
       refreshStream,
-      handleThumbnailError
+      handleThumbnailError,
+      viewerCount
     };
   }
 });
@@ -1443,5 +1452,25 @@ export default defineComponent({
     width: 24px;
     height: 24px;
   }
+}
+
+.viewer-count {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 15px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  z-index: 20;
+}
+
+[data-theme='light'] .viewer-count {
+  background-color: rgba(255, 255, 255, 0.5);
+  color: var(--light-text);
 }
 </style>

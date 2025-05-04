@@ -36,7 +36,6 @@ import Toast from 'vue-toastification';
 import 'vue-toastification/dist/index.css';
 import { inject } from '@vercel/analytics';
 import { createPinia } from 'pinia';
-import { createRouter, createWebHistory } from 'vue-router';
 import { faTelegram, faGoogle, faApple } from '@fortawesome/free-brands-svg-icons';
 
 // Add all icons to the library

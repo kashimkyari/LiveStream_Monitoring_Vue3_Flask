@@ -52,7 +52,7 @@ export default {
       this.toast.success('Login successful! Redirecting...');
       // Handle successful login (redirect to dashboard, etc.)
     },
-    handleAccountCreated(username) {
+    handleAccountCreated(/* username */) {
       this.toast.success('Account created successfully!');
       this.currentView = 'login';
       // Optionally pre-fill the username field in login
@@ -63,28 +63,9 @@ export default {
 </script>
 
 <style>
-/* Global shared styles for all auth components */
-:root {
-  /* Color scheme variables */
-  --primary-color: var(--bs-info, #0dcaf0);
-  --primary-hover: color-mix(in srgb, var(--primary-color) 85%, white);
-  --dark-bg: var(--bs-dark, #212529);
-  --card-bg: var(--bs-gray-800, #343a40);
-  --text-color: white;
-  --text-muted: var(--bs-gray-400, #ced4da);
-  --border-color: var(--bs-gray-700, #495057);
-  --input-bg: var(--bs-gray-900, #212529);
-  --success-color: var(--bs-success, #198754);
-  --danger-color: var(--bs-danger, #dc3545);
-  --warning-color: var(--bs-warning, #ffc107);
-}
+@import url('../styles/theme.css');
 
-body {
-  margin: 0;
-  padding: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-
+/* Retain component-specific styles while leveraging theme variables */
 .mobile-auth-container {
   min-height: 100vh;
   width: 100%;

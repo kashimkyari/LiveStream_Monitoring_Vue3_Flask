@@ -176,7 +176,7 @@ export default {
       if (!username) return
       
       try {
-        const response = await axios.get(`https://stripchat.com/api/front/v2/models/username/${username}/members`)
+        const response = await axios.get(`/api/stripchat-viewers/${username}`)
         
         // Extract guest count from response
         if (response.data && response.data.guests !== undefined) {

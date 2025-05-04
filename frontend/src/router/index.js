@@ -12,13 +12,25 @@ const MobileAdminNotifications = () => import('../components/MobileAdminNotifica
 const MobileAgentNotifications = () => import('../components/MobileAgentNotifications.vue');
 const MobileAgentDashboard = () => import('../components/MobileAgentDashboard.vue');
 const MobileForgotPassword = () => import('../components/MobileForgotPassword.vue');
-const MobileAddStreamModal = () => import('../components/MobileAddStreamModal.vue');
-const MobileMessageComponent = () => import('../components/MobileMessageComponent.vue');
-const MobileAgentAnalytics = () => import('../components/MobileAgentAnalytics.vue');
 const MobileAdminHome = () => import('../components/MobileAdminHome.vue');
 const MobileCreateAccount = () => import('../components/MobileCreateAccount.vue');
-const MobileAuthContainer = () => import('../components/MobileAuthContainer.vue');
 const MobileAgentMessages = () => import('../components/MobileAgentMessages.vue');
+const MobileAgentAnalytics = () => import('../components/MobileAgentAnalytics.vue');
+const MobileAuthContainer = () => import('../components/MobileAuthContainer.vue');
+const AdminDashboard = () => import('../components/AdminDashboard.vue');
+const AgentDashboard = () => import('../components/AgentDashboard.vue');
+const Login = () => import('../components/Login.vue');
+const CreateAccount = () => import('../components/CreateAccount.vue');
+const ForgotPassword = () => import('../components/ForgotPassword.vue');
+const AdminMessageComponent = () => import('../components/AdminMessageComponent.vue');
+const AgentMessageComponent = () => import('../components/AgentMessageComponent.vue');
+const AdminNotificationsPage = () => import('../components/AdminNotificationsPage.vue');
+const AgentNotificationsComponent = () => import('../components/AgentNotificationsComponent.vue');
+const StreamsTab = () => import('../components/StreamsTab.vue');
+const AgentStreamsComponent = () => import('../components/AgentStreamsComponent.vue');
+const AgentsTab = () => import('../components/AgentsTab.vue');
+const AgentPage = () => import('../components/AgentPage.vue');
+const FlagSettingsPage = () => import('../components/FlagSettingsPage.vue');
 
 // Define routes
 const routes = [
@@ -36,7 +48,24 @@ const routes = [
   { path: '/admin/home', component: MobileAdminHome, meta: { requiresAuth: true, role: 'admin' } },
   { path: '/create-account', component: MobileCreateAccount },
   { path: '/agent/messages', component: MobileAgentMessages, meta: { requiresAuth: true, role: 'agent' } },
-  // Add other mobile components as needed
+  { path: '/agent/analytics', component: MobileAgentAnalytics, meta: { requiresAuth: true, role: 'agent' } },
+  { path: '/auth', component: MobileAuthContainer },
+  // Desktop or additional routes
+  { path: '/desktop/admin/dashboard', component: AdminDashboard, meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/desktop/agent/dashboard', component: AgentDashboard, meta: { requiresAuth: true, role: 'agent' } },
+  { path: '/desktop/login', component: Login },
+  { path: '/desktop/create-account', component: CreateAccount },
+  { path: '/desktop/forgot-password', component: ForgotPassword },
+  { path: '/desktop/admin/messages', component: AdminMessageComponent, meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/desktop/agent/messages', component: AgentMessageComponent, meta: { requiresAuth: true, role: 'agent' } },
+  { path: '/desktop/admin/notifications', component: AdminNotificationsPage, meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/desktop/agent/notifications', component: AgentNotificationsComponent, meta: { requiresAuth: true, role: 'agent' } },
+  { path: '/desktop/admin/streams', component: StreamsTab, meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/desktop/agent/streams', component: AgentStreamsComponent, meta: { requiresAuth: true, role: 'agent' } },
+  { path: '/desktop/admin/agents', component: AgentsTab, meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/desktop/agent/page', component: AgentPage, meta: { requiresAuth: true, role: 'agent' } },
+  { path: '/desktop/admin/flag-settings', component: FlagSettingsPage, meta: { requiresAuth: true, role: 'admin' } },
+  // Add other routes as needed for modals and smaller components if they are to be standalone pages
 ];
 
 const router = createRouter({

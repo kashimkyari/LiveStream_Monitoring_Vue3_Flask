@@ -24,7 +24,7 @@
     <main class="content">
       <AdminDashboard v-if="userRole === 'admin'" />
       <AgentDashboard v-else-if="userRole === 'agent'" />
-      <DefaultDashboard v-else />
+      <!-- <DefaultDashboard v-else /> -->
     </main>
   </div>
 </template>
@@ -33,11 +33,11 @@
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import AdminDashboard from './AdminDashboard.vue'
 import AgentDashboard from './AgentDashboard.vue'
-import DefaultDashboard from './DefaultDashboard.vue'
+// import DefaultDashboard from './DefaultDashboard.vue'
 
 export default {
   name: 'MainLayout',
-  components: { FontAwesomeIcon, AdminDashboard, AgentDashboard, DefaultDashboard },
+  components: { FontAwesomeIcon, AdminDashboard, AgentDashboard },
   props: {
     userRole: {
       type: String,
