@@ -23,7 +23,7 @@ logging.basicConfig(
 
 load_dotenv()
 
-from config import create_app
+from config import create_app, socketio
 from extensions import db
 from models import User
 
@@ -71,6 +71,8 @@ def add_cors_headers(response):
     if origin and origin in allowed_origins:
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control'
     return response
 
 # Add CORS test endpoint for debugging
@@ -180,10 +182,11 @@ if __name__ == "__main__":
     debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
     logging.info(f"Starting server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
     
-    app.run(
+    socketio.run(
+        app,
         host='0.0.0.0',
         port=int(os.getenv('PORT', 5000)),
         debug=debug_mode,
         use_reloader=debug_mode,
-        ssl_context=ssl_context
+        allow_unsafe_werkzeug=True  # Required for gevent with Werkzeug >= 2.0
     )

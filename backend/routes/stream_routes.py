@@ -443,6 +443,7 @@ def cleanup_jobs():
     })
 
 # Add this function in stream_routes.py
+@stream_bp.route("/api/streams/refresh/stripchat", methods=["POST"])
 def refresh_stripchat_stream(room_url):
     from scraping import scrape_stripchat_data  # Ensure import if not already present
     
@@ -458,7 +459,7 @@ def refresh_stripchat_stream(room_url):
         db.session.commit()
     
     return scraped_data['stripchat_m3u8_url']
-@stream_bp.route("/api/streams/refresh/stripchat", methods=["POST"])
+
 
 
 @login_required(role="admin")

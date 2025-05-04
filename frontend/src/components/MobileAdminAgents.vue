@@ -155,12 +155,18 @@
                   <div v-if="filteredStreams.length === 0" class="no-streams-message">
                     No streams found
                   </div>
-                  <div v-else class="stream-item" v-for="stream in filteredStreams" :key="stream.id" @click="toggleStreamAssignment(stream.id)">
+                  <div v-else class="stream-item" v-for="stream in filteredStreams" :key="stream.id" @click="toggleStreamAssignment(stream.id)" :class="{ 'assigned': editAgent.streamIds.includes(stream.id) }">
                     <div class="stream-info">
                       <span class="stream-name">{{ stream.streamer_username }}</span>
                       <span class="stream-platform" :class="stream.platform.toLowerCase()">{{ stream.platform }}</span>
                     </div>
-                    <font-awesome-icon :icon="editAgent.streamIds.includes(stream.id) ? 'check-circle' : 'circle'" class="assignment-icon" :class="{ 'assigned': editAgent.streamIds.includes(stream.id) }" />
+                    <div class="assignment-status">
+                      <span v-if="editAgent.streamIds.includes(stream.id)" class="assigned-badge">Assigned</span>
+                      <font-awesome-icon 
+                        :icon="editAgent.streamIds.includes(stream.id) ? 'check-circle' : 'plus-circle'" 
+                        class="status-icon" 
+                        :class="{ 'assigned-icon': editAgent.streamIds.includes(stream.id) }" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -277,6 +283,7 @@ export default {
 
     const loadAgents = async () => {
       loading.value = true
+      toast.info('Loading agents...')
       try {
         const token = localStorage.getItem('token')
         const response = await axios.get('/api/agents', {
@@ -302,7 +309,7 @@ export default {
         })
         allStreams.value = Object.values(response.data).map(stream => ({
           ...stream,
-          platform: stream.platform || 'Unknown'
+          platform: stream.type || 'Unknown'
         }))
         filteredStreams.value = allStreams.value
         toast.success('Streams loaded successfully')
@@ -375,11 +382,11 @@ export default {
       toast.info('Saving agent changes...')
       try {
         const token = localStorage.getItem('token')
+        // Update agent details
         const response = await axios.patch(`/api/agents/${selectedAgent.value.id}`, {
           username: editAgent.value.username,
           email: editAgent.value.email,
-          receiveUpdates: editAgent.value.receiveUpdates,
-          streamIds: editAgent.value.streamIds
+          receiveUpdates: editAgent.value.receiveUpdates
         }, {
           headers: { Authorization: `Bearer ${token}` }
         })
@@ -387,12 +394,51 @@ export default {
           agent.id === selectedAgent.value.id ? response.data : agent
         )
         selectedAgent.value = response.data
+        toast.success('Agent details updated successfully')
+        
+        // Handle stream assignments by removing old ones and adding new ones
+        toast.info('Updating stream assignments...')
+        // Get current assignments for the agent
+        const currentAssignmentsResponse = await axios.get(`/api/assignments?agent_id=${selectedAgent.value.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        const currentAssignments = currentAssignmentsResponse.data.assignments
+        const currentStreamIds = currentAssignments.map(a => a.stream_id)
+        const newStreamIds = editAgent.value.streamIds || []
+        
+        // Remove assignments that are no longer in the new list
+        const streamsToRemove = currentStreamIds.filter(id => !newStreamIds.includes(id))
+        for (const streamId of streamsToRemove) {
+          const assignment = currentAssignments.find(a => a.stream_id === streamId)
+          if (assignment) {
+            await axios.delete(`/api/assignments/${assignment.id}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            })
+          }
+        }
+        
+        // Add new assignments that weren't in the old list
+        const streamsToAdd = newStreamIds.filter(id => !currentStreamIds.includes(id))
+        for (const streamId of streamsToAdd) {
+          await axios.post('/api/assign', {
+            agent_id: selectedAgent.value.id,
+            stream_id: streamId
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        }
+        
+        if (streamsToRemove.length > 0 || streamsToAdd.length > 0) {
+          toast.success('Stream assignments updated successfully')
+        } else {
+          toast.info('No changes to stream assignments')
+        }
+        
         await loadAssignedStreams(selectedAgent.value.id)
         isEditing.value = false
         editAgent.value = {}
-        toast.success('Agent updated successfully')
       } catch (error) {
-        const message = error.response?.data?.message || 'Failed to update agent'
+        const message = error.response?.data?.message || 'Failed to update agent or assignments'
         toast.error(message)
       } finally {
         savingChanges.value = false
@@ -404,18 +450,22 @@ export default {
       toast.info('Loading assigned streams...')
       try {
         const token = localStorage.getItem('token')
-        const response = await axios.get(`/api/agents/${agentId}/assignments`, {
+        // Use the assignment endpoint to get current assignments for the agent
+        const response = await axios.get(`/api/assignments?agent_id=${agentId}`, {
           headers: { Authorization: `Bearer ${token}` }
         })
-        const streamIds = response.data.map(assignment => assignment.stream_id)
+        const assignedStreamIds = response.data.assignments.map(a => a.stream_id)
+        
+        // Get full stream details
         const streamsResponse = await axios.get('/api/streams', {
           headers: { Authorization: `Bearer ${token}` }
         })
-        assignedStreams.value = Object.values(streamsResponse.data)
-          .filter(stream => streamIds.includes(stream.id))
+        
+        assignedStreams.value = streamsResponse.data
+          .filter(stream => assignedStreamIds.includes(stream.id))
           .map(stream => ({
             ...stream,
-            platform: stream.platform || 'Unknown'
+            platform: stream.type || 'Unknown'
           }))
         toast.success('Assigned streams loaded successfully')
       } catch (error) {
@@ -1176,5 +1226,25 @@ export default {
   .detail-label {
     min-width: auto;
   }
+}
+
+.assigned {
+  background-color: var(--primary-light);
+  border-left: 4px solid var(--primary-color);
+}
+
+.assigned-badge {
+  font-size: 0.75rem;
+  color: var(--success-color);
+  margin-right: 8px;
+}
+
+.status-icon {
+  color: var(--text-light);
+  transition: var(--transition);
+}
+
+.status-icon.assigned-icon {
+  color: var(--success-color);
 }
 </style>

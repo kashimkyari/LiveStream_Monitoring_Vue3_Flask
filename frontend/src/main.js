@@ -28,13 +28,15 @@ import {
   faMoon, // Added for theme toggle
   faSun,
   faWifi3,
-  faLightbulb  // Added for theme toggle
+  faLightbulb,  // Added for theme toggle
+  faPlusCircle
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import Toast from 'vue-toastification';
 import 'vue-toastification/dist/index.css';
 import { inject } from '@vercel/analytics';
 import { createPinia } from 'pinia';
+import { createRouter, createWebHistory } from 'vue-router';
 import { faTelegram, faGoogle, faApple } from '@fortawesome/free-brands-svg-icons';
 
 // Add all icons to the library
@@ -65,7 +67,8 @@ library.add(
   faGoogle,
   faApple,
   faWifi3,
-  faLightbulb
+  faLightbulb,
+  faPlusCircle
 );
 
 // Create a single app instance
@@ -99,8 +102,16 @@ app.config.globalProperties.$socket = io('https://monitor-backend.jetcamstudio.c
   transports: ['websocket', 'polling'] // Recommended for fallback
 });
 
-app.use(inject());
+inject(); // Call inject() outside of app.use to initialize analytics
+
 app.use(createPinia());
+
+// Minimal Vue Router setup to provide injection
+const router = createRouter({
+  history: createWebHistory(),
+  routes: []
+});
+app.use(router);
 
 // Initialize mobile detector
 mobileDetector.initialize(768);

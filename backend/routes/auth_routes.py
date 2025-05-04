@@ -72,8 +72,8 @@ def login():
                 'true',
                 max_age=30*24*60*60,
                 httponly=True,
-                secure=is_production,
-                samesite='Strict',
+                secure=True,
+                samesite='None',
                 domain=domain
             )
             
@@ -83,8 +83,8 @@ def login():
                 request.cookies.get(session_cookie_name, ''),
                 max_age=30*24*60*60,
                 httponly=True,
-                secure=is_production,
-                samesite='Lax',
+                secure=True,
+                samesite='None',
                 domain=domain
             )
             
