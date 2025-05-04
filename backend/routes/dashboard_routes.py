@@ -1,5 +1,5 @@
 # routes/dashboard_routes.py
-from flask import Blueprint, jsonify, session
+from flask import Blueprint, jsonify, session, current_app
 from extensions import db
 from models import Stream, Assignment
 from utils import login_required
@@ -29,8 +29,8 @@ def get_dashboard():
             "streams": data
         }), 200
     except Exception as e:
-        current_app.logger.error("Error in /api/dashboard: %s", e)
-        return jsonify({"message": "Error fetching dashboard data", "error": str(e)}), 500
+        current_app.logger.error(f"Error in /api/dashboard: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @dashboard_bp.route("/api/agent/dashboard", methods=["GET"])
 @login_required

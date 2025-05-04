@@ -99,7 +99,14 @@ app.use(Toast, {
 app.config.globalProperties.$socket = io('https://monitor-backend.jetcamstudio.com:5000', {
   path: '/ws',
   withCredentials: true,
-  transports: ['websocket', 'polling'] // Recommended for fallback
+  transports: ['websocket'],
+});
+
+// Listen for stream update events to synchronize detection status
+app.config.globalProperties.$socket.on('stream_update', (data) => {
+  console.log('Stream status updated:', data);
+  // Here you would update the store or component state to reflect the detection status
+  // For example, if using Pinia or Vuex, dispatch an action to update the stream status
 });
 
 inject(); // Call inject() outside of app.use to initialize analytics

@@ -23,9 +23,12 @@ class Config:
     )
     # Handle Supabase PostgreSQL connection with SSL parameters if needed
     if 'DATABASE_URL' in os.environ and 'supabase' in os.getenv('DATABASE_URL').lower():
+        # Log the database URI for debugging (mask sensitive parts)
+        masked_uri = SQLALCHEMY_DATABASE_URI.replace(os.getenv('DATABASE_URL').split('://')[1].split('@')[0], '****')
+        print(f"Using Supabase database with URI: {masked_uri}")
         # Ensure the connection string has the correct SSL parameters
         if '?sslmode=' not in os.getenv('DATABASE_URL'):
-            SQLALCHEMY_DATABASE_URI += "?sslmode=require"
+            SQLALCHEMY_DATABASE_URI += "?sslmode=verify-ca"
     SQLALCHEMY_TRACK_MODIFICATIONS = False   # Disable event system for performance
 
     # ─── CORS ────────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ from models import (
     ChaturbateStream, StripchatStream
 )
 from extensions import db
-from utils.notifications import emit_notification
+from utils.notifications import emit_notification, emit_stream_update
 
 # Configure logging
 logging.basicConfig(
@@ -272,61 +272,50 @@ def process_audio_realtime(stream_url, cancel_event):
     logger.info(f"Stopped real-time audio for {stream_url}")
 
 def process_audio_segment(audio_data, stream_url):
-    """Process audio with Whisper and sentiment analysis"""
-    model = load_whisper_model()
-    if not model:
-        return []
-    
-    keywords = refresh_flagged_keywords()
-    if not keywords:
-        return []
-    
+    """Process an audio segment for transcription and analysis"""
     try:
-        options = whisper.DecodingOptions(
-            language="en",
-            without_timestamps=True,
-            fp16=torch.cuda.is_available()
-        )
-        result = model.transcribe(audio_data, language="en")
-        transcript = result["text"]
-        detected = []
-        now = datetime.now()
-        
-        for keyword in keywords:
-            if keyword.lower() in transcript.lower():
-                if keyword in last_audio_alerts.get(stream_url, {}):
-                    last_alert = last_audio_alerts[stream_url][keyword]
-                    if (now - last_alert).total_seconds() < AUDIO_ALERT_COOLDOWN:
-                        continue
-                
-                last_audio_alerts.setdefault(stream_url, {})[keyword] = now
-                detected.append({
-                    "keyword": keyword,
-                    "transcript": transcript,
-                    "timestamp": now.isoformat()
-                })
-        
-        sentiment = _sentiment_analyzer.polarity_scores(transcript)
-        if sentiment['compound'] <= NEGATIVE_SENTIMENT_THRESHOLD:
-            sentiment_key = "_negative_sentiment_"
-            if sentiment_key in last_audio_alerts.get(stream_url, {}):
-                last_alert = last_audio_alerts[stream_url][sentiment_key]
-                if (now - last_alert).total_seconds() < AUDIO_ALERT_COOLDOWN:
-                    return detected
-                    
-            last_audio_alerts.setdefault(stream_url, {})[sentiment_key] = now
-            detected.append({
-                "keyword": "negative_sentiment",
+        model = load_whisper_model()
+        if model is None:
+            logger.error("Whisper model not loaded")
+            return None
+        start_time = time.time()
+        logger.info(f"Transcribing audio for {stream_url}")
+        result = model.transcribe(audio_data, fp16=False)
+        transcript = result.get("text", "").strip()
+        logger.info(f"Transcription for {stream_url}: {transcript[:100]}...")
+        logger.info(f"Transcription took {time.time() - start_time:.2f} seconds")
+        if not transcript:
+            logger.info(f"Empty transcription for {stream_url}")
+            return None
+        # Save transcript to audio_detection folder
+        os.makedirs('audio_detection', exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        stream_id = stream_url.split('/')[-1] if '/' in stream_url else stream_url
+        transcript_file = f'audio_detection/transcript_{stream_id}_{timestamp}.txt'
+        with open(transcript_file, 'w', encoding='utf-8') as f:
+            f.write(transcript)
+        logger.info(f"Transcript saved to {transcript_file}")
+        # Check for keywords
+        keywords = refresh_flagged_keywords()
+        detected_keywords = []
+        for kw in keywords:
+            if kw in transcript.lower():
+                detected_keywords.append(kw)
+        if detected_keywords:
+            sentiment = _sentiment_analyzer.polarity_scores(transcript)
+            compound_score = sentiment.get("compound", 0.0)
+            detection = {
+                "timestamp": datetime.now().isoformat(),
                 "transcript": transcript,
-                "sentiment_score": sentiment['compound'],
-                "timestamp": now.isoformat()
-            })
-            
-        return detected
-            
+                "keyword": detected_keywords,
+                "sentiment_score": compound_score
+            }
+            log_audio_detection(detection, stream_url)
+            return detection
+        return None
     except Exception as e:
-        logger.error(f"Audio processing failed: {e}")
-        return []
+        logger.error(f"Error processing audio for {stream_url}: {e}")
+        return None
 
 def log_audio_detection(detection, stream_url):
     """Log audio detections to database"""
@@ -655,57 +644,6 @@ def log_chat_detection(detections, stream_url):
             }
             emit_notification(notification_data)
 
-def log_audio_detection(detection, stream_url):
-    """Log audio detection events to the database"""
-    platform, streamer_name = get_stream_info(stream_url)
-    assignment_id, assigned_agent = get_stream_assignment(stream_url)
-    
-    # Format the detection details
-    keyword = detection.get("keyword")
-    transcript = detection.get("transcript")
-    sentiment_score = detection.get("sentiment_score", None)
-    
-    details = {
-        "keyword": keyword,
-        "transcript": transcript,
-        "timestamp": detection.get("timestamp"),
-        "streamer_name": streamer_name,
-        "platform": platform,
-        "assigned_agent": assigned_agent or "Unassigned"
-    }
-    
-    if sentiment_score is not None:
-        details["sentiment_score"] = sentiment_score
-    
-    with current_app.app_context():
-        log_entry = DetectionLog(
-            room_url=stream_url,
-            event_type="audio_detection",
-            details=details,
-            timestamp=datetime.now(),
-            assigned_agent=assigned_agent,
-            assignment_id=assignment_id,
-            read=False
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-        
-        # Create notification data
-        notification_data = {
-            "id": log_entry.id,
-            "event_type": log_entry.event_type,
-            "timestamp": log_entry.timestamp.isoformat(),
-            "details": log_entry.details,
-            "read": log_entry.read,
-            "room_url": log_entry.room_url,
-            "streamer": streamer_name,
-            "platform": platform,
-            "assigned_agent": assigned_agent or "Unassigned"
-        }
-        
-        # Emit notification
-        emit_notification(notification_data)
-
 def handle_audio_detection(stream_url, transcript, keyword, sentiment_score, platform, streamer_name):
     try:
         # Create detection log in database
@@ -745,6 +683,7 @@ def handle_audio_detection(stream_url, transcript, keyword, sentiment_score, pla
     except Exception as e:
         current_app.logger.error(f"Error handling audio detection: {str(e)}")
         return False
+
 def handle_visual_detection(stream_url, detections, annotated_image, platform, streamer_name):
     try:
         # Create detection log in database
@@ -783,66 +722,6 @@ def handle_visual_detection(stream_url, detections, annotated_image, platform, s
     except Exception as e:
         current_app.logger.error(f"Error handling visual detection: {str(e)}")
         return False
-
-def log_chat_detection(detections, stream_url):
-    """Log chat detection events to the database"""
-    if not detections:
-        return
-        
-    platform, streamer_name = get_stream_info(stream_url)
-    assignment_id, assigned_agent = get_stream_assignment(stream_url)
-    
-    # Group detections by type
-    grouped = {}
-    for detection in detections:
-        type_key = detection.get("type", "unknown")
-        if type_key not in grouped:
-            grouped[type_key] = []
-        grouped[type_key].append(detection)
-    
-    # Log each type separately
-    for type_key, group in grouped.items():
-        # Format the detection details
-        details = {
-            "detections": group,
-            "timestamp": datetime.now().isoformat(),
-            "streamer_name": streamer_name,
-            "platform": platform,
-            "assigned_agent": assigned_agent or "Unassigned"
-        }
-        
-        event_type = "chat_detection"
-        if type_key == "sentiment":
-            event_type = "chat_sentiment_detection"
-        
-        with current_app.app_context():
-            log_entry = DetectionLog(
-                room_url=stream_url,
-                event_type=event_type,
-                details=details,
-                timestamp=datetime.now(),
-                assigned_agent=assigned_agent,
-                assignment_id=assignment_id,
-                read=False
-            )
-            db.session.add(log_entry)
-            db.session.commit()
-            
-            # Create notification data
-            notification_data = {
-                "id": log_entry.id,
-                "event_type": log_entry.event_type,
-                "timestamp": log_entry.timestamp.isoformat(),
-                "details": log_entry.details,
-                "read": log_entry.read,
-                "room_url": log_entry.room_url,
-                "streamer": streamer_name,
-                "platform": platform,
-                "assigned_agent": assigned_agent or "Unassigned"
-            }
-            
-            # Emit notification
-            emit_notification(notification_data)
 
 def handle_chat_detection(stream_url, message, keywords, sender, platform, streamer_name):
     try:
@@ -883,6 +762,7 @@ def handle_chat_detection(stream_url, message, keywords, sender, platform, strea
     except Exception as e:
         current_app.logger.error(f"Error handling chat detection: {str(e)}")
         return False
+
 # =============== MAIN MONITORING CONTROL ===============
 def process_combined_detection(stream_url, cancel_event, poll_interval=60):
     """Main monitoring loop combining all detection types"""
@@ -975,34 +855,55 @@ def notification_monitor_loop():
             time.sleep(60)  # Wait a bit after errors
 
 def start_monitoring(stream_url):
-    """Start monitoring a stream with all detectors"""
-    logger.info(f"Starting monitoring for {stream_url}")
-    
-    cancel_event = threading.Event()
-    monitor_thread = threading.Thread(
-        target=process_combined_detection,
-        args=(stream_url, cancel_event),
-        daemon=True
-    )
-    monitor_thread.start()
-    
-    return cancel_event, monitor_thread
+    """Start monitoring a stream for detections"""
+    with current_app.app_context():
+        stream = Stream.query.filter_by(room_url=stream_url).first()
+        if not stream:
+            logger.error(f"Stream not found: {stream_url}")
+            return False
+        if stream.is_monitored:
+            logger.info(f"Stream already monitored: {stream_url}")
+            return True
+        stream.is_monitored = True
+        db.session.commit()
+        logger.info(f"Starting monitoring for {stream_url}")
+        cancel_event = threading.Event()
+        thread = threading.Thread(
+            target=process_combined_detection,
+            args=(stream_url, cancel_event)
+        )
+        thread.daemon = True
+        thread.start()
+        stream_processors[stream_url] = (cancel_event, thread)
+        emit_stream_update({
+            'id': stream.id,
+            'url': stream_url,
+            'status': 'monitoring',
+            'type': stream.type
+        })
+        return True
 
 def stop_monitoring(stream_url, cancel_event=None, thread=None):
     """Stop monitoring a stream"""
-    if cancel_event:
-        cancel_event.set()
-    
-    if thread and thread.is_alive():
-        thread.join(timeout=5)
-    
-    # Cleanup audio processing
-    if stream_url in stream_processors:
-        _, chunker_cancel = stream_processors[stream_url]
-        chunker_cancel.set()
-        del stream_processors[stream_url]
-        
-    logger.info(f"Stopped monitoring {stream_url}")
+    with current_app.app_context():
+        stream = Stream.query.filter_by(room_url=stream_url).first()
+        if stream:
+            stream.is_monitored = False
+            db.session.commit()
+        if stream_url in stream_processors:
+            cancel_event, thread = stream_processors.get(stream_url, (None, None))
+            if cancel_event:
+                cancel_event.set()
+            if thread:
+                thread.join(timeout=2.0)
+            del stream_processors[stream_url]
+        logger.info(f"Stopped monitoring {stream_url}")
+        emit_stream_update({
+            'id': stream.id if stream else 0,
+            'url': stream_url,
+            'status': 'stopped',
+            'type': stream.type if stream else 'unknown'
+        })
 
 # =============== EXPORTS ===============
 __all__ = [
