@@ -17,18 +17,27 @@ class Config:
     REMEMBER_COOKIE_SECURE = False           # Allow cookies over HTTP
 
     # ─── Database ────────────────────────────────────────────────────────
-    SQLALCHEMY_DATABASE_URI = (
-        os.getenv('DATABASE_URL') or
-        f"sqlite:///{os.path.join(os.getcwd(), 'instance', 'app.db')}"
-    )
-    # Handle Supabase PostgreSQL connection with SSL parameters if needed
-    if 'DATABASE_URL' in os.environ and 'supabase' in os.getenv('DATABASE_URL').lower():
-        # Log the database URI for debugging (mask sensitive parts)
-        masked_uri = SQLALCHEMY_DATABASE_URI.replace(os.getenv('DATABASE_URL').split('://')[1].split('@')[0], '****')
-        print(f"Using Supabase database with URI: {masked_uri}")
-        # Ensure the connection string has the correct SSL parameters
-        if '?sslmode=' not in os.getenv('DATABASE_URL'):
-            SQLALCHEMY_DATABASE_URI += "?sslmode=verify-ca"
+    # For Supabase or other hosted PostgreSQL services, ensure SSL is configured
+    if os.getenv('DATABASE_URL') and 'supabase' in os.getenv('DATABASE_URL'):
+        # Log the database URI (mask sensitive parts)
+        db_uri = os.getenv('DATABASE_URL')
+        masked_uri = db_uri[:db_uri.find('://') + 3] + '****:****@' + db_uri[db_uri.find('@') + 1:]
+        print(f"Using Supabase database: {masked_uri}")
+        
+        # Check if sslmode is already in the URI
+        if 'sslmode' not in db_uri:
+            db_uri = f"{db_uri}?sslmode=verify-ca"
+        
+        # Set the SSL root certificate path
+        root_cert_path = os.getenv('PG_ROOT_CERT_PATH')
+        if root_cert_path and os.path.exists(root_cert_path):
+            print(f"Using SSL root certificate: {root_cert_path}")
+            SQLALCHEMY_DATABASE_URI = f"{db_uri}&sslrootcert={root_cert_path}"
+        else:
+            print(f"SSL root certificate not found at: {root_cert_path}. Attempting connection without it.")
+            SQLALCHEMY_DATABASE_URI = db_uri
+    else:
+        SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL')
     SQLALCHEMY_TRACK_MODIFICATIONS = False   # Disable event system for performance
 
     # ─── CORS ────────────────────────────────────────────────────────────
