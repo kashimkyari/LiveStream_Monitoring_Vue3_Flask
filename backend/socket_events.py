@@ -31,9 +31,18 @@ def register_socket_events(socketio):
                 emit('user_status', {'userId': user_id, 'online': True}, broadcast=True)
                 
                 # Tell client who is online
-                emit('initial_status', {
-                    'users': [{'userId': uid, 'online': True} for uid in online_users.keys()]
-                })
+                online_user_list = [{'id': uid, 'online': True} for uid in online_users.keys()]
+                emit('initial_status', {'users': online_user_list})
+                
+                # Fetch and send full user data to the client
+                agents = User.query.filter(User.role.in_(['agent', 'admin'])).all()
+                user_data = [{
+                    'id': agent.id,
+                    'username': agent.username,
+                    'online': agent.online,
+                    'last_active': agent.last_active.isoformat() if agent.last_active else None
+                } for agent in agents]
+                emit('online_users', {'users': user_data})
         else:
             # Anonymous connection
             connected_sids[request.sid] = None

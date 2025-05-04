@@ -144,23 +144,16 @@ def trigger_detection():
         return jsonify({"error": f"Error starting detection: {str(e)}"}), 500
 
 # Add a route to check detection status
-@detection_bp.route("/api/detection-status", methods=["GET"])
+@detection_bp.route("/api/detection-status/<int:stream_id>", methods=["GET"])
 @login_required()
-def detection_status():
-    stream_url = request.args.get("stream_url")
-    
-    if not stream_url:
-        # Return status for all streams
-        active_streams = list(detection_threads.keys())
-        return jsonify({
-            "active_streams": active_streams,
-            "count": len(active_streams)
-        })
-    
-    # Check status for specific stream
-    is_active = stream_url in detection_threads
+def detection_status(stream_id):
+    # Find the stream by ID
+    stream = Stream.query.get_or_404(stream_id)
+    # Check if detection is active for this stream
+    is_active = stream.room_url in detection_threads
     return jsonify({
-        "stream_url": stream_url,
+        "stream_id": stream_id,
+        "stream_url": stream.room_url,
         "active": is_active
     })
 

@@ -61,8 +61,9 @@
 </template>
 
 <script>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import MobileVideoPlayer from './MobileVideoPlayer.vue'
+import axios from 'axios'
 
 export default {
   name: 'MobileStreamCard',
@@ -82,7 +83,7 @@ export default {
     }
   },
   
-  emits: ['click', 'refresh'],
+  emits: ['click', 'refresh', 'detectionToggled'],
   
   setup(props, { emit }) {
     // Determine platform/type for styling
@@ -148,6 +149,49 @@ export default {
       emit('click');
     }
     
+    const isDetecting = ref(false)
+
+    const checkDetectionStatus = async () => {
+      try {
+        const response = await axios.get(`/api/detection-status/${props.stream.id}`);
+        isDetecting.value = response.data.active;
+        // Ensure detection toggle remains in detecting state if active
+        if (response.data.active) {
+          isDetecting.value = true;
+        }
+      } catch (error) {
+        console.error('Error checking detection status:', error);
+      }
+    };
+
+    const toggleDetection = async () => {
+      if (isDetecting.value) {
+        try {
+          await axios.post(`/api/stop-detection/${props.stream.id}`);
+          isDetecting.value = false;
+          emit('detectionToggled', { streamId: props.stream.id, active: false });
+        } catch (error) {
+          console.error('Error stopping detection:', error);
+          showNotification('Failed to stop detection', 'error');
+        }
+      } else {
+        try {
+          const response = await axios.get(`/api/detection-status/${props.stream.id}`);
+          if (response.data.active) {
+            showNotification('Detection is already active for this stream', 'info');
+            isDetecting.value = true;
+            return;
+          }
+          await axios.post(`/api/start-detection/${props.stream.id}`);
+          isDetecting.value = true;
+          emit('detectionToggled', { streamId: props.stream.id, active: true });
+        } catch (error) {
+          console.error('Error starting detection:', error);
+          showNotification('Failed to start detection', 'error');
+        }
+      }
+    };
+    
     return {
       streamType,
       platformClass,
@@ -157,7 +201,10 @@ export default {
       assignmentsText,
       statusText,
       statusIcon,
-      statusClass
+      statusClass,
+      isDetecting,
+      checkDetectionStatus,
+      toggleDetection
     }
   }
 }

@@ -14,15 +14,21 @@ messaging_bp = Blueprint('messaging', __name__)
 @login_required()
 def send_message():
     data = request.get_json()
-    receiver_id = data.get("receiver_id")
-    message_text = data.get("message")
-    attachment_id = data.get("attachment_id")
+    
+    # Validate required fields
+    if not data:
+        return jsonify({"error": "Request body is required"}), 400
+        
+    receiver_id = data.get('receiver_id')
+    message_text = data.get('message')
+    attachment_id = data.get('attachment_id')
 
-    if not receiver_id:
-        return jsonify({"error": "Missing receiver_id"}), 400
+    # Enhanced validation
+    if not receiver_id or not isinstance(receiver_id, int):
+        return jsonify({"error": "Valid receiver_id is required"}), 400
         
     if not message_text and not attachment_id:
-        return jsonify({"error": "Message or attachment required"}), 400
+        return jsonify({"error": "Message content or attachment required"}), 400
 
     try:
         new_message = ChatMessage(
@@ -77,13 +83,17 @@ def get_messages(receiver_id):
 @messaging_bp.route("/api/online-users", methods=["GET"])
 @login_required()
 def get_online_users():
-    agents = User.query.filter(User.role.in_(["agent", "admin"])).all()
-    return jsonify([{
-        "id": agent.id,
-        "username": agent.username,
-        "online": agent.online,
-        "last_active": agent.last_active.isoformat() if agent.last_active else None
-    } for agent in agents])
+    try:
+        agents = User.query.filter(User.role.in_(["agent", "admin"])).all()
+        return jsonify([{
+            "id": agent.id,
+            "username": agent.username,
+            "online": agent.online,
+            "last_active": agent.last_active.isoformat() if agent.last_active else None
+        } for agent in agents])
+    except Exception as e:
+        current_app.logger.error(f"Error fetching online users: {str(e)}")
+        return jsonify({"error": "Failed to fetch online users due to internal error."}), 500
 
 
 # routes.py
