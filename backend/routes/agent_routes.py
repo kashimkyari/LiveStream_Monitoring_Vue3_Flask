@@ -1,7 +1,7 @@
 # routes/agent_routes.py
 from flask import Blueprint, request, jsonify, session
 from extensions import db
-from models import User, Assignment
+from models import User, Assignment, PasswordReset
 from utils import login_required
 
 agent_bp = Blueprint('agent', __name__)
