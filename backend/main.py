@@ -192,5 +192,9 @@ if __name__ == "__main__":
         port=int(os.getenv('PORT', 5000)),
         debug=debug_mode,
         use_reloader=debug_mode,
-        allow_unsafe_werkzeug=True  # Required for gevent with Werkzeug >= 2.0
+        allow_unsafe_werkzeug=True,  # Required for gevent with Werkzeug >= 2.0
+        engineio_options={
+            'async_mode': 'gevent',
+            'cors_allowed_origins': allowed_origins
+        }
     )
