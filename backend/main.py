@@ -23,12 +23,16 @@ logging.basicConfig(
 
 load_dotenv()
 
-from config import create_app, socketio
+from config import create_app
+from utils.notifications import init_socketio
 from extensions import db
 from models import User
 
 # Initialize Flask app
 app = create_app()
+
+# Initialize SocketIO
+socketio = init_socketio(app)
 
 # Parse allowed origins from environment
 allowed_origins = os.getenv('ALLOWED_ORIGINS', 'https://monitor.jetcamstudio.com,http://localhost:8080').split(',')

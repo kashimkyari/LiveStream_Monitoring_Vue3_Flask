@@ -602,6 +602,7 @@ export default {
   padding: 16px;
   position: relative;
   min-height: 100vh;
+  box-sizing: border-box;
 }
 
 .mobile-admin-agents[data-theme="dark"] {
@@ -697,6 +698,7 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-bottom: 70px; /* Space for FAB */
 }
 
 .agent-item {
@@ -788,6 +790,7 @@ export default {
   transition: var(--transition);
   box-shadow: var(--shadow-md);
   font-size: 1.5rem;
+  z-index: 10;
 }
 
 .fab:hover {
