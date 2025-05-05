@@ -108,6 +108,7 @@ import { computed, onMounted, ref } from 'vue'
 import anime from 'animejs/lib/anime.es.js'
 import StatCard from './StatCard.vue'
 import StreamCard from './StreamCard.vue'
+import axios from 'axios'
 
 export default {
   name: 'DashboardTab',
@@ -134,19 +135,29 @@ export default {
     const selectAllStreams = ref(false);
     const isOnlineCollapsed = ref(true);
     const isOfflineCollapsed = ref(true);
+    const notifications = ref([]);
     
-    // Compute dynamic stats based on props data
+    // Fetch notifications on mount
+    const fetchNotifications = async () => {
+      try {
+        const response = await axios.get('/api/notifications');
+        notifications.value = response.data;
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+      }
+    };
+    
+    // Compute dynamic stats based on props data and notifications
     const stats = computed(() => {
       // Count active streams (where status is 'online')
       const activeStreamsCount = props.streams.filter(stream => stream.status === 'online').length;
       
-      // Compute total detections from the detections object
-      let totalDetectionsCount = 0;
-      if (props.detections) {
-        Object.values(props.detections).forEach(detectionArray => {
-          totalDetectionsCount += detectionArray.length;
-        });
-      }
+      // Compute total detections from notifications
+      const totalDetectionsCount = notifications.value.filter(n => 
+        n.event_type === 'object_detection' || 
+        n.event_type === 'audio_detection' || 
+        n.event_type === 'chat_detection'
+      ).length;
       
       // Compute active agents (agents with status 'active')
       const activeAgentsCount = props.agents.filter(agent => agent.status === 'active').length;
@@ -154,19 +165,19 @@ export default {
       return [
         { 
           value: activeStreamsCount, 
-          label: 'Active Streams',
-          icon: 'broadcast-tower'
-        },
-        { 
+        label: 'Active Streams',
+        icon: 'broadcast-tower'
+      },
+      { 
           value: totalDetectionsCount, 
-          label: 'Total Detections',
-          icon: 'exclamation-triangle'
-        },
-        { 
+        label: 'Total Detections',
+        icon: 'exclamation-triangle'
+      },
+      { 
           value: activeAgentsCount, 
-          label: 'Active Agents',
-          icon: 'user-shield'
-        }
+        label: 'Active Agents',
+        icon: 'user-shield'
+      }
       ];
     });
 
@@ -321,6 +332,9 @@ export default {
       if (onlineStreams.value.length > 0) {
         isOnlineCollapsed.value = false;
       }
+      
+      // Fetch notifications for total detections
+      fetchNotifications();
     });
     
     return {

@@ -45,11 +45,11 @@
                 <span class="status-badge" :class="{'active': agent.online, 'inactive': !agent.online}" v-if="agent.hasOwnProperty('online')">{{ agent.online ? 'Online' : 'Offline' }}</span>
                 <span class="status-badge unknown" v-else>Unknown</span>
               </td>
-              <td class="count-col" @mouseenter="showStreamsList(agent)" @mouseleave="hideStreamsList">
+              <td class="count-col" @click="toggleStreamsList(agent)" @mouseenter="showStreamsList(agent)" @mouseleave="hideStreamsList">
                 <div class="stream-count">{{ getStreamCount(agent) }}</div>
                 <div v-if="activeAgent === (agent.agent_id || agent.id)" class="streams-tooltip">
-                  <div class="tooltip-header">Assigned Streams ({{ getStreamCount(agent.id) }})</div>
-                  <div v-if="getStreamCount(agent.id) > 0" class="stream-list">
+                  <div class="tooltip-header">Assigned Streams ({{ getStreamCount(agent) }})</div>
+                  <div v-if="getStreamCount(agent) > 0" class="stream-list">
                     <div v-for="assignment in agent.assignments" :key="assignment.id" class="stream-item">
                       <span v-if="assignment.stream">
                         <strong>{{ assignment.stream.streamer_username }}</strong> ({{ assignment.stream.platform }}) - 
@@ -219,14 +219,33 @@ export default {
     getStreamCount(agent) {
       return agent.assignments?.length || 0;
     },
+    fetchAssignmentsForAgent(agent) {
+      if (agent.assignments) return; // Already have assignments
+      axios.get('/api/assignments', {
+        params: {
+          agent_id: agent.agent_id || agent.id
+        }
+      })
+        .then(response => {
+          agent.assignments = response.data.assignments || [];
+        })
+        .catch(error => {
+          console.error(`Error fetching assignments for agent ${agent.agent_id || agent.id}:`, error);
+          agent.assignments = [];
+        });
+    },
     showStreamsList(agent) {
       this.activeAgent = agent.agent_id || agent.id;
+      this.fetchAssignmentsForAgent(agent);
     },
     hideStreamsList() {
       this.activeAgent = null;
     },
     toggleStreamsList(agent) {
       this.expandedAgent = this.expandedAgent === (agent.agent_id || agent.id) ? null : (agent.agent_id || agent.id);
+      if (this.expandedAgent) {
+        this.fetchAssignmentsForAgent(agent);
+      }
     },
     openCreateModal() {
       this.isEditing = false;
@@ -378,6 +397,12 @@ export default {
         .then(response => {
           this.localAgents = response.data || [];
           this.agentsFetched = true;
+          // Optionally, fetch assignments for all agents upfront
+          this.localAgents.forEach(agent => {
+            if (!agent.assignments) {
+              this.fetchAssignmentsForAgent(agent);
+            }
+          });
         })
         .catch(error => {
           console.error('Error fetching agents:', error);
@@ -486,8 +511,8 @@ export default {
 /* Updated Table Styles from StreamsTab */
 .agents-table {
   height: calc(100vh - 250px);
-  min-height: 400px;
-  max-height: 800px;
+  min-height: 300px;
+  max-height: 600px;
   overflow: hidden;
   position: relative;
   border-radius: 12px;
@@ -500,6 +525,7 @@ export default {
 .table-wrapper {
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: rgba(var(--primary-rgb), 0.3) transparent;
 }
@@ -937,6 +963,11 @@ tbody td {
   .tab-header h2 {
     font-size: 1.5rem;
   }
+  
+  .agents-table {
+    min-height: 200px;
+    max-height: 500px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -1009,8 +1040,8 @@ tbody td {
 .streams-tooltip {
   position: absolute;
   top: 50%;
-  left: 50%;
-  transform: translate(0, -50%);
+  left: 100%;
+  transform: translate(10px, -50%);
   background-color: var(--input-bg);
   border: 1px solid var(--input-border);
   border-radius: 8px;
@@ -1119,5 +1150,14 @@ tbody td {
 .unavailable {
   color: var(--text-muted);
   font-style: italic;
+}
+
+.agent-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+  display: inline-block;
+  vertical-align: middle;
 }
 </style>

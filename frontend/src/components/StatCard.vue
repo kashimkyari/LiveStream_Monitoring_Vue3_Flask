@@ -29,9 +29,31 @@ export default {
       type: Number,
       default: 0
     }
-    // Note: For 'Total Detections', the value prop should be computed in the parent component
-    // to reflect the count of detection-related notifications (e.g., object_detection, audio_detection, chat_detection)
-    // as shown in AdminNotificationsPage.vue.
+    // Critical Note for Parent Component:
+    // For 'Total Detections', the 'value' prop must be computed in the parent component
+    // to reflect the total count of notifications fetched from '/api/notifications'.
+    // This should include all notifications or specifically detection-related ones
+    // (event_type of 'object_detection', 'audio_detection', or 'chat_detection')
+    // as per the logic in AdminNotificationsPage.vue and notification_routes.py.
+    // Example logic for parent component:
+    // const notifications = ref([]);
+    // const fetchNotifications = async () => {
+    //   try {
+    //     const response = await axios.get('/api/notifications');
+    //     notifications.value = response.data;
+    //   } catch (error) {
+    //     console.error('Error fetching notifications:', error);
+    //   }
+    // };
+    // const totalDetections = computed(() => notifications.value.length);
+    // // OR for detection-specific count:
+    // // const totalDetections = computed(() => notifications.value.filter(n => 
+    // //   n.event_type === 'object_detection' || 
+    // //   n.event_type === 'audio_detection' || 
+    // //   n.event_type === 'chat_detection'
+    // // ).length);
+    // onMounted(fetchNotifications);
+    // Pass this as :value="totalDetections" to this component.
   },
   setup(props) {
     const statCard = ref(null)
