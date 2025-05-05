@@ -48,7 +48,7 @@
           :disabled="!isOnline"
         >
           <span class="detection-icon">
-            <font-awesome-icon v-if="isDetecting" icon="spinner" spin />
+            <font-awesome-icon v-if="!canToggleDetection" icon="spinner" spin />
             <font-awesome-icon v-else :icon="isDetecting ? 'stop-circle' : 'play-circle'" />
           </span>
           <span class="detection-label">{{ isDetecting ? 'Detecting' : 'Start' }}</span>
@@ -430,27 +430,14 @@ export default {
             stop: true
           })
           isDetecting.value = false
-          streamStatus.value = 'offline'
-          isOnline.value = false
           showToast(`Detection stopped for ${props.stream.streamer_username}`, 'info')
         } else {
-          // Check if detection is already active before starting
-          const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`)
-          if (statusResponse.data.active) {
-            isDetecting.value = true
-            streamStatus.value = statusResponse.data.status || 'online'
-            isOnline.value = streamStatus.value === 'online'
-            showToast(`Detection is already active for ${props.stream.streamer_username}`, 'info')
-          } else {
-            // Start detection using stream_id
-            await axios.post('/api/trigger-detection', {
-              stream_id: props.stream.id
-            })
-            isDetecting.value = true
-            streamStatus.value = 'online'
-            isOnline.value = true
-            showToast(`Detection started for ${props.stream.streamer_username}`, 'success')
-          }
+          // Start detection using stream_id
+          await axios.post('/api/trigger-detection', {
+            stream_id: props.stream.id
+          })
+          isDetecting.value = true
+          showToast(`Detection started for ${props.stream.streamer_username}`, 'success')
         }
       } catch (error) {
         console.error('Error toggling detection:', error)
@@ -830,7 +817,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  background-color: rgba(40, 167, 69, 0.85); /* Green for start state */
+  background-color: rgba(40, 167, 69, 0.85); /* Green for idle state */
   color: white;
   border: none;
   border-radius: 20px;
@@ -841,16 +828,17 @@ export default {
 }
 
 .detection-toggle:hover:not(:disabled) {
-  background-color: rgba(40, 167, 69, 1);
+  background-color: rgba(40, 167, 69, 1); /* Darker green on hover for idle state */
   transform: translateY(-2px);
 }
 
 .detection-toggle.active {
-  background-color: rgba(255, 193, 7, 0.85); /* Yellow for detecting state */
+  background-color: rgba(255, 193, 7, 0.85); /* Yellow for running state */
 }
 
 .detection-toggle.active:hover:not(:disabled) {
   background-color: rgba(220, 53, 69, 0.85); /* Red on hover for stop state */
+  transform: translateY(-2px);
 }
 
 .detection-toggle.loading {

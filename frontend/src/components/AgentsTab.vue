@@ -907,7 +907,7 @@ tbody td {
 
 .detail-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: space-around;
   align-items: center;
   margin-bottom: 6px;
   cursor: pointer;
