@@ -44,16 +44,16 @@
           <font-awesome-icon :icon="stream.agent?.username ? 'user-check' : 'user-clock'" />
           <span>{{ stream.agent?.username || 'Unassigned' }}</span>
         </div>
-      </div>
+            </div>
       <div class="stream-stats">
         <div class="stat-item">
           <font-awesome-icon icon="clock" />
           <span>{{ getStreamTime() }}</span>
-        </div>
+          </div>
         <div class="stat-item alert-stat" :class="{'has-alerts': detectionCount > 0}">
           <font-awesome-icon icon="bell" />
           <span>{{ detectionCount }} {{ detectionCount === 1 ? 'alert' : 'alerts' }}</span>
-        </div>
+            </div>
         <div v-if="isDetecting" class="stat-item monitor-stat">
           <font-awesome-icon icon="eye" />
           <span>Monitoring</span>
@@ -61,13 +61,13 @@
       </div>
     </div>
     <div class="card-footer">
-      <button
+        <button 
         class="detection-btn"
         :disabled="!canToggleDetection"
         @click.stop="toggleDetection"
       >
         {{ getDetectionButtonText() }}
-      </button>
+        </button>
       <span v-if="isDetecting" class="detecting-indicator">Detecting</span>
     </div>
   </div>
@@ -214,7 +214,7 @@ export default {
       if (!canToggleDetection.value) return 'Loading...'
       return isDetecting.value ? 'Stop' : 'Monitor'
     }
-
+    
     // Open stream details modal (for video player)
     const openStreamDetails = () => {
       emit('click');

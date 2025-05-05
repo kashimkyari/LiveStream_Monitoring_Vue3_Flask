@@ -168,6 +168,10 @@ const HlsPlayer = defineComponent({
           videoElement.play()
             .then(() => {
               isPlaying.value = true;
+              // Update stream status to online when playing
+              axios.post(`/api/streams/${props.streamerName}/status`, { status: 'online' })
+                .then(() => console.log(`Updated stream ${props.streamerName} status to online`))
+                .catch(error => console.error('Failed to update stream status:', error));
               
               // Use simpler animations on low-power devices
               if (!isLowPowerDevice) {

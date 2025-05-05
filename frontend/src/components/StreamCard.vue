@@ -1,5 +1,5 @@
 <template>
-  <div
+  <div 
     :class="[
       'stream-card',
       { 'compact-view': isCompactView },
@@ -38,13 +38,13 @@
           class="detection-toggle" 
           :class="{ 'active': isDetecting, 'loading': !canToggleDetection }"
           @click.stop="toggleDetection"
-          :title="isDetecting ? 'Stop monitoring' : 'Start monitoring'"
+          :title="isDetecting ? 'Stop detection' : 'Start detection'"
         >
           <span class="detection-icon">
             <font-awesome-icon v-if="!canToggleDetection" icon="spinner" spin />
             <font-awesome-icon v-else :icon="isDetecting ? 'stop-circle' : 'play-circle'" />
           </span>
-          <span class="detection-label">{{ getDetectionButtonText() }}</span>
+          <span class="detection-label">{{ isDetecting ? 'Stop' : 'Start' }}</span>
         </button>
       </div>
     </div>
@@ -310,9 +310,15 @@ export default {
         const response = await axios.get(`/api/detection-status/${props.stream.id}`)
         isDetecting.value = response.data.active
         streamStatus.value = response.data.status || 'unknown'
-        // Update online status based on stream status
-        isOnline.value = streamStatus.value === 'online'
+        // Update online status based on stream status or playback
+        isOnline.value = streamStatus.value === 'online' || isPlaying.value
         isLoading.value = false
+        // If stream is playing and status is not 'online', update it
+        if (isPlaying.value && streamStatus.value !== 'online') {
+          await axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
+          streamStatus.value = 'online'
+          isOnline.value = true
+        }
       } catch (error) {
         console.error('Error checking stream status:', error)
         isLoading.value = false
@@ -541,6 +547,10 @@ export default {
           isPlaying.value = true
           isOnline.value = true
           streamStatus.value = 'online'
+          // Update backend status to online when playing
+          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
+            .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
+            .catch(error => console.error('Failed to update stream status:', error))
         }
         videoElement.onpause = () => {
           isPlaying.value = false
@@ -552,6 +562,10 @@ export default {
           isOnline.value = false
           streamStatus.value = 'offline'
           isLoading.value = false
+          // Update backend status to offline on error
+          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'offline' })
+            .then(() => console.log(`Updated stream ${props.stream.id} status to offline`))
+            .catch(error => console.error('Failed to update stream status:', error))
         }
       }
     }
