@@ -10,8 +10,8 @@
       { 'disabled': !isOnline }
     ]"
     @click="handleCardClick"
-    @mouseenter="isOnline ? addHoverAnimation() : null" 
-    @mouseleave="isOnline ? removeHoverAnimation() : null" 
+    @mouseenter="isOnline && canToggleDetection ? addHoverAnimation() : null" 
+    @mouseleave="isOnline && canToggleDetection ? removeHoverAnimation() : null" 
     ref="streamCard"
   >
     <div class="video-container">
@@ -423,8 +423,11 @@ export default {
       
       canToggleDetection.value = false
       try {
-        if (isDetecting.value) {
-          // Stop detection
+        const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`)
+        const isActive = statusResponse.data.active
+        
+        if (isActive) {
+          // Detection is already running, so stop it
           await axios.post('/api/trigger-detection', {
             stream_id: props.stream.id,
             stop: true
@@ -432,7 +435,7 @@ export default {
           isDetecting.value = false
           showToast(`Detection stopped for ${props.stream.streamer_username}`, 'info')
         } else {
-          // Start detection using stream_id
+          // Detection is not running, so start it
           await axios.post('/api/trigger-detection', {
             stream_id: props.stream.id
           })
