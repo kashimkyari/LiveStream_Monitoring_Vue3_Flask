@@ -22,7 +22,7 @@
           <thead>
             <tr>
               <th class="avatar-col"></th>
-              <th>Agent</th>
+              <th>Username</th>
               <th>Email</th>
               <th>Status</th>
               <th class="count-col">Streams</th>
@@ -42,20 +42,22 @@
                 <div class="agent-email">{{ agent.email || 'N/A' }}</div>
               </td>
               <td>
-                <div class="agent-status" :class="{'online': agent.online, 'offline': !agent.online}" v-if="agent.hasOwnProperty('online')">{{ agent.online ? 'Online' : 'Offline' }}</div>
-                <div class="agent-status unknown" v-else>Unknown</div>
+                <span class="status-badge" :class="{'active': agent.online, 'inactive': !agent.online}" v-if="agent.hasOwnProperty('online')">{{ agent.online ? 'Online' : 'Offline' }}</span>
+                <span class="status-badge unknown" v-else>Unknown</span>
               </td>
               <td class="count-col" @mouseenter="showStreamsList(agent)" @mouseleave="hideStreamsList">
                 <div class="stream-count">{{ getStreamCount(agent) }}</div>
                 <div v-if="activeAgent === (agent.agent_id || agent.id)" class="streams-tooltip">
-                  <div class="tooltip-header">Assigned Streams</div>
-                  <div v-if="getStreamCount(agent) > 0" class="stream-list">
+                  <div class="tooltip-header">Assigned Streams ({{ getStreamCount(agent.id) }})</div>
+                  <div v-if="getStreamCount(agent.id) > 0" class="stream-list">
                     <div v-for="assignment in agent.assignments" :key="assignment.id" class="stream-item">
                       <span v-if="assignment.stream">
-                        {{ assignment.stream.streamer_username }} ({{ assignment.stream.platform }}) - 
+                        <strong>{{ assignment.stream.streamer_username }}</strong> ({{ assignment.stream.platform }}) - 
+                        <span class="stream-status" :class="{'online': assignment.stream.status === 'online', 'offline': assignment.stream.status !== 'online'}">{{ assignment.stream.status === 'online' ? 'Online' : 'Offline' }}</span>
+                        <br />
                         <a :href="assignment.stream.room_url" target="_blank" class="stream-link">View Stream</a>
                       </span>
-                      <span v-else>Stream details unavailable</span>
+                      <span v-else class="unavailable">Stream details unavailable</span>
                     </div>
                   </div>
                   <div v-else class="empty-streams">No streams assigned</div>
@@ -194,7 +196,9 @@ export default {
       agentToDelete: null,
       deletingAgentId: null,
       searchQuery: '',
-      highlightedAgentId: null
+      highlightedAgentId: null,
+      localAgents: [],
+      agentsFetched: false
     };
   },
   emits: ['edit', 'delete', 'agentUpdated', 'reloadAgents'],
@@ -204,7 +208,7 @@ export default {
   },
   computed: {
     filteredAgents() {
-      return this.agents.filter(agent => {
+      return this.localAgents.filter(agent => {
         const usernameMatch = agent.username && agent.username.toLowerCase().includes(this.searchQuery.toLowerCase());
         const emailMatch = agent.email && agent.email.toLowerCase().includes(this.searchQuery.toLowerCase());
         return usernameMatch || emailMatch;
@@ -365,10 +369,42 @@ export default {
     },
     reloadAgents() {
       this.$emit('reloadAgents');
+      // Also fetch agents locally if props are not updated immediately
+      this.fetchAgents();
+    },
+    fetchAgents() {
+      if (this.agentsFetched) return;
+      axios.get('/api/agents')
+        .then(response => {
+          this.localAgents = response.data || [];
+          this.agentsFetched = true;
+        })
+        .catch(error => {
+          console.error('Error fetching agents:', error);
+          this.toast.error('Failed to fetch agents: ' + (error.response?.data?.message || 'Unknown error'), {
+            timeout: 3000,
+            position: "top-center",
+            icon: true
+          });
+          // If fetch fails, fall back to props
+          this.localAgents = this.agents;
+        });
     }
   },
   mounted() {
     this.reloadAgents();
+    // Initialize localAgents from props if available
+    if (this.agents.length > 0) {
+      this.localAgents = this.agents;
+      this.agentsFetched = true;
+    }
+  },
+  watch: {
+    agents(newAgents) {
+      // Update localAgents when props change
+      this.localAgents = newAgents;
+      this.agentsFetched = true;
+    }
   }
 }
 </script>
@@ -989,9 +1025,9 @@ tbody td {
 
 .tooltip-header {
   font-weight: 600;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   border-bottom: 1px solid var(--input-border);
-  padding-bottom: 4px;
+  padding-bottom: 6px;
   color: var(--primary-color);
 }
 
@@ -1001,8 +1037,10 @@ tbody td {
 }
 
 .stream-item {
-  margin-bottom: 6px;
-  line-height: 1.3;
+  margin-bottom: 8px;
+  line-height: 1.4;
+  border-left: 2px solid var(--primary-color);
+  padding-left: 8px;
 }
 
 .stream-item:last-child {
@@ -1010,6 +1048,75 @@ tbody td {
 }
 
 .empty-streams {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.agent-status {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.agent-status.online {
+  background-color: rgba(40, 199, 111, 0.1);
+  color: #28c76f;
+}
+
+.agent-status.offline {
+  background-color: rgba(234, 84, 85, 0.1);
+  color: #ea5455;
+}
+
+.agent-status.unknown {
+  background-color: rgba(108, 117, 125, 0.1);
+  color: #6c757d;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.status-badge.active {
+  background-color: rgba(40, 199, 111, 0.1);
+  color: #28c76f;
+}
+
+.status-badge.inactive {
+  background-color: rgba(234, 84, 85, 0.1);
+  color: #ea5455;
+}
+
+.status-badge.unknown {
+  background-color: rgba(108, 117, 125, 0.1);
+  color: #6c757d;
+}
+
+.stream-status {
+  font-size: 0.75rem;
+  padding: 1px 4px;
+  border-radius: 10px;
+  margin-left: 5px;
+}
+
+.stream-status.online {
+  background-color: rgba(40, 199, 111, 0.15);
+  color: #28c76f;
+}
+
+.stream-status.offline {
+  background-color: rgba(234, 84, 85, 0.15);
+  color: #ea5455;
+}
+
+.unavailable {
   color: var(--text-muted);
   font-style: italic;
 }

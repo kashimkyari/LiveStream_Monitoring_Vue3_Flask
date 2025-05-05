@@ -29,6 +29,9 @@ export default {
       type: Number,
       default: 0
     }
+    // Note: For 'Total Detections', the value prop should be computed in the parent component
+    // to reflect the count of detection-related notifications (e.g., object_detection, audio_detection, chat_detection)
+    // as shown in AdminNotificationsPage.vue.
   },
   setup(props) {
     const statCard = ref(null)

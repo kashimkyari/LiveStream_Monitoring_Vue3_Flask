@@ -132,32 +132,28 @@ export default {
     const isMuted = ref(true)
     const isBookmarked = ref(false)
     const isFullscreen = ref(false)
-    
     // Stream status based on stream.status from StreamsTab.vue
     const isOnline = ref(props.stream.status === 'online')
     const isLoading = ref(true)
     const streamStatus = ref(props.stream.status || 'unknown')
-    
     // Detection state variables
     const isDetecting = ref(false)
     const canToggleDetection = ref(true)
     const checkStatusInterval = ref(null)
-    
     // Viewer count for Stripchat streams
     const viewers = ref(0)
     const viewersRefreshInterval = ref(null)
-    
     // Get the global store or event bus if available
     const eventBus = inject('eventBus', null)
-    
     // Get the theme from parent component
     const isDarkTheme = inject('theme', ref(true))
-    
     // Add interval for checking stream status if offline
     let streamStatusCheckInterval = ref(null)
-    
     // Add new variables for video playback status
     const isPlaying = ref(false)
+    
+    const agentCache = ref({})
+    const allAgentsFetched = ref(false)
     
     // Computed property to determine if compact view should be used
     const isCompactView = computed(() => {
@@ -189,6 +185,70 @@ export default {
     const isStripchatStream = computed(() => {
       return props.stream?.platform?.toLowerCase() === 'stripchat'
     })
+
+    // Computed property to check if stream has assigned agents
+    const hasAssignedAgents = computed(() => {
+      return props.stream.assignments && props.stream.assignments.length > 0;
+    });
+
+    // Computed property to get assigned agent names from cached or pre-fetched data
+    const assignedAgentNames = computed(() => {
+      if (!hasAssignedAgents.value) return '';
+      const names = props.stream.assignments.map(assignment => {
+        if (assignment.agent && assignment.agent.username) {
+          return assignment.agent.username;
+        } else {
+          const agentId = assignment.agent_id;
+          return agentCache.value[agentId] || `Agent ${agentId}`;
+        }
+      });
+      return names.join(', ');
+    });
+
+    // Method to fetch all agents and populate cache
+    const fetchAllAgents = async () => {
+      if (allAgentsFetched.value) return;
+      try {
+        const response = await axios.get('/api/agents');
+        const agents = response.data || [];
+        agents.forEach(agent => {
+          agentCache.value[agent.id] = agent.username || `Agent ${agent.id}`;
+        });
+        allAgentsFetched.value = true;
+      } catch (error) {
+        console.error('Error fetching all agents:', error);
+        // Fallback to individual fetches if needed
+        fetchAgentUsernames();
+      }
+    };
+
+    // Method to fetch agent usernames individually as fallback
+    const fetchAgentUsernames = async () => {
+      if (!hasAssignedAgents.value) return;
+      for (const assignment of props.stream.assignments) {
+        if (assignment.agent && assignment.agent.username) {
+          agentCache.value[assignment.agent_id] = assignment.agent.username;
+        } else {
+          const agentId = assignment.agent_id;
+          if (!agentCache.value[agentId]) {
+            try {
+              const response = await axios.get(`/api/agents/${agentId}`);
+              agentCache.value[agentId] = response.data.username || `Agent ${agentId}`;
+            } catch (error) {
+              console.error(`Error fetching username for agent ${agentId}:`, error);
+              agentCache.value[agentId] = `Agent ${agentId}`;
+            }
+          }
+        }
+      }
+    };
+
+    // Watch for changes in assignments and fetch usernames
+    watch(() => props.stream.assignments, () => {
+      if (!allAgentsFetched.value) {
+        fetchAllAgents();
+      }
+    }, { deep: true });
 
     // Get username from stream data
     const getStreamerUsername = () => {
@@ -619,6 +679,9 @@ export default {
       // Set up viewer count refresh for Stripchat
       setupViewerCountRefresh()
       
+      // Fetch all agents
+      fetchAllAgents()
+      
       // Listen for global mute all event if event bus exists
       if (eventBus) {
         eventBus.$on('muteAllStreams', (exceptId) => {
@@ -676,19 +739,6 @@ export default {
         console.error('Failed to report stream offline:', error)
       }
     }
-
-    // Computed property to check if stream has assigned agents
-    const hasAssignedAgents = computed(() => {
-      return props.stream.assignments && props.stream.assignments.length > 0;
-    });
-
-    // Computed property to get assigned agent names
-    const assignedAgentNames = computed(() => {
-      if (!hasAssignedAgents.value) return '';
-      return props.stream.assignments.map(assignment => {
-        return assignment.agent && assignment.agent.username ? assignment.agent.username : `Agent ${assignment.agent_id}`;
-      }).join(', ');
-    });
 
     // Function to handle card click based on stream status
     const handleCardClick = () => {

@@ -29,7 +29,6 @@ const AgentNotificationsComponent = () => import('../components/AgentNotificatio
 const StreamsTab = () => import('../components/StreamsTab.vue');
 const AgentStreamsComponent = () => import('../components/AgentStreamsComponent.vue');
 const AgentsTab = () => import('../components/AgentsTab.vue');
-const AgentPage = () => import('../components/AgentPage.vue');
 const FlagSettingsPage = () => import('../components/FlagSettingsPage.vue');
 
 // Define routes
@@ -63,7 +62,6 @@ const routes = [
   { path: '/desktop/admin/streams', component: StreamsTab, meta: { requiresAuth: true, role: 'admin' } },
   { path: '/desktop/agent/streams', component: AgentStreamsComponent, meta: { requiresAuth: true, role: 'agent' } },
   { path: '/desktop/admin/agents', component: AgentsTab, meta: { requiresAuth: true, role: 'admin' } },
-  { path: '/desktop/agent/page', component: AgentPage, meta: { requiresAuth: true, role: 'agent' } },
   { path: '/desktop/admin/flag-settings', component: FlagSettingsPage, meta: { requiresAuth: true, role: 'admin' } },
   // Add other routes as needed for modals and smaller components if they are to be standalone pages
 ];
