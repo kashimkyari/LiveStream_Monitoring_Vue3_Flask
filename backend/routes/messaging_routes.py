@@ -14,11 +14,11 @@ messaging_bp = Blueprint('messaging', __name__)
 @login_required()
 def send_message():
     data = request.get_json()
-    
+
     # Validate required fields
     if not data:
         return jsonify({"error": "Request body is required"}), 400
-        
+
     receiver_id = data.get('receiver_id')
     message_text = data.get('message')
     attachment_id = data.get('attachment_id')
@@ -48,7 +48,7 @@ def send_message():
             
         db.session.add(new_message)
         db.session.commit()
-
+        
         # Serialize after commit to ensure ID exists
         message_data = {
             "id": new_message.id,
@@ -84,13 +84,13 @@ def get_messages(receiver_id):
 @login_required()
 def get_online_users():
     try:
-        agents = User.query.filter(User.role.in_(["agent", "admin"])).all()
-        return jsonify([{
-            "id": agent.id,
-            "username": agent.username,
-            "online": agent.online,
-            "last_active": agent.last_active.isoformat() if agent.last_active else None
-        } for agent in agents])
+    agents = User.query.filter(User.role.in_(["agent", "admin"])).all()
+    return jsonify([{
+        "id": agent.id,
+        "username": agent.username,
+        "online": agent.online,
+        "last_active": agent.last_active.isoformat() if agent.last_active else None
+    } for agent in agents])
     except Exception as e:
         current_app.logger.error(f"Error fetching online users: {str(e)}")
         return jsonify({"error": "Failed to fetch online users due to internal error."}), 500

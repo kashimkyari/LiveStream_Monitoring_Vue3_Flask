@@ -13,7 +13,7 @@
 
 <script>
 import anime from 'animejs/lib/anime.es.js'
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 
 export default {
   name: 'StatCard',
@@ -69,6 +69,19 @@ export default {
           easing: 'easeOutExpo',
           duration: 1000,
           delay: 200 + (props.index * 100)
+        })
+      }
+    })
+
+    // Watch for changes in value to animate updates
+    watch(() => props.value, (newValue, oldValue) => {
+      if (statValue.value && newValue !== oldValue) {
+        anime({
+          targets: statValue.value,
+          scale: [1, 1.2, 1],
+          color: ['#000', '#4caf50', '#000'],
+          duration: 500,
+          easing: 'easeInOutQuad'
         })
       }
     })

@@ -17,21 +17,83 @@
       />
     </div>
 
-    <!-- Stream section with header -->
-    <div class="streams-section">
-      <div class="section-header">
-        <h3>Active Streams</h3>
-        <span class="stream-count">{{ streams.length }} streams</span>
+    <!-- Search and Controls -->
+    <div class="controls-section">
+      <div class="search-box">
+        <font-awesome-icon icon="search" class="search-icon" />
+        <input v-model="searchQuery" placeholder="Search streams..." class="search-input" />
       </div>
-      
-      <div class="stream-grid">
+      <div class="view-controls">
+        <button @click="toggleViewMode" class="view-toggle-btn">
+          <font-awesome-icon :icon="viewMode === 'grid' ? 'list' : 'th-large'" />
+          {{ viewMode === 'grid' ? 'List View' : 'Grid View' }}
+        </button>
+        <div class="refresh-control">
+          <button @click="openRefreshModal" class="view-toggle-btn refresh-btn">
+            <font-awesome-icon icon="sync-alt" />
+            Refresh Streams
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Refresh Modal -->
+    <div v-if="isRefreshModalOpen" class="modal-overlay">
+      <div class="refresh-modal">
+        <h3>Select Streams to Refresh</h3>
+        <div class="checkbox-group">
+          <label>
+            <input type="checkbox" v-model="selectAllStreams" @change="toggleSelectAll" />
+            Select All
+          </label>
+          <label v-for="stream in streams" :key="stream.id">
+            <input type="checkbox" v-model="selectedStreams" :value="stream.id" />
+            {{ stream.streamer_username }} ({{ stream.status === 'online' ? 'Online' : 'Offline' }})
+          </label>
+        </div>
+        <div class="modal-buttons">
+          <button @click="closeRefreshModal" class="cancel-btn">Cancel</button>
+          <button @click="refreshSelectedStreams" class="confirm-btn">Refresh Selected</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stream sections with headers -->
+    <div class="streams-section">
+      <!-- Online Streams -->
+      <div class="section-header" @click="toggleOnlineCollapse">
+        <h3>Online Streams</h3>
+        <span class="stream-count">{{ onlineStreams.length }} streams</span>
+        <font-awesome-icon :icon="isOnlineCollapsed ? 'chevron-down' : 'chevron-up'" class="collapse-icon" />
+      </div>
+      <div v-if="!isOnlineCollapsed" :class="['stream-container', viewMode === 'list' ? 'list-view' : 'grid-view']">
         <StreamCard 
-          v-for="(stream, index) in streams" 
+          v-for="(stream, index) in filteredOnlineStreams" 
           :key="stream.id"
           :stream="enhanceStreamWithUsername(stream)" 
           :index="index"
           :detectionCount="getDetectionCount(stream)"
-          :totalStreams="streams.length"
+          :totalStreams="onlineStreams.length"
+          class="stream-card"
+          @click="openStream(stream, index)"
+          @detection-toggled="handleDetectionToggled"
+        ></StreamCard>
+      </div>
+      
+      <!-- Offline Streams -->
+      <div class="section-header offline-section" @click="toggleOfflineCollapse">
+        <h3>Offline Streams</h3>
+        <span class="stream-count">{{ offlineStreams.length }} streams</span>
+        <font-awesome-icon :icon="isOfflineCollapsed ? 'chevron-down' : 'chevron-up'" class="collapse-icon" />
+      </div>
+      <div v-if="!isOfflineCollapsed" :class="['stream-container', viewMode === 'list' ? 'list-view' : 'grid-view']">
+        <StreamCard 
+          v-for="(stream, index) in filteredOfflineStreams" 
+          :key="stream.id"
+          :stream="enhanceStreamWithUsername(stream)" 
+          :index="index"
+          :detectionCount="getDetectionCount(stream)"
+          :totalStreams="offlineStreams.length"
           class="stream-card"
           @click="openStream(stream, index)"
           @detection-toggled="handleDetectionToggled"
@@ -62,27 +124,73 @@ export default {
       default: () => []
     }
   },
-  emits: ['open-stream'],
+  emits: ['open-stream', 'refresh-streams'],
   setup(props, { emit }) {
     const statsSection = ref(null);
+    const searchQuery = ref('');
+    const viewMode = ref('grid'); // 'grid' or 'list'
+    const isRefreshModalOpen = ref(false);
+    const selectedStreams = ref([]);
+    const selectAllStreams = ref(false);
+    const isOnlineCollapsed = ref(true);
+    const isOfflineCollapsed = ref(true);
     
-    const stats = computed(() => [
-      { 
-        value: props.dashboardStats.ongoing_streams, 
-        label: 'Active Streams',
-        icon: 'broadcast-tower'
-      },
-      { 
-        value: props.dashboardStats.total_detections, 
-        label: 'Total Detections',
-        icon: 'exclamation-triangle'
-      },
-      { 
-        value: props.dashboardStats.active_agents, 
-        label: 'Active Agents',
-        icon: 'user-shield'
+    // Compute dynamic stats based on props data
+    const stats = computed(() => {
+      // Count active streams (where status is 'online')
+      const activeStreamsCount = props.streams.filter(stream => stream.status === 'online').length;
+      
+      // Compute total detections from the detections object
+      let totalDetectionsCount = 0;
+      if (props.detections) {
+        Object.values(props.detections).forEach(detectionArray => {
+          totalDetectionsCount += detectionArray.length;
+        });
       }
-    ]);
+      
+      // Compute active agents (agents with status 'active')
+      const activeAgentsCount = props.agents.filter(agent => agent.status === 'active').length;
+      
+      return [
+        { 
+          value: activeStreamsCount, 
+          label: 'Active Streams',
+          icon: 'broadcast-tower'
+        },
+        { 
+          value: totalDetectionsCount, 
+          label: 'Total Detections',
+          icon: 'exclamation-triangle'
+        },
+        { 
+          value: activeAgentsCount, 
+          label: 'Active Agents',
+          icon: 'user-shield'
+        }
+      ];
+    });
+
+    // Separate streams into online and offline
+    const onlineStreams = computed(() => {
+      return props.streams.filter(stream => stream.status === 'online');
+    });
+
+    const offlineStreams = computed(() => {
+      return props.streams.filter(stream => stream.status !== 'online');
+    });
+
+    // Filtered streams based on search query
+    const filteredOnlineStreams = computed(() => {
+      return onlineStreams.value.filter(stream => 
+        stream.streamer_username.toLowerCase().includes(searchQuery.value.toLowerCase())
+      );
+    });
+
+    const filteredOfflineStreams = computed(() => {
+      return offlineStreams.value.filter(stream => 
+        stream.streamer_username.toLowerCase().includes(searchQuery.value.toLowerCase())
+      );
+    });
 
     // Add the enhanceStreamWithUsername function
     const enhanceStreamWithUsername = (stream) => {
@@ -127,6 +235,45 @@ export default {
         emit('open-stream', stream);
       }, 150);
     };
+
+    const toggleViewMode = () => {
+      viewMode.value = viewMode.value === 'grid' ? 'list' : 'grid';
+    };
+
+    const openRefreshModal = () => {
+      isRefreshModalOpen.value = true;
+    };
+
+    const closeRefreshModal = () => {
+      isRefreshModalOpen.value = false;
+      selectedStreams.value = [];
+      selectAllStreams.value = false;
+    };
+
+    const toggleSelectAll = () => {
+      if (selectAllStreams.value) {
+        selectedStreams.value = props.streams.map(stream => stream.id);
+      } else {
+        selectedStreams.value = [];
+      }
+    };
+
+    const refreshSelectedStreams = () => {
+      if (selectedStreams.value.length > 0) {
+        emit('refresh-streams', { streamIds: selectedStreams.value });
+      } else {
+        emit('refresh-streams', { all: true });
+      }
+      closeRefreshModal();
+    };
+
+    const toggleOnlineCollapse = () => {
+      isOnlineCollapsed.value = !isOnlineCollapsed.value;
+    };
+
+    const toggleOfflineCollapse = () => {
+      isOfflineCollapsed.value = !isOfflineCollapsed.value;
+    };
     
     onMounted(() => {
       // Animate the header with a fade-in and slide-up effect
@@ -169,15 +316,38 @@ export default {
         duration: 700,
         easing: 'easeOutCubic'
       });
+      
+      // Expand Online Streams section if there are online streams
+      if (onlineStreams.value.length > 0) {
+        isOnlineCollapsed.value = false;
+      }
     });
     
     return {
       stats,
       statsSection,
+      searchQuery,
+      viewMode,
+      isRefreshModalOpen,
+      selectedStreams,
+      selectAllStreams,
+      isOnlineCollapsed,
+      isOfflineCollapsed,
       getDetectionCount,
       openStream,
       handleDetectionToggled,
-      enhanceStreamWithUsername // Make sure to expose this function
+      enhanceStreamWithUsername,
+      onlineStreams,
+      offlineStreams,
+      filteredOnlineStreams,
+      filteredOfflineStreams,
+      toggleViewMode,
+      openRefreshModal,
+      closeRefreshModal,
+      toggleSelectAll,
+      refreshSelectedStreams,
+      toggleOnlineCollapse,
+      toggleOfflineCollapse
     };
   }
 }
@@ -228,6 +398,190 @@ export default {
   );
 }
 
+/* Controls section */
+.controls-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.search-box {
+  position: relative;
+  flex: 1;
+  max-width: 400px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted, #6c757d);
+  opacity: 0.6;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 15px 10px 35px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
+}
+
+.view-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.view-toggle-btn, .refresh-btn {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.view-toggle-btn:hover, .refresh-btn:hover {
+  background-color: var(--primary-hover);
+  transform: scale(1.02);
+}
+
+.refresh-control {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.refresh-modal {
+  background-color: var(--input-bg);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 450px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--input-border);
+  animation: slideIn 0.2s ease-out;
+}
+
+.refresh-modal h3 {
+  margin-top: 0;
+  margin-bottom: 1.25rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text-color);
+  border-bottom: 1px solid var(--input-border);
+  padding-bottom: 0.5rem;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  transition: background-color 0.2s ease;
+}
+
+.checkbox-group label:hover {
+  background-color: var(--hover-bg);
+}
+
+.checkbox-group label:first-child {
+  font-weight: 500;
+  border-bottom: 1px solid var(--input-border);
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.cancel-btn, .confirm-btn {
+  padding: 0.6rem 1.25rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.cancel-btn {
+  background-color: var(--hover-bg);
+  color: var(--text-color);
+}
+
+.cancel-btn:hover {
+  background-color: var(--disabled-bg);
+}
+
+.confirm-btn {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.confirm-btn:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-2px);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* Streams section styling */
 .streams-section {
   padding-top: 0.5rem;
@@ -238,6 +592,11 @@ export default {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
+  cursor: pointer;
+}
+
+.section-header.offline-section {
+  margin-top: 2rem;
 }
 
 .section-header h3 {
@@ -256,11 +615,45 @@ export default {
   font-weight: 500;
 }
 
-.stream-grid {
+.collapse-icon {
+  margin-left: 0.5rem;
+  transition: transform 0.3s ease;
+}
+
+.stream-container {
+  margin-bottom: 2rem;
+}
+
+.grid-view {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(3, 1fr); /* Enforce 3x3 grid */
   gap: 1.5rem;
   perspective: 1000px;
+}
+
+.list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.list-view .stream-card {
+  width: 100%;
+  max-width: none;
+  height: auto;
+  min-height: 60px;
+  aspect-ratio: unset;
+  flex-direction: row;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.list-view .stream-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.15);
 }
 
 .stream-card {
@@ -288,8 +681,8 @@ export default {
     gap: 1.25rem;
   }
   
-  .stream-grid {
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  .grid-view {
+    grid-template-columns: repeat(3, 1fr); /* Maintain 3 columns for larger screens */
   }
 }
 
@@ -302,7 +695,8 @@ export default {
     gap: 1rem;
   }
   
-  .stream-grid {
+  .grid-view {
+    grid-template-columns: repeat(2, 1fr); /* Reduce to 2 columns for medium screens */
     gap: 1.25rem;
   }
 }
@@ -327,9 +721,24 @@ export default {
     font-size: 1.3rem;
   }
   
-  .stream-grid {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  .grid-view {
+    grid-template-columns: repeat(2, 1fr); /* 2 columns for smaller screens */
     gap: 1rem;
+  }
+  
+  .list-view .stream-card {
+    padding: 0.5rem;
+    min-height: 50px;
+  }
+  
+  .controls-section {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .search-input {
+    width: 100%;
+    margin-bottom: 0.5rem;
   }
 }
 
@@ -348,8 +757,8 @@ export default {
     grid-template-columns: 1fr;
   }
   
-  .stream-grid {
-    grid-template-columns: 1fr;
+  .grid-view {
+    grid-template-columns: 1fr; /* 1 column for very small screens */
   }
   
   .dashboard-header h2 {
@@ -361,6 +770,25 @@ export default {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
+  }
+  
+  .refresh-modal {
+    width: 90%;
+    padding: 1.25rem;
+  }
+  
+  .refresh-modal h3 {
+    font-size: 1.2rem;
+  }
+  
+  .modal-buttons {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .cancel-btn, .confirm-btn {
+    width: 100%;
+    text-align: center;
   }
 }
 </style>

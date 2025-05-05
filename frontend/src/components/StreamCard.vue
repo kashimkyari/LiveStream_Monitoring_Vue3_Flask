@@ -6,11 +6,12 @@
       { 'dark-theme': isDarkTheme },
       { 'online': isOnline },
       { 'offline': !isOnline },
-      { 'detecting': isDetecting }
+      { 'detecting': isDetecting },
+      { 'disabled': !isOnline }
     ]"
     @click="handleCardClick"
-    @mouseenter="addHoverAnimation" 
-    @mouseleave="removeHoverAnimation" 
+    @mouseenter="isOnline ? addHoverAnimation() : null" 
+    @mouseleave="isOnline ? removeHoverAnimation() : null" 
     ref="streamCard"
   >
     <div class="video-container">
@@ -26,25 +27,31 @@
       </div>
       
       <div class="stream-overlay" ref="streamOverlay">
-        <button class="view-details-btn">
+        <button class="view-details-btn" :disabled="!isOnline">
           <font-awesome-icon icon="eye" />
           <span class="btn-text">View Details</span>
         </button>
       </div>
       
-      <!-- Detection toggle button -->
+      <!-- Offline watermark -->
+      <div v-if="!isOnline" class="offline-watermark">
+        <span>OFFLINE</span>
+      </div>
+      
+      <!-- Detection toggle button (single instance) -->
       <div class="detection-controls">
         <button 
           class="detection-toggle" 
           :class="{ 'active': isDetecting, 'loading': !canToggleDetection }"
           @click.stop="toggleDetection"
           :title="isDetecting ? 'Stop detection' : 'Start detection'"
+          :disabled="!isOnline"
         >
           <span class="detection-icon">
-            <font-awesome-icon v-if="!canToggleDetection" icon="spinner" spin />
+            <font-awesome-icon v-if="isDetecting" icon="spinner" spin />
             <font-awesome-icon v-else :icon="isDetecting ? 'stop-circle' : 'play-circle'" />
           </span>
-          <span class="detection-label">{{ isDetecting ? 'Stop' : 'Start' }}</span>
+          <span class="detection-label">{{ isDetecting ? 'Detecting' : 'Start' }}</span>
         </button>
       </div>
     </div>
@@ -56,9 +63,9 @@
         </span>
       </div>
       <div class="stream-meta">
-        <div class="agent-badge" :class="{'unassigned': !stream.agent?.username}">
-          <font-awesome-icon :icon="stream.agent?.username ? 'user-check' : 'user-clock'" />
-          <span>{{ stream.agent?.username || 'Unassigned' }}</span>
+        <div class="agent-badge" :class="{'unassigned': !hasAssignedAgents}">
+          <font-awesome-icon :icon="hasAssignedAgents ? 'user-check' : 'user-clock'" />
+          <span>{{ assignedAgentNames || 'Unassigned' }}</span>
         </div>
       </div>
       <div class="stream-stats" ref="streamStats">
@@ -83,22 +90,9 @@
       </div>
     </div>
     <div class="quick-actions">
-      <button class="action-btn assign-btn" @click.stop="$emit('assign')" v-if="!stream.agent?.username">
+      <button class="action-btn assign-btn" @click.stop="$emit('assign')" v-if="!hasAssignedAgents">
         <font-awesome-icon icon="user-plus" />
       </button>
-    </div>
-    <div class="card-footer">
-      <div class="footer-left">
-        <button
-          v-if="!isCompactView"
-          class="detection-btn"
-          :disabled="!canToggleDetection"
-          @click.stop="toggleDetection"
-        >
-          {{ getDetectionButtonText() }}
-        </button>
-        <span v-if="isDetecting" class="detecting-indicator">Detecting</span>
-      </div>
     </div>
   </div>
 </template>
@@ -139,10 +133,10 @@ export default {
     const isBookmarked = ref(false)
     const isFullscreen = ref(false)
     
-    // Add missing variables for stream status
-    const isOnline = ref(false)
+    // Stream status based on stream.status from StreamsTab.vue
+    const isOnline = ref(props.stream.status === 'online')
     const isLoading = ref(true)
-    const streamStatus = ref('unknown')
+    const streamStatus = ref(props.stream.status || 'unknown')
     
     // Detection state variables
     const isDetecting = ref(false)
@@ -169,6 +163,12 @@ export default {
     const isCompactView = computed(() => {
       return props.totalStreams > 8
     })
+
+    // Watch for changes in stream status
+    watch(() => props.stream.status, (newStatus) => {
+      isOnline.value = newStatus === 'online';
+      streamStatus.value = newStatus || 'unknown';
+    });
 
     // Computed property to get the stream URL (m3u8)
     const streamUrl = computed(() => {
@@ -231,6 +231,9 @@ export default {
       
       if (!m3u8Url) {
         console.error('No HLS URL available for this stream')
+        isOnline.value = false
+        streamStatus.value = 'offline'
+        isLoading.value = false
         return
       }
       
@@ -252,28 +255,41 @@ export default {
           videoPlayer.value.play().catch(e => {
             console.warn('Autoplay prevented:', e)
           })
+          isOnline.value = true
+          streamStatus.value = 'online'
+          isLoading.value = false
+          // Update backend status to online
+          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
+            .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
+            .catch(error => console.error('Failed to update stream status:', error))
         })
         
         hls.on(Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                console.error('HLS network error:', data);
-                isOnline.value = false;
-                isLoading.value = false;
-                hls.stopLoad();
-                hls.detachMedia();
+                console.error('HLS network error:', data)
+                isOnline.value = false
+                streamStatus.value = 'offline'
+                isLoading.value = false
+                hls.stopLoad()
+                hls.detachMedia()
                 // Report to backend that stream is offline
-                reportStreamOffline(props.stream.id);
-                break;
+                reportStreamOffline(props.stream.id)
+                break
               case Hls.ErrorTypes.MEDIA_ERROR:
-                console.error('HLS media error:', data);
-                hls.recoverMediaError();
-                break;
+                console.error('HLS media error:', data)
+                hls.recoverMediaError()
+                break
               default:
-                console.error('Unrecoverable HLS error:', data);
-                hls.destroy();
-                break;
+                console.error('Unrecoverable HLS error:', data)
+                hls.destroy()
+                isOnline.value = false
+                streamStatus.value = 'offline'
+                isLoading.value = false
+                // Report to backend that stream is offline
+                reportStreamOffline(props.stream.id)
+                break
             }
           }
         })
@@ -286,6 +302,22 @@ export default {
           videoPlayer.value.play().catch(e => {
             console.warn('Autoplay prevented:', e)
           })
+          isOnline.value = true
+          streamStatus.value = 'online'
+          isLoading.value = false
+          // Update backend status to online
+          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
+            .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
+            .catch(error => console.error('Failed to update stream status:', error))
+        })
+        videoPlayer.value.addEventListener('error', () => {
+          isOnline.value = false
+          streamStatus.value = 'offline'
+          isLoading.value = false
+          // Update backend status to offline
+          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'offline' })
+            .then(() => console.log(`Updated stream ${props.stream.id} status to offline`))
+            .catch(error => console.error('Failed to update stream status:', error))
         })
       }
     }
@@ -310,8 +342,8 @@ export default {
         const response = await axios.get(`/api/detection-status/${props.stream.id}`)
         isDetecting.value = response.data.active
         streamStatus.value = response.data.status || 'unknown'
-        // Update online status based on stream status or playback
-        isOnline.value = streamStatus.value === 'online' || isPlaying.value
+        // Update online status based on stream status from API
+        isOnline.value = streamStatus.value === 'online'
         isLoading.value = false
         // If stream is playing and status is not 'online', update it
         if (isPlaying.value && streamStatus.value !== 'online') {
@@ -645,6 +677,34 @@ export default {
       }
     }
 
+    // Computed property to check if stream has assigned agents
+    const hasAssignedAgents = computed(() => {
+      return props.stream.assignments && props.stream.assignments.length > 0;
+    });
+
+    // Computed property to get assigned agent names
+    const assignedAgentNames = computed(() => {
+      if (!hasAssignedAgents.value) return '';
+      return props.stream.assignments.map(assignment => {
+        return assignment.agent && assignment.agent.username ? assignment.agent.username : `Agent ${assignment.agent_id}`;
+      }).join(', ');
+    });
+
+    // Function to handle card click based on stream status
+    const handleCardClick = () => {
+      if (!isOnline.value) {
+        const userConfirmed = confirm('Stream is offline. Do you want to view details or refresh the stream?');
+        if (userConfirmed) {
+          // Emit event to show details modal or trigger refresh
+          showToast('Opening stream details or refreshing...', 'info');
+          emit('click');
+        }
+      } else {
+        // Directly show details modal for online streams
+        emit('click');
+      }
+    };
+
     return {
       streamCard,
       videoPlayer,
@@ -655,6 +715,7 @@ export default {
       isCompactView,
       isDarkTheme,
       isDetecting,
+      isOnline,
       viewers,
       isStripchatStream,
       addHoverAnimation,
@@ -666,7 +727,10 @@ export default {
       toggleDetection,
       getDetectionButtonText,
       reportStreamOffline,
-      checkStreamStatus
+      checkStreamStatus,
+      hasAssignedAgents,
+      assignedAgentNames,
+      handleCardClick
     }
   }
 }
@@ -716,7 +780,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  background-color: rgba(5, 0, 0, 0.7);
+  background-color: rgba(40, 167, 69, 0.85); /* Green for start state */
   color: white;
   border: none;
   border-radius: 20px;
@@ -726,22 +790,27 @@ export default {
   transition: all 0.2s ease;
 }
 
-.detection-toggle:hover {
-  background-color: rgba(0, 0, 0, 0.85);
+.detection-toggle:hover:not(:disabled) {
+  background-color: rgba(40, 167, 69, 1);
   transform: translateY(-2px);
 }
 
 .detection-toggle.active {
-  background-color: rgba(220, 53, 69, 0.85);
+  background-color: rgba(255, 193, 7, 0.85); /* Yellow for detecting state */
 }
 
-.detection-toggle.active:hover {
-  background-color: rgba(220, 53, 69, 1);
+.detection-toggle.active:hover:not(:disabled) {
+  background-color: rgba(220, 53, 69, 0.85); /* Red on hover for stop state */
 }
 
 .detection-toggle.loading {
-  background-color: rgba(255, 193, 7, 0.85);
+  background-color: rgba(255, 193, 7, 0.85); /* Yellow for loading state */
   pointer-events: none;
+}
+
+.detection-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Monitor stat for active detection */
@@ -1113,5 +1182,185 @@ export default {
 
 .fade-in {
   animation: fadeIn 0.3s forwards;
+}
+
+/* Disabled state for offline streams */
+.stream-card.disabled {
+  opacity: 0.6;
+  pointer-events: auto; /* Allow clicks but visually indicate disabled state */
+  cursor: not-allowed;
+}
+
+/* Offline watermark */
+.offline-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  z-index: 5;
+}
+
+[data-theme='light'] .offline-watermark {
+  background-color: rgba(255, 255, 255, 0.7);
+  color: black;
+}
+
+/* List view adjustments */
+.list-view .stream-card {
+  flex-direction: row;
+  height: auto;
+  min-height: 60px;
+  border-radius: 8px;
+}
+
+.list-view .video-container {
+  width: 80px;
+  min-width: 80px;
+  height: 45px;
+  margin-right: 0.75rem;
+  aspect-ratio: 16/9;
+}
+
+.list-view .stream-info {
+  flex-grow: 1;
+  padding: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.list-view .info-top-row {
+  margin-bottom: 0.25rem;
+}
+
+.list-view .stream-title {
+  font-size: 0.9rem;
+  margin: 0;
+  max-width: 100%;
+}
+
+.list-view .platform-tag {
+  font-size: 0.6rem;
+  padding: 1px 4px;
+}
+
+.list-view .stream-meta {
+  margin-bottom: 0.25rem;
+}
+
+.list-view .agent-badge {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+}
+
+.list-view .stream-stats {
+  padding-top: 0;
+  justify-content: flex-start;
+  gap: 0.75rem;
+}
+
+.list-view .stat-item {
+  font-size: 0.65rem;
+  gap: 0.25rem;
+}
+
+.list-view .detection-controls {
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+}
+
+.list-view .detection-toggle {
+  padding: 3px 8px;
+  font-size: 0.7rem;
+}
+
+.list-view .detection-label {
+  display: none;
+}
+
+.list-view .quick-actions {
+  top: 50%;
+  right: 3rem;
+  transform: translateY(-50%);
+}
+
+.list-view .action-btn {
+  width: 24px;
+  height: 24px;
+}
+
+.list-view .offline-watermark {
+  font-size: 0.8rem;
+  padding: 3px 6px;
+}
+
+@media (max-width: 768px) {
+  .stream-card {
+    border-radius: 10px;
+  }
+  
+  .stream-title {
+    font-size: 0.9rem;
+  }
+  
+  .stream-meta {
+    margin-bottom: 12px;
+  }
+  
+  .stream-stats {
+    padding-top: 12px;
+  }
+  
+  
+  .stat-item {
+    font-size: 0.75rem;
+  }
+  
+  .control-btn,
+  .action-btn {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .platform-tag,
+  .agent-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+  }
+  
+  .view-details-btn {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+  }
+  
+  .view-details-btn .btn-text {
+    display: none;
+  }
+  
+  .list-view .video-container {
+    width: 70px;
+    min-width: 70px;
+    height: 40px;
+  }
+  
+  .list-view .stream-title {
+    font-size: 0.85rem;
+  }
+  
+  .list-view .detection-controls {
+    right: 0.25rem;
+  }
+  
+  .list-view .quick-actions {
+    right: 2.5rem;
+  }
 }
 </style>

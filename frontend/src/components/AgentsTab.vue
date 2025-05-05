@@ -969,4 +969,48 @@ tbody td {
 .stream-link:hover {
   text-decoration: underline;
 }
+
+.streams-tooltip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(0, -50%);
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  min-width: 200px;
+  max-width: 300px;
+  font-size: 0.85rem;
+  color: var(--text-color);
+}
+
+.tooltip-header {
+  font-weight: 600;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--input-border);
+  padding-bottom: 4px;
+  color: var(--primary-color);
+}
+
+.stream-list {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.stream-item {
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.stream-item:last-child {
+  margin-bottom: 0;
+}
+
+.empty-streams {
+  color: var(--text-muted);
+  font-style: italic;
+}
 </style>

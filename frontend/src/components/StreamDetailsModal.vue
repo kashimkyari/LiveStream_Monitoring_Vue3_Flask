@@ -59,7 +59,7 @@
       </div>
       <div class="modal-footer">
         <button 
-          @click="$emit('assign')" 
+          @click="openAssignAgentModal" 
           class="action-button" 
           v-wave
           :disabled="isRefreshing"
@@ -83,12 +83,57 @@
       </div>
     </div>
   </div>
+  <!-- Assign Agent Modal -->
+  <div v-if="showAssignModal" class="modal-overlay" @click.self="closeAssignAgentModal">
+    <div class="assign-modal-content">
+      <button class="modal-close" @click="closeAssignAgentModal" v-wave>
+        <font-awesome-icon icon="times" />
+      </button>
+      <div class="modal-header">
+        <h3>Assign Agent to {{ stream.streamer_username }}</h3>
+      </div>
+      <div class="modal-body">
+        <div class="agent-selection">
+          <label for="agentSelect">Select Agent:</label>
+          <select id="agentSelect" v-model="selectedAgentId" class="agent-select">
+            <option value="">-- Select an Agent --</option>
+            <option v-for="agent in agents" :key="agent.id" :value="agent.id">
+              {{ agent.username }} (ID: {{ agent.id }})
+            </option>
+          </select>
+        </div>
+        <div v-if="assignmentError" class="error-banner">
+          {{ assignmentError }}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button @click="closeAssignAgentModal" class="action-button cancel" v-wave>
+          Cancel
+        </button>
+        <button 
+          @click="assignAgent" 
+          class="action-button confirm" 
+          v-wave
+          :disabled="!selectedAgentId || isAssigning"
+        >
+          <span v-if="isAssigning">
+            <font-awesome-icon icon="spinner" spin />
+            Assigning...
+          </span>
+          <span v-else>
+            Assign Agent
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
 import Hls from 'hls.js'
 import anime from 'animejs'
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
+import axios from 'axios'
 
 export default {
   name: 'StreamDetailsModal',
@@ -108,26 +153,47 @@ export default {
     show: {
       type: Boolean,
       default: false
+    },
+    agents: {
+      type: Array,
+      default: () => []
     }
   },
-  emits: ['close', 'assign', 'refresh'],
+  emits: ['close', 'assign', 'refresh', 'agent-assigned'],
   setup(props, { emit }) {
     const refreshError = ref(null)
     const videoPlayer = ref(null)
     const hls = ref(null)
     const isLoading = ref(true)
+    const showAssignModal = ref(false)
+    const selectedAgentId = ref('')
+    const assignmentError = ref(null)
+    const isAssigning = ref(false)
+    const agentCache = ref({})
     
     // Computed property to check if there are any assigned agents
     const hasAssignments = computed(() => {
       return props.stream.assignments && props.stream.assignments.length > 0;
     })
 
-    // Helper function to get agent username from assignment
-    const getAgentUsername = (assignment) => {
+    // Helper function to get agent username from assignment or fetch from API
+    const getAgentUsername = async (assignment) => {
       if (assignment.agent && assignment.agent.username) {
         return assignment.agent.username;
       }
-      return `Agent ${assignment.agent_id}`;
+      const agentId = assignment.agent_id;
+      if (agentCache.value[agentId]) {
+        return agentCache.value[agentId];
+      }
+      try {
+        const response = await axios.get(`/api/agents/${agentId}`);
+        const username = response.data.username || `Agent ${agentId}`;
+        agentCache.value[agentId] = username;
+        return username;
+      } catch (error) {
+        console.error(`Error fetching username for agent ${agentId}:`, error);
+        return `Agent ${agentId}`;
+      }
     }
 
     const formatTime = (timestamp) => {
@@ -150,7 +216,32 @@ export default {
       setTimeout(() => {
         initializeVideo()
       }, 1000)
+      // Call platform-specific refresh endpoint
+      refreshStream();
     }
+
+    const refreshStream = async () => {
+      try {
+        let response;
+        if (props.stream.platform.toLowerCase() === 'chaturbate') {
+          response = await axios.post('/api/streams/refresh/chaturbate', {
+            room_slug: props.stream.streamer_username
+          });
+        } else if (props.stream.platform.toLowerCase() === 'stripchat') {
+          response = await axios.post('/api/streams/refresh/stripchat', {
+            room_url: props.stream.room_url
+          });
+        }
+        if (response?.data) {
+          emit('refresh');
+          // Show success toast or notification if needed
+          console.log(`Stream ${props.stream.streamer_username} refreshed successfully.`);
+        }
+      } catch (error) {
+        console.error('Error refreshing stream:', error);
+        refreshError.value = `Could not refresh ${props.stream.streamer_username}. Please try again.`;
+      }
+    };
 
     const initializeVideo = () => {
       if (!videoPlayer.value) return
@@ -262,6 +353,56 @@ export default {
       }
     }
     
+    // Assign Agent Modal functions
+    const openAssignAgentModal = () => {
+      showAssignModal.value = true
+      selectedAgentId.value = ''
+      assignmentError.value = null
+      // Add animation for modal entrance
+      anime({
+        targets: '.assign-modal-content',
+        translateY: [30, 0],
+        opacity: [0, 1],
+        easing: 'easeOutExpo',
+        duration: 600
+      })
+    }
+    
+    const closeAssignAgentModal = () => {
+      showAssignModal.value = false
+      selectedAgentId.value = ''
+      assignmentError.value = null
+    }
+    
+    const assignAgent = async () => {
+      if (!selectedAgentId.value) return
+      
+      isAssigning.value = true
+      assignmentError.value = null
+      
+      try {
+        const response = await axios.post('/api/assignments', {
+          stream_id: props.stream.id,
+          agent_id: selectedAgentId.value
+        })
+        
+        if (response.data) {
+          emit('agent-assigned', {
+            streamId: props.stream.id,
+            assignment: response.data
+          })
+          closeAssignAgentModal()
+          // Show success toast or notification if needed
+          console.log(`Agent ${selectedAgentId.value} assigned to stream ${props.stream.id}`)
+        }
+      } catch (error) {
+        console.error('Error assigning agent:', error)
+        assignmentError.value = 'Failed to assign agent. Please try again.'
+      } finally {
+        isAssigning.value = false
+      }
+    }
+    
     // Initialize when mounted
     onMounted(() => {
       // Add entrance animation to modal
@@ -304,7 +445,14 @@ export default {
       videoPlayer,
       isLoading,
       hasAssignments,
-      getAgentUsername
+      getAgentUsername,
+      openAssignAgentModal,
+      closeAssignAgentModal,
+      assignAgent,
+      showAssignModal,
+      selectedAgentId,
+      assignmentError,
+      isAssigning
     }
   }
 }
@@ -333,6 +481,17 @@ export default {
   width: 100%;
   max-width: 800px;
   max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.assign-modal-content {
+  background-color: var(--input-bg);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 60vh;
   overflow-y: auto;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   position: relative;
@@ -542,6 +701,52 @@ export default {
   opacity: 0.7;
   cursor: not-allowed;
   background-color: var(--disabled-bg);
+}
+
+.action-button.cancel {
+  background-color: var(--hover-bg);
+  color: var(--text-color);
+}
+
+.action-button.cancel:hover:not(:disabled) {
+  background-color: var(--disabled-bg);
+}
+
+.action-button.confirm {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.action-button.confirm:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+}
+
+.agent-selection {
+  margin-bottom: 20px;
+}
+
+.agent-selection label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.agent-select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 5px;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.agent-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
 }
 
 .error-banner {
