@@ -34,7 +34,9 @@ import {
   faChevronUp,
   faUserShield,
   faUserCheck,
-  faUserSecret
+  faUserSecret,
+  faChartBar,
+  faSatelliteDish
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import Toast from 'vue-toastification';
@@ -77,7 +79,9 @@ library.add(
   faChevronUp,
   faUserShield,
   faUserCheck,
-  faUserSecret
+  faUserSecret,
+  faChartBar,
+  faSatelliteDish
 );
 
 // Create a single app instance

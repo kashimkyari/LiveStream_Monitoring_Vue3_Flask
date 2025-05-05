@@ -41,19 +41,24 @@
             <div class="field-label">Stream:</div>
             <div class="video-container">
               <mobile-video-player
-                v-if="stream.is_online && stream.m3u8_url"
+                v-if="isOnline && stream.m3u8_url"
                 :streamUrl="stream.m3u8_url"
                 :streamTitle="stream.streamer_username || 'Live Stream'"
                 :streamPlatform="stream.platform || 'Unknown'"
                 :autoplay="true"
                 @refresh-request="refreshStream"
               />
-              <div v-else-if="stream.preview_url" class="preview-image-container">
-                <img :src="stream.preview_url" alt="Stream Preview" class="preview-image" />
-              </div>
-              <div v-else class="no-preview">
-                <font-awesome-icon icon="image" class="no-preview-icon" />
-                <p>No preview available</p>
+              <div v-else class="offline-preview">
+                <font-awesome-icon icon="satellite-dish" class="offline-icon" />
+                <p>Stream is currently offline</p>
+                <button 
+                  class="btn btn-secondary"
+                  @click="refreshStream"
+                  :disabled="detectionLoading"
+                >
+                  <font-awesome-icon icon="sync" />
+                  Try to Reconnect
+                </button>
               </div>
             </div>
           </div>
@@ -79,6 +84,18 @@
             <span v-if="isAssignedToCurrentAgent">Unassign Me</span>
             <span v-else>Assign to Me</span>
           </button>
+          <button 
+            class="btn" 
+            :class="isDetecting ? 'btn-danger' : 'btn-primary'"
+            @click="toggleDetection"
+            :disabled="!isOnline || detectionLoading"
+          >
+            <font-awesome-icon 
+              :icon="detectionLoading ? 'spinner' : (isDetecting ? 'stop' : 'play')" 
+              :spin="detectionLoading" 
+            />
+            {{ isDetecting ? 'Stop Detection' : isOnline ? 'Start Detection' : 'Stream Offline' }}
+          </button>
         </div>
       </div>
     </div>
@@ -86,10 +103,11 @@
 </template>
 
 <script>
-import { ref, computed, watchEffect, inject } from 'vue'
+import { ref, computed, watchEffect, inject, watch, onBeforeUnmount } from 'vue'
 import { useToast } from 'vue-toastification'
 import { formatDistance } from 'date-fns'
 import MobileVideoPlayer from './MobileVideoPlayer.vue'
+import axios from 'axios'
 
 export default {
   name: 'MobileStreamDetailsModal',
@@ -112,6 +130,9 @@ export default {
   setup(props, { emit }) {
     const toast = useToast()
     const isDarkTheme = inject('theme')
+    const isDetecting = ref(false)
+    const detectionLoading = ref(false)
+    const isOnline = ref(props.stream.status === 'online')
     
     // Agent data
     const assignedAgents = ref([])
@@ -128,11 +149,65 @@ export default {
       return currentAgentId.value !== null
     })
     
+    let detectionInterval = null
+
+    const checkDetectionStatus = async () => {
+      if (!isOnline.value) return
+      try {
+        const response = await axios.get(`/api/detection-status/${props.stream.id}`)
+        isDetecting.value = response.data.active
+        isOnline.value = response.data.status === 'online'
+      } catch (error) {
+        console.error('Detection status check failed:', error)
+        isOnline.value = false
+      }
+    }
+
+    const startDetectionInterval = () => {
+      if (isOnline.value && !detectionInterval) {
+        detectionInterval = setInterval(checkDetectionStatus, 10000)
+        checkDetectionStatus() // Initial check
+      }
+    }
+
+    const stopDetectionInterval = () => {
+      if (detectionInterval) {
+        clearInterval(detectionInterval)
+        detectionInterval = null
+      }
+    }
+
+    watch(isOnline, (newVal) => {
+      if (newVal) {
+        startDetectionInterval()
+      } else {
+        stopDetectionInterval()
+        isDetecting.value = false
+      }
+    })
+
+    watchEffect(() => {
+      if (props.show && isOnline.value) {
+        startDetectionInterval()
+      } else {
+        stopDetectionInterval()
+      }
+    })
+
+    onBeforeUnmount(() => {
+      stopDetectionInterval()
+    })
+    
     // Load assigned agents whenever the stream changes
     watchEffect(() => {
       if (props.show && props.stream && props.stream.id) {
         loadAssignedAgents()
       }
+    })
+
+    // Watch for stream changes
+    watch(() => props.stream, (newStream) => {
+      isOnline.value = newStream.status === 'online'
     })
     
     // Methods
@@ -238,6 +313,30 @@ export default {
       emit('stream-refresh', props.stream.id);
       toast.info('Refreshing stream...');
     }
+
+    const toggleDetection = async () => {
+      detectionLoading.value = true
+      try {
+        if (isDetecting.value) {
+          await axios.post('/api/trigger-detection', {
+            stream_id: props.stream.id,
+            stop: true
+          })
+          toast.success(`Detection stopped for ${props.stream.streamer_username}`)
+        } else {
+          await axios.post('/api/trigger-detection', {
+            stream_id: props.stream.id
+          })
+          toast.success(`Detection started for ${props.stream.streamer_username}`)
+        }
+        isDetecting.value = !isDetecting.value
+      } catch (error) {
+        console.error('Detection toggle failed:', error)
+        toast.error(`Failed to toggle detection: ${error.response?.data?.error || error.message}`)
+      } finally {
+        detectionLoading.value = false
+      }
+    }
     
     return {
       isDarkTheme,
@@ -250,7 +349,11 @@ export default {
       copyToClipboard,
       formatNumber,
       formatStreamTime,
-      refreshStream
+      refreshStream,
+      isDetecting,
+      detectionLoading,
+      toggleDetection,
+      isOnline
     }
   }
 }
@@ -471,5 +574,33 @@ export default {
 .modal-fade-enter-from,
 .modal-fade-leave-to {
   opacity: 0;
+}
+
+.offline-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  background-color: var(--hover-bg);
+  border-radius: 8px;
+}
+
+.offline-icon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  color: var(--text-light);
+  opacity: 0.7;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary:disabled {
+  background-color: var(--border-color);
+  color: var(--text-light);
 }
 </style>

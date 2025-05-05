@@ -32,7 +32,7 @@
           :class="{ 'active': isDetecting, 'loading': !canToggleDetection }"
           @click.stop="toggleDetection"
           :title="isDetecting ? 'Stop detection' : 'Start detection'"
-          :disabled="!isOnline"
+          :disabled="!isOnline || !canToggleDetection"
         >
           <span class="detection-icon">
             <font-awesome-icon v-if="!canToggleDetection" icon="spinner" spin />
@@ -89,6 +89,7 @@ import axios from 'axios'
 import anime from 'animejs/lib/anime.es.js'
 import Hls from 'hls.js'
 import { inject } from 'vue'
+import { useToast } from 'vue-toastification'
 
 export default {
   name: 'MobileStreamCard',
@@ -125,9 +126,11 @@ export default {
     const allAgentsFetched = ref(false)
     const eventBus = inject('eventBus', null)
     const isDarkTheme = inject('theme', ref(true))
+    const toast = useToast()
     
     let hls = null
-    
+    let detectionInterval = null
+
     const showToast = (message, type = 'success') => {
       console.log(`[Toast ${type}]: ${message}`)
       alert(`[${type.toUpperCase()}]: ${message}`)
@@ -206,26 +209,22 @@ export default {
       
       canToggleDetection.value = false
       try {
-        const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`)
-        const isActive = statusResponse.data.active
-        
-        if (isActive) {
+        if (isDetecting.value) {
           await axios.post('/api/trigger-detection', {
             stream_id: props.stream.id,
             stop: true
           })
-          isDetecting.value = false
-          showToast(`Detection stopped for ${props.stream.streamer_username}`, 'info')
+          toast.success(`Detection stopped for ${props.stream.streamer_username}`)
         } else {
           await axios.post('/api/trigger-detection', {
             stream_id: props.stream.id
           })
-          isDetecting.value = true
-          showToast(`Detection started for ${props.stream.streamer_username}`, 'success')
+          toast.success(`Detection started for ${props.stream.streamer_username}`)
         }
+        isDetecting.value = !isDetecting.value
       } catch (error) {
-        console.error('Error toggling detection:', error)
-        showToast(`Error toggling detection for ${props.stream.streamer_username}: ${error.message}`, 'error')
+        console.error('Detection toggle failed:', error)
+        toast.error(`Failed to toggle detection: ${error.response?.data?.error || error.message}`)
       } finally {
         canToggleDetection.value = true
       }
@@ -337,16 +336,52 @@ export default {
       }
     }
 
-    onMounted(() => {
+    const checkDetectionStatus = async () => {
+      if (!isOnline.value) return
+      try {
+        const response = await axios.get(`/api/detection-status/${props.stream.id}`)
+        isDetecting.value = response.data.active
+        isOnline.value = response.data.status === 'online'
+      } catch (error) {
+        console.error('Detection status check failed:', error)
+        isOnline.value = false
+      }
+    }
+
+    const startDetectionInterval = () => {
+      if (isOnline.value && !detectionInterval) {
+        detectionInterval = setInterval(checkDetectionStatus, 10000)
+      }
+    }
+
+    const stopDetectionInterval = () => {
+      if (detectionInterval) {
+        clearInterval(detectionInterval)
+        detectionInterval = null
+      }
+    }
+
+    watch(isOnline, (newVal) => {
+      if (newVal) {
+        startDetectionInterval()
+      } else {
+        stopDetectionInterval()
+        isDetecting.value = false
+      }
+    })
+
+    onMounted(async () => {
       initializeVideo()
       handleVideoPlayback()
       checkStreamStatus()
-      const statusInterval = setInterval(checkStreamStatus, 30000)
-      
-      onBeforeUnmount(() => {
-        clearInterval(statusInterval)
-        if (hls) hls.destroy()
-      })
+      if (isOnline.value) {
+        startDetectionInterval()
+      }
+    })
+
+    onBeforeUnmount(() => {
+      stopDetectionInterval()
+      if (hls) hls.destroy()
     })
 
     watch(() => props.stream.status, (newStatus) => {

@@ -347,6 +347,31 @@ export default {
       }
     })
 
+    // Add platform detection logic
+    const detectPlatformFromUrl = (url) => {
+      if (!url) return ''
+      try {
+        const parsedUrl = new URL(url.toLowerCase())
+        if (parsedUrl.hostname.includes('chaturbate')) return 'chaturbate'
+        if (parsedUrl.hostname.includes('stripchat')) return 'stripchat'
+      } catch {
+        if (url.toLowerCase().includes('chaturbate')) return 'chaturbate'
+        if (url.toLowerCase().includes('stripchat')) return 'stripchat'
+      }
+      return ''
+    }
+
+    // Add watcher for URL changes
+    watch(
+      () => form.value.room_url,
+      (newUrl) => {
+        const detectedPlatform = detectPlatformFromUrl(newUrl)
+        if (detectedPlatform) {
+          form.value.platform = detectedPlatform
+        }
+      }
+    )
+
     watch(() => props.isVisible, (newVisible) => {
       if (newVisible) {
         retryCount.value = 0

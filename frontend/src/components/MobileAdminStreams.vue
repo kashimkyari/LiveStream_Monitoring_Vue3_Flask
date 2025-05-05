@@ -348,7 +348,7 @@ import VideoPlayerModal from './VideoPlayerModal.vue';
 const toast = useToast();
 
 // State variables
-const viewMode = ref('list'); // 'grid' or 'list'
+const viewMode = ref('grid'); // 'grid' or 'list'
 const selectedStream = ref(null);
 const streams = ref([]);
 const isLoading = ref(false);
@@ -445,6 +445,10 @@ const initializeMiniPlayers = () => {
   if (viewMode.value !== 'grid') return;
   
   streams.value.forEach(stream => {
+    // Skip offline streams
+    if (stream.status !== 'online') return;
+    
+    // Existing player initialization logic
     if (!stream.video_url) return;
     
     const videoElement = document.getElementById(`mini-player-${stream.id}`);
@@ -528,6 +532,12 @@ const toggleDetection = async (stream) => {
 
 const refreshStreamUrl = async (stream) => {
   try {
+    // Skip refresh if stream is offline
+    if (stream.status !== 'online') {
+      toast.warning(`Cannot refresh offline stream: ${stream.streamer_username}`);
+      return;
+    }
+    
     toast.info(`Refreshing stream for ${stream.streamer_username}...`);
     
     // Determine the API endpoint and payload based on platform

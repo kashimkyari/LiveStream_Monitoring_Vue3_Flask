@@ -11,7 +11,8 @@
               {{ stream.platform }}
             </div>
             <div class="stream-status-badge">
-              <span class="live-dot"></span>LIVE
+              <span :class="isOnline ? 'live-dot' : 'offline-dot'"></span>
+              {{ isOnline ? 'LIVE' : 'OFFLINE' }}
             </div>
           </div>
           <button class="close-btn" @click="closeModal">
@@ -21,7 +22,7 @@
         
         <!-- Video Player -->
         <div class="video-container">
-          <div class="video-player">
+          <div v-if="isOnline" class="video-player">
             <div class="full-player">
               <video 
                 ref="videoPlayer" 
@@ -36,6 +37,13 @@
               >
                 <font-awesome-icon icon="play" size="3x" />
               </button>
+            </div>
+          </div>
+          <div v-else class="offline-overlay">
+            <div class="offline-content">
+              <font-awesome-icon icon="satellite-dish" class="offline-icon" />
+              <h3>Stream Offline</h3>
+              <p>This stream is currently not broadcasting</p>
             </div>
           </div>
         </div>
@@ -57,7 +65,8 @@
             </div>
             <div class="status-group">
               <div class="live-status">
-                <span class="live-dot"></span> LIVE
+                <span :class="isOnline ? 'live-dot' : 'offline-dot'"></span>
+                {{ isOnline ? 'LIVE' : 'OFFLINE' }}
               </div>
               <div v-if="stream.detection_status" class="detection-status">
                 {{ stream.detection_status }}
@@ -69,11 +78,12 @@
               class="detection-trigger-btn" 
               :class="{ 'active': stream.detection_active }"
               @click="toggleDetection"
+              :disabled="!isOnline"
             >
               <font-awesome-icon :icon="stream.detection_active ? 'stop' : 'play'" />
-              {{ stream.detection_active ? 'Stop Detection' : 'Start Detection' }}
+              {{ stream.detection_active ? 'Stop Detection' : isOnline ? 'Start Detection' : 'Stream Offline' }}
             </button>
-            <button class="refresh-stream-btn" @click="refreshStream">
+            <button class="refresh-stream-btn" @click="refreshStream" :disabled="!isOnline">
               <font-awesome-icon icon="sync" />
               Refresh Stream
             </button>
@@ -91,9 +101,11 @@
 </template>
 
 <script setup>
-import { ref, onUnmounted, watch, defineEmits, defineProps } from 'vue';
+import { ref, onUnmounted, watch, defineEmits, defineProps, computed } from 'vue';
 import { formatDistance } from 'date-fns';
 import Hls from 'hls.js';
+import { useToast } from 'vue-toastification';
+import axios from 'axios';
 
 const props = defineProps({
   show: {
@@ -115,6 +127,11 @@ const emit = defineEmits([
 const videoPlayer = ref(null);
 const isPlaying = ref(false);
 const hlsInstance = ref(null);
+
+const toast = useToast();
+
+// Add computed property for online status
+const isOnline = computed(() => props.stream?.status === 'online');
 
 // Watch for changes in the show prop to initialize player when modal opens
 watch(() => props.show, (newValue) => {
@@ -141,8 +158,20 @@ watch(
   }
 );
 
+// Add watcher for online status changes
+watch(() => props.stream?.status, (newStatus) => {
+  if (newStatus !== 'online') {
+    destroyPlayer();
+  }
+});
+
 // Initialize the video player
 const initializePlayer = () => {
+  if (!isOnline.value) {
+    destroyPlayer();
+    return;
+  }
+  
   if (!videoPlayer.value || !props.stream?.video_url) return;
 
   if (Hls.isSupported()) {
@@ -221,12 +250,60 @@ const closeModal = () => {
 
 // Toggle detection for stream
 const toggleDetection = () => {
+  if (!isOnline.value) {
+    toast.warning('Cannot toggle detection on offline stream');
+    return;
+  }
   emit('toggle-detection', props.stream);
 };
 
 // Refresh stream URL
-const refreshStream = () => {
-  emit('refresh-stream', props.stream);
+const refreshStream = async () => {
+  if (!isOnline.value) {
+    toast.warning('Cannot refresh offline stream');
+    return;
+  }
+
+  try {
+    toast.info(`Refreshing ${props.stream.platform} stream...`);
+    
+    // Determine endpoint and payload based on platform
+    const platform = props.stream.platform.toLowerCase();
+    let endpoint, payload;
+
+    if (platform === 'chaturbate') {
+      endpoint = '/api/refresh/chaturbate';
+      // Extract room slug from URL (last part of the URL)
+      const roomSlug = props.stream.room_url.split('/').filter(Boolean).pop();
+      payload = { room_slug: roomSlug };
+    } else if (platform === 'stripchat') {
+      endpoint = '/api/refresh/stripchat';
+      payload = { room_url: props.stream.room_url };
+    } else {
+      throw new Error('Unsupported platform');
+    }
+
+    const response = await axios.post(endpoint, payload);
+    
+    if (response.data.m3u8_url) {
+      // Update the stream URL in parent component
+      emit('refresh-stream', {
+        ...props.stream,
+        video_url: response.data.m3u8_url
+      });
+      
+      // Reinitialize player with new URL
+      destroyPlayer();
+      initializePlayer();
+      
+      toast.success('Stream refreshed successfully');
+    } else {
+      throw new Error('No M3U8 URL returned');
+    }
+  } catch (error) {
+    console.error('Refresh error:', error);
+    toast.error(`Failed to refresh stream: ${error.response?.data?.message || error.message}`);
+  }
 };
 
 // Format number for display (e.g., 1000 -> 1K)
@@ -347,7 +424,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   padding: 4px 10px;
-  background-color: #dc2626;
+  background-color: v-bind('isOnline ? "#dc2626" : "#6b7280"');
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 700;
@@ -357,10 +434,15 @@ onUnmounted(() => {
 .live-dot {
   width: 8px;
   height: 8px;
-  background-color: #fff;
+  background-color: #dc2626;
   border-radius: 50%;
   margin-right: 5px;
   animation: pulse 1.5s infinite;
+}
+
+.offline-dot {
+  background-color: #6b7280;
+  animation: none;
 }
 
 @keyframes pulse {
@@ -565,6 +647,38 @@ onUnmounted(() => {
 
 .stream-url a:hover {
   text-decoration: underline;
+}
+
+.offline-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  text-align: center;
+  z-index: 2;
+}
+
+.offline-content {
+  padding: 2rem;
+  max-width: 300px;
+}
+
+.offline-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.7;
+}
+
+.detection-trigger-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: #6b7280 !important;
 }
 
 @media (max-width: 768px) {
