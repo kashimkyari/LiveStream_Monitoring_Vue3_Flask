@@ -57,8 +57,15 @@
 
     <!-- Grid View -->
     <div v-else-if="viewMode === 'grid'" class="stream-grid">
-      <div 
-        v-for="stream in streams" 
+      <!-- Online Streams -->
+      <div class="section-header" @click="toggleOnlineCollapse">
+        <h3>Online Streams</h3>
+        <span class="stream-count">{{ onlineStreams.length }} streams</span>
+        <font-awesome-icon :icon="isOnlineCollapsed ? 'chevron-down' : 'chevron-up'" class="collapse-icon" />
+      </div>
+      <div v-if="!isOnlineCollapsed" class="stream-grid">
+        <div 
+          v-for="stream in onlineStreams" 
         :key="stream.id" 
         class="stream-grid-item"
         @click="selectStream(stream)"
@@ -113,6 +120,75 @@
             <button class="control-btn refresh-btn" @click.stop="refreshStreamUrl(stream)">
               <font-awesome-icon icon="sync" />
             </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Offline Streams -->
+      <div class="section-header offline-section" @click="toggleOfflineCollapse">
+        <h3>Offline Streams</h3>
+        <span class="stream-count">{{ offlineStreams.length }} streams</span>
+        <font-awesome-icon :icon="isOfflineCollapsed ? 'chevron-down' : 'chevron-up'" class="collapse-icon" />
+      </div>
+      <div v-if="!isOfflineCollapsed" class="stream-grid">
+        <div 
+          v-for="stream in offlineStreams" 
+          :key="stream.id" 
+          class="stream-grid-item"
+          @click="selectStream(stream)"
+        >
+          <div class="video-thumbnail" :class="{ 'selected': selectedStream?.id === stream.id }">
+            <div class="player-overlay">
+              <font-awesome-icon icon="play" size="2x" />
+            </div>
+            <div class="mini-player">
+              <video 
+                class="mini-video-player" 
+                :id="`mini-player-${stream.id}`"
+                muted
+                autoplay
+                playsinline
+              ></video>
+            </div>
+            <div class="stream-badges">
+              <div class="live-badge offline">
+                <span class="live-dot offline"></span>OFFLINE
+              </div>
+              <div class="detection-badge" v-if="stream.detection_status">
+                {{ stream.detection_status }}
+              </div>
+            </div>
+            <div class="stream-duration">
+              {{ formatStreamTime(stream.stream_start_time) }}
+            </div>
+          </div>
+          <div class="stream-info">
+            <div class="stream-title-row">
+              <h3 class="stream-title">{{ stream.streamer_username }}</h3>
+              <div class="stream-platform" :class="stream.platform.toLowerCase()">
+                {{ stream.platform }}
+              </div>
+            </div>
+            <div class="stream-details">
+              <span class="stream-viewers">
+                <font-awesome-icon icon="eye" /> 
+                {{ formatNumber(stream.viewer_count || 0) }}
+              </span>
+            </div>
+            <div class="stream-controls">
+              <button 
+                class="control-btn detection-btn" 
+                :class="{ 'active': stream.detection_active }"
+                @click.stop="toggleDetection(stream)"
+              >
+                <font-awesome-icon :icon="stream.detection_active ? 'stop' : 'play'" />
+                {{ stream.detection_active ? 'Stop Detection' : 'Start Detection' }}
+              </button>
+              <button class="control-btn refresh-btn" @click.stop="refreshStreamUrl(stream)">
+                <font-awesome-icon icon="sync" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -120,8 +196,15 @@
 
     <!-- List View -->
     <div v-else class="stream-list">
-      <div 
-        v-for="stream in streams" 
+      <!-- Online Streams -->
+      <div class="section-header" @click="toggleOnlineCollapse">
+        <h3>Online Streams</h3>
+        <span class="stream-count">{{ onlineStreams.length }} streams</span>
+        <font-awesome-icon :icon="isOnlineCollapsed ? 'chevron-down' : 'chevron-up'" class="collapse-icon" />
+      </div>
+      <div v-if="!isOnlineCollapsed" class="stream-list">
+        <div 
+          v-for="stream in onlineStreams" 
         :key="stream.id" 
         class="stream-list-item"
         :class="{ 'selected': selectedStream?.id === stream.id }"
@@ -174,6 +257,71 @@
           >
             <font-awesome-icon icon="sync" />
           </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Offline Streams -->
+      <div class="section-header offline-section" @click="toggleOfflineCollapse">
+        <h3>Offline Streams</h3>
+        <span class="stream-count">{{ offlineStreams.length }} streams</span>
+        <font-awesome-icon :icon="isOfflineCollapsed ? 'chevron-down' : 'chevron-up'" class="collapse-icon" />
+      </div>
+      <div v-if="!isOfflineCollapsed" class="stream-list">
+        <div 
+          v-for="stream in offlineStreams" 
+          :key="stream.id" 
+          class="stream-list-item offline"
+          :class="{ 'selected': selectedStream?.id === stream.id }"
+          @click="selectStream(stream)"
+        >
+          <div class="list-thumbnail">
+            <div class="status-indicator offline">
+            </div>
+            <div class="list-live-badge offline">OFFLINE</div>
+          </div>
+          <div class="list-info">
+            <div class="list-title-row">
+              <h3 :title="stream.streamer_username">{{ stream.streamer_username }}</h3>
+              <div class="stream-platform" :class="stream.platform.toLowerCase()">
+                {{ stream.platform }}
+              </div>
+            </div>
+            <div class="list-details">
+              <span class="list-detail-item viewers">
+                <font-awesome-icon icon="eye" /> 
+                <span>{{ formatNumber(stream.viewer_count || 0) }}</span>
+              </span>
+              <span class="list-detail-item duration">
+                <font-awesome-icon icon="clock" /> 
+                <span>{{ formatStreamTime(stream.stream_start_time) }}</span>
+              </span>
+              <span class="list-detail-item detection-status" v-if="stream.detection_status">
+                <font-awesome-icon icon="chart-bar" /> 
+                <span>{{ stream.detection_status }}</span>
+              </span>
+            </div>
+          </div>
+          <div class="list-actions">
+            <button class="play-btn" title="Play stream">
+              <font-awesome-icon icon="play" />
+            </button>
+            <button 
+              class="detection-toggle-btn" 
+              :class="{ 'active': stream.detection_active }"
+              @click.stop="toggleDetection(stream)"
+              :title="stream.detection_active ? 'Stop detection' : 'Start detection'"
+            >
+              <font-awesome-icon :icon="stream.detection_active ? 'binoculars' : 'binoculars'" />
+            </button>
+            <button 
+              class="refresh-stream-btn" 
+              @click.stop="refreshStreamUrl(stream)"
+              title="Refresh stream"
+            >
+              <font-awesome-icon icon="sync" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -190,7 +338,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import { formatDistance } from 'date-fns';
 import axios from 'axios';
 import Hls from 'hls.js';
@@ -205,6 +353,25 @@ const selectedStream = ref(null);
 const streams = ref([]);
 const isLoading = ref(false);
 const hlsInstances = ref({});
+const isOnlineCollapsed = ref(false);
+const isOfflineCollapsed = ref(true);
+
+// Computed properties for online and offline streams
+const onlineStreams = computed(() => {
+  return streams.value.filter(stream => stream.status === 'online');
+});
+
+const offlineStreams = computed(() => {
+  return streams.value.filter(stream => stream.status !== 'online');
+});
+
+const toggleOnlineCollapse = () => {
+  isOnlineCollapsed.value = !isOnlineCollapsed.value;
+};
+
+const toggleOfflineCollapse = () => {
+  isOfflineCollapsed.value = !isOfflineCollapsed.value;
+};
 
 onMounted(() => {
   loadStreams();
@@ -249,7 +416,8 @@ const loadStreams = async () => {
           ? stream.chaturbate_m3u8_url 
           : stream.stripchat_m3u8_url,
         detection_active: false,
-        detection_status: null
+        detection_status: null,
+        status: stream.status || 'offline' // Ensure status is set
       }));
     
     // Clean up any existing HLS instances
@@ -1069,5 +1237,60 @@ watch(viewMode, (newMode) => {
   height: 100%;
   z-index: 1;
   object-fit: fill;
+}
+
+/* Streams section styling */
+.streams-section {
+  padding-top: 0.5rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  cursor: pointer;
+}
+
+.section-header.offline-section {
+  margin-top: 2rem;
+}
+
+.section-header h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-color);
+  margin: 0;
+}
+
+.stream-count {
+  background-color: var(--primary-color, #3B82F6);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.collapse-icon {
+  margin-left: 0.5rem;
+  transition: transform 0.3s ease;
+}
+
+.stream-container {
+  margin-bottom: 2rem;
+}
+
+.live-badge.offline {
+  background-color: #757575;
+}
+
+.live-dot.offline {
+  background-color: #BDBDBD;
+  animation: none;
+}
+
+.status-indicator.offline {
+  background-color: #757575;
 }
 </style>
