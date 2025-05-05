@@ -1,8 +1,14 @@
 <template>
-  <div 
-    class="stream-card" 
-    :class="{ 'compact-view': isCompactView }"
-    @click="$emit('click', $event)" 
+  <div
+    :class="[
+      'stream-card',
+      { 'compact-view': isCompactView },
+      { 'dark-theme': isDarkTheme },
+      { 'online': isOnline },
+      { 'offline': !isOnline },
+      { 'detecting': isDetecting }
+    ]"
+    @click="handleCardClick"
     @mouseenter="addHoverAnimation" 
     @mouseleave="removeHoverAnimation" 
     ref="streamCard"
@@ -30,13 +36,13 @@
       <div class="detection-controls">
         <button 
           class="detection-toggle" 
-          :class="{ 'active': isDetectionActive, 'loading': isDetectionLoading }"
+          :class="{ 'active': isDetecting, 'loading': !canToggleDetection }"
           @click.stop="toggleDetection"
-          :title="isDetectionActive ? 'Stop monitoring' : 'Start monitoring'"
+          :title="isDetecting ? 'Stop monitoring' : 'Start monitoring'"
         >
           <span class="detection-icon">
-            <font-awesome-icon v-if="isDetectionLoading" icon="spinner" spin />
-            <font-awesome-icon v-else :icon="isDetectionActive ? 'stop-circle' : 'play-circle'" />
+            <font-awesome-icon v-if="!canToggleDetection" icon="spinner" spin />
+            <font-awesome-icon v-else :icon="isDetecting ? 'stop-circle' : 'play-circle'" />
           </span>
           <span class="detection-label">{{ getDetectionButtonText() }}</span>
         </button>
@@ -70,7 +76,7 @@
           <span>{{ viewers }} viewers</span>
         </div>
         <!-- Add detection status display -->
-        <div v-if="isDetectionActive" class="stat-item monitor-stat">
+        <div v-if="isDetecting" class="stat-item monitor-stat">
           <font-awesome-icon icon="eye" />
           <span>Monitoring</span>
         </div>
@@ -80,6 +86,19 @@
       <button class="action-btn assign-btn" @click.stop="$emit('assign')" v-if="!stream.agent?.username">
         <font-awesome-icon icon="user-plus" />
       </button>
+    </div>
+    <div class="card-footer">
+      <div class="footer-left">
+        <button
+          v-if="!isCompactView"
+          class="detection-btn"
+          :disabled="!canToggleDetection"
+          @click.stop="toggleDetection"
+        >
+          {{ getDetectionButtonText() }}
+        </button>
+        <span v-if="isDetecting" class="detecting-indicator">Detecting</span>
+      </div>
     </div>
   </div>
 </template>
@@ -123,10 +142,10 @@ export default {
     // Add missing variables for stream status
     const isOnline = ref(false)
     const isLoading = ref(true)
+    const streamStatus = ref('unknown')
     
     // Detection state variables
-    const isDetectionActive = ref(false)
-    const isDetectionLoading = ref(false)
+    const isDetecting = ref(false)
     const canToggleDetection = ref(true)
     const checkStatusInterval = ref(null)
     
@@ -278,55 +297,74 @@ export default {
       }
     }
 
-    // Detection toggle and status functions
-    const toggleDetection = async () => {
-      if (!canToggleDetection.value) return;
+    // Function to show toast notification (placeholder for actual toast system)
+    const showToast = (message, type = 'success') => {
+      // This is a placeholder. Replace with your actual toast notification system if available.
+      console.log(`[Toast ${type}]: ${message}`)
+      alert(`[${type.toUpperCase()}]: ${message}`)
+    }
 
+    // Function to check stream and detection status
+    const checkStreamStatus = async () => {
       try {
-        // First check current status
-        const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`);
-        const currentlyActive = statusResponse.data.active;
-        
-        if (currentlyActive) {
-          // Detection is already running, inform user
-          alert('Detection is already active for this stream');
-          isDetectionActive.value = true;
-          return;
-        }
-        
-        // Detection is not active, start it
-        const response = await axios.post('/api/trigger-detection', {
-          stream_url: props.stream.room_url,
-          enable: true
-        });
-        
-        if (response.data.status === 'success') {
-          isDetectionActive.value = true;
-          emit('detection-toggled', { streamId: props.stream.id, active: true });
-        } else {
-          alert('Failed to start detection: ' + response.data.message);
-          isDetectionActive.value = false;
-        }
+        const response = await axios.get(`/api/detection-status/${props.stream.id}`)
+        isDetecting.value = response.data.active
+        streamStatus.value = response.data.status || 'unknown'
+        // Update online status based on stream status
+        isOnline.value = streamStatus.value === 'online'
+        isLoading.value = false
       } catch (error) {
-        console.error('Error toggling detection:', error);
-        alert('Error toggling detection: ' + error.message);
-        isDetectionActive.value = false;
+        console.error('Error checking stream status:', error)
+        isLoading.value = false
       }
     }
-    
-    const checkDetectionStatus = async () => {
+
+    // Function to toggle detection
+    const toggleDetection = async () => {
+      if (!canToggleDetection.value) return
+      
+      canToggleDetection.value = false
       try {
-        const response = await axios.get(`/api/detection-status/${props.stream.id}`);
-        isDetectionActive.value = response.data.active;
+        if (isDetecting.value) {
+          // Stop detection
+          await axios.post('/api/trigger-detection', {
+            stream_id: props.stream.id,
+            stop: true
+          })
+          isDetecting.value = false
+          streamStatus.value = 'offline'
+          isOnline.value = false
+          showToast(`Detection stopped for ${props.stream.streamer_username}`, 'info')
+        } else {
+          // Check if detection is already active before starting
+          const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`)
+          if (statusResponse.data.active) {
+            isDetecting.value = true
+            streamStatus.value = statusResponse.data.status || 'online'
+            isOnline.value = streamStatus.value === 'online'
+            showToast(`Detection is already active for ${props.stream.streamer_username}`, 'info')
+          } else {
+            // Start detection using stream_id
+            await axios.post('/api/trigger-detection', {
+              stream_id: props.stream.id
+            })
+            isDetecting.value = true
+            streamStatus.value = 'online'
+            isOnline.value = true
+            showToast(`Detection started for ${props.stream.streamer_username}`, 'success')
+          }
+        }
       } catch (error) {
-        console.error('Error checking detection status:', error);
-        isDetectionActive.value = false;
+        console.error('Error toggling detection:', error)
+        showToast(`Error toggling detection for ${props.stream.streamer_username}: ${error.message}`, 'error')
+      } finally {
+        canToggleDetection.value = true
       }
     }
     
     const getDetectionButtonText = () => {
-      if (isDetectionLoading.value) return 'Loading...'
-      return isDetectionActive.value ? 'Stop' : 'Monitor'
+      if (!canToggleDetection.value) return 'Loading...'
+      return isDetecting.value ? 'Stop' : 'Monitor'
     }
 
     const addEntranceAnimation = () => {
@@ -497,17 +535,23 @@ export default {
 
     // Function to handle video playback status
     const handleVideoPlayback = () => {
-      const videoElement = document.querySelector('video')
+      const videoElement = videoPlayer.value
       if (videoElement) {
         videoElement.onplay = () => {
           isPlaying.value = true
           isOnline.value = true
+          streamStatus.value = 'online'
         }
         videoElement.onpause = () => {
           isPlaying.value = false
         }
         videoElement.onended = () => {
           isPlaying.value = false
+        }
+        videoElement.onerror = () => {
+          isOnline.value = false
+          streamStatus.value = 'offline'
+          isLoading.value = false
         }
       }
     }
@@ -517,11 +561,11 @@ export default {
       initializeVideo()
       addEntranceAnimation()
       
-      // Check detection status initially
-      checkDetectionStatus()
+      // Check stream status initially
+      checkStreamStatus()
       
-      // Set up interval to check detection status
-      checkStatusInterval.value = setInterval(checkDetectionStatus, 30000)
+      // Set up interval to check stream status
+      checkStatusInterval.value = setInterval(checkStreamStatus, 30000)
       
       // Set up interval to check stream status if offline
       streamStatusCheckInterval.value = setInterval(checkStreamStatus, 120000) // Check every 2 minutes
@@ -578,32 +622,12 @@ export default {
     // Add method to report stream offline
     const reportStreamOffline = async (streamId) => {
       try {
-        await axios.post(`/api/streams/${streamId}/status`, { status: 'offline' });
-        console.log(`Reported stream ${streamId} as offline`);
+        await axios.post(`/api/streams/${streamId}/status`, { status: 'offline' })
+        streamStatus.value = 'offline'
+        isOnline.value = false
+        console.log(`Reported stream ${streamId} as offline`)
       } catch (error) {
-        console.error('Failed to report stream offline:', error);
-      }
-    };
-
-    // Function to check stream status and attempt reconnection
-    const checkStreamStatus = async () => {
-      if (!isOnline.value) {
-        isLoading.value = true
-        try {
-          // Attempt to reload the stream
-          initializeVideo()
-          // Check with backend if stream is available
-          const response = await axios.get(`/api/streams/${props.stream.id}`)
-          if (response.data && response.data.status === 'online') {
-            isOnline.value = true
-            console.log(`Stream ${props.stream.id} is back online`)
-            await axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' });
-          }
-        } catch (error) {
-          console.error('Failed to check stream status:', error)
-        } finally {
-          isLoading.value = false
-        }
+        console.error('Failed to report stream offline:', error)
       }
     }
 
@@ -616,8 +640,7 @@ export default {
       isBookmarked,
       isCompactView,
       isDarkTheme,
-      isDetectionActive,
-      isDetectionLoading,
+      isDetecting,
       viewers,
       isStripchatStream,
       addHoverAnimation,

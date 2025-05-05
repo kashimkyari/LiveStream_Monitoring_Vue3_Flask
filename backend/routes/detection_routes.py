@@ -12,7 +12,7 @@ import base64
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload
-from utils.notifications import emit_notification
+from utils.notifications import emit_notification, emit_stream_update
 
 
 detection_bp = Blueprint('detection', __name__)
@@ -84,11 +84,12 @@ def trigger_detection():
         return jsonify({"error": "Unauthorized"}), 401
 
     # If stream_id is provided, fetch the appropriate M3U8 URL
-    if stream_id and not stream_url:
+    if stream_id:
         stream = Stream.query.get(stream_id)
         if not stream:
             return jsonify({"error": "Stream not found"}), 404
         # Try to find an attribute ending with _m3u8_url
+        stream_url = ''
         for attr in dir(stream):
             if attr.endswith('_m3u8_url'):
                 stream_url = getattr(stream, attr, '')
@@ -99,82 +100,75 @@ def trigger_detection():
             stream_url = getattr(stream, 'stream_url', getattr(stream, 'room_url', ''))
         if not stream_url:
             return jsonify({"error": "No valid URL found for stream"}), 400
+        # Update stream status if available
+        if hasattr(stream, 'status'):
+            stream.status = 'online' if not stop else 'offline'
+            db.session.commit()
+            # Emit update to connected clients
+            stream_data = {
+                'id': stream.id,
+                'type': stream.type,
+                'room_url': stream.room_url,
+                'streamer_username': stream.streamer_username,
+                'status': stream.status,
+                'action': 'status_update'
+            }
+            emit_stream_update(stream_data)
 
     # Check if we need to stop detection
     if stop:
         if stream_url in detection_threads:
-            # Fix: The stored object is a tuple containing threads and the cancel_event
-            # We need to unpack it correctly
             detection_thread, chat_thread, cancel_event = detection_threads[stream_url]
-            
-            # Set the cancel event to stop the threads
             cancel_event.set()
-            
-            # Wait for threads to finish (with timeout)
             detection_thread.join(timeout=2)
             chat_thread.join(timeout=2)
-            
-            # Remove from detection_threads
             del detection_threads[stream_url]
-            return jsonify({"message": "Detection stopped successfully"}), 200
+            return jsonify({"message": "Detection stopped successfully", "stream_url": stream_url, "stream_id": stream_id}), 200
         else:
-            return jsonify({"message": "No detection running for this stream"}), 404
+            return jsonify({"message": "No detection running for this stream", "stream_url": stream_url, "stream_id": stream_id}), 404
 
     # Check if detection is already running
     if stream_url in detection_threads:
-        return jsonify({"message": "Detection already running for this stream"}), 200
+        return jsonify({"message": "Detection already running for this stream", "stream_url": stream_url, "stream_id": stream_id}), 200
 
-    # Removed strict HTTP status code check to allow detection start even if direct access fails
     try:
-        # Import detection modules
         from detection import process_combined_detection, chat_detection_loop
-        
-        # Create cancel event
         cancel_event = threading.Event()
-        
-        # Start detection threads
         detection_thread = threading.Thread(
             target=process_combined_detection,
             args=(stream_url, cancel_event),
             daemon=True
         )
         detection_thread.start()
-        
         chat_thread = threading.Thread(
             target=chat_detection_loop,
             args=(stream_url, cancel_event, 60),
             daemon=True
         )
         chat_thread.start()
-        
-        # Fix: Store threads and cancel event in the correct order
         detection_threads[stream_url] = (detection_thread, chat_thread, cancel_event)
-        
-        return jsonify({"message": "Detection started successfully"}), 200
+        return jsonify({"message": "Detection started successfully", "stream_url": stream_url, "stream_id": stream_id}), 200
     except Exception as e:
         return jsonify({"error": f"Error starting detection: {str(e)}"}), 500
 
-# Add a route to check detection status
 @detection_bp.route("/api/detection-status/<int:stream_id>", methods=["GET"])
 @login_required()
 def detection_status(stream_id):
-    # Find the stream by ID
     stream = Stream.query.get_or_404(stream_id)
-    # Check if detection is active for this stream
-    # Try to find an attribute ending with _m3u8_url
     stream_url = ''
     for attr in dir(stream):
         if attr.endswith('_m3u8_url'):
             stream_url = getattr(stream, attr, '')
             if stream_url:
                 break
-    # Fallback to stream_url or room_url if no M3U8 URL is found
     if not stream_url:
         stream_url = getattr(stream, 'stream_url', getattr(stream, 'room_url', ''))
     is_active = stream_url in detection_threads
+    stream_status = getattr(stream, 'status', 'unknown')
     return jsonify({
         "stream_id": stream_id,
         "stream_url": stream_url,
-        "active": is_active
+        "active": is_active,
+        "status": stream_status
     })
 

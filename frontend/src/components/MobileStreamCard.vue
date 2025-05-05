@@ -1,67 +1,80 @@
 <template>
-  <div class="mobile-stream-card" :class="platformClass">
-    <div class="stream-preview" v-if="stream.is_online">
-      <mobile-video-player
-        :streamUrl="stream.m3u8_url"
-        :streamTitle="stream.streamer_username || 'Live Stream'"
-        :streamPlatform="stream.platform || 'Unknown'"
-        :autoplay="false"
-        :muted="true"
-        @refresh-request="$emit('refresh')"
-        @close="openStreamDetails"
-      />
-    </div>
-    
-    <div class="stream-card-content-wrapper">
-      <div class="stream-card-content" @click="$emit('click')">
-        <div class="stream-header">
-          <h3 class="stream-title">{{ stream.streamer_username }}</h3>
-          <div class="stream-badge">{{ streamType }}</div>
-        </div>
-        
-        <div class="stream-details">
-          <!-- Stream URL -->
-          <div class="detail-item">
-            <font-awesome-icon icon="link" class="detail-icon" />
-            <div class="detail-text url-text" @click.stop="openStreamUrl">
-              {{ formatRoomUrl(stream.room_url) }}
-            </div>
-          </div>
-          
-          <!-- Assignments -->
-          <div class="detail-item">
-            <font-awesome-icon icon="users" class="detail-icon" />
-            <div class="detail-text">
-              {{ assignmentsText }}
-            </div>
-          </div>
-          
-          <!-- Stream Status -->
-          <div class="detail-item">
-            <font-awesome-icon :icon="statusIcon" class="detail-icon" :class="statusClass" />
-            <div class="detail-text" :class="statusClass">
-              {{ statusText }}
-            </div>
-          </div>
-        </div>
+  <div
+    :class="[
+      'mobile-stream-card',
+      { 'online': isOnline },
+      { 'offline': !isOnline },
+      { 'detecting': isDetecting }
+    ]"
+    @click="handleCardClick"
+  >
+    <div class="video-container">
+      <video ref="videoPlayer" class="video-player"></video>
+      <div v-if="detectionCount > 0" class="detection-badge">
+        <span>{{ detectionCount }}</span>
       </div>
-      
-      <div class="stream-actions">
-        <button 
-          class="refresh-button" 
-          @click.stop="$emit('refresh')"
-          :disabled="isRefreshing"
-          :class="{ 'refreshing': isRefreshing }"
-        >
-          <font-awesome-icon icon="sync" :class="{ 'fa-spin': isRefreshing }" />
+      <div class="stream-overlay">
+        <button class="view-details-btn">
+          <font-awesome-icon icon="eye" />
         </button>
       </div>
+      <div class="detection-controls">
+        <button
+          class="detection-toggle"
+          :class="{ 'active': isDetecting, 'loading': !canToggleDetection }"
+          @click.stop="toggleDetection"
+          :title="isDetecting ? 'Stop monitoring' : 'Start monitoring'"
+        >
+          <span class="detection-icon">
+            <font-awesome-icon v-if="!canToggleDetection" icon="spinner" spin />
+            <font-awesome-icon v-else :icon="isDetecting ? 'stop-circle' : 'play-circle'" />
+          </span>
+        </button>
+      </div>
+    </div>
+    <div class="stream-info">
+      <div class="info-top-row">
+        <h3 class="stream-title" :title="stream.streamer_username">{{ stream.streamer_username }}</h3>
+        <span class="platform-tag" :class="stream.platform.toLowerCase()">
+          {{ stream.platform }}
+        </span>
+      </div>
+      <div class="stream-meta">
+        <div class="agent-badge" :class="{'unassigned': !stream.agent?.username}">
+          <font-awesome-icon :icon="stream.agent?.username ? 'user-check' : 'user-clock'" />
+          <span>{{ stream.agent?.username || 'Unassigned' }}</span>
+        </div>
+      </div>
+      <div class="stream-stats">
+        <div class="stat-item">
+          <font-awesome-icon icon="clock" />
+          <span>{{ getStreamTime() }}</span>
+        </div>
+        <div class="stat-item alert-stat" :class="{'has-alerts': detectionCount > 0}">
+          <font-awesome-icon icon="bell" />
+          <span>{{ detectionCount }} {{ detectionCount === 1 ? 'alert' : 'alerts' }}</span>
+        </div>
+        <div v-if="isDetecting" class="stat-item monitor-stat">
+          <font-awesome-icon icon="eye" />
+          <span>Monitoring</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-footer">
+      <button
+        class="detection-btn"
+        :disabled="!canToggleDetection"
+        @click.stop="toggleDetection"
+      >
+        {{ getDetectionButtonText() }}
+      </button>
+      <span v-if="isDetecting" class="detecting-indicator">Detecting</span>
     </div>
   </div>
 </template>
 
 <script>
-import { computed, ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import MobileVideoPlayer from './MobileVideoPlayer.vue'
 import axios from 'axios'
 
@@ -128,79 +141,95 @@ export default {
     })
     
     // Stream status
-    const isStreamActive = computed(() => {
-      return props.stream.m3u8_url ? true : false
-    })
-    
-    const statusText = computed(() => {
-      return isStreamActive.value ? 'Online' : 'Offline'
-    })
-    
-    const statusIcon = computed(() => {
-      return isStreamActive.value ? 'circle' : 'times-circle'
-    })
-    
-    const statusClass = computed(() => {
-      return isStreamActive.value ? 'status-online' : 'status-offline'
-    })
-    
+    const isOnline = ref(false)
+    const isLoading = ref(true)
+    const isDetecting = ref(false)
+    const canToggleDetection = ref(true)
+    const checkStatusInterval = ref(null)
+    const streamStatus = ref('unknown')
+
+    const showToast = (message, type = 'success') => {
+      // This is a placeholder. Replace with your actual toast notification system if available.
+      console.log(`[Toast ${type}]: ${message}`)
+      alert(`[${type.toUpperCase()}]: ${message}`)
+    }
+
+    const checkStreamStatus = async () => {
+      try {
+        const response = await axios.get(`/api/detection-status/${props.stream.id}`)
+        isDetecting.value = response.data.active
+        streamStatus.value = response.data.status || 'unknown'
+        // Update online status based on stream status
+        isOnline.value = streamStatus.value === 'online'
+        isLoading.value = false
+      } catch (error) {
+        console.error('Error checking stream status:', error)
+        isLoading.value = false
+      }
+    }
+
+    const toggleDetection = async () => {
+      if (!canToggleDetection.value) return
+      
+      canToggleDetection.value = false
+      try {
+        if (isDetecting.value) {
+          // Stop detection
+          await axios.post('/api/trigger-detection', {
+            stream_id: props.stream.id,
+            stop: true
+          })
+          isDetecting.value = false
+          streamStatus.value = 'offline'
+          isOnline.value = false
+          showToast(`Detection stopped for ${props.stream.streamer_username}`, 'info')
+        } else {
+          // Check if detection is already active before starting
+          const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`)
+          if (statusResponse.data.active) {
+            isDetecting.value = true
+            streamStatus.value = statusResponse.data.status || 'online'
+            isOnline.value = streamStatus.value === 'online'
+            showToast(`Detection is already active for ${props.stream.streamer_username}`, 'info')
+          } else {
+            // Start detection using stream_id
+            await axios.post('/api/trigger-detection', {
+              stream_id: props.stream.id
+            })
+            isDetecting.value = true
+            streamStatus.value = 'online'
+            isOnline.value = true
+            showToast(`Detection started for ${props.stream.streamer_username}`, 'success')
+          }
+        }
+      } catch (error) {
+        console.error('Error toggling detection:', error)
+        showToast(`Error toggling detection for ${props.stream.streamer_username}: ${error.message}`, 'error')
+      } finally {
+        canToggleDetection.value = true
+      }
+    }
+
+    const getDetectionButtonText = () => {
+      if (!canToggleDetection.value) return 'Loading...'
+      return isDetecting.value ? 'Stop' : 'Monitor'
+    }
+
     // Open stream details modal (for video player)
     const openStreamDetails = () => {
       emit('click');
     }
     
-    const isDetecting = ref(false)
-    const canToggleDetection = ref(true)
-
-    const checkDetectionStatus = async () => {
-      try {
-        const response = await axios.get(`/api/detection-status/${props.stream.id}`);
-        isDetecting.value = response.data.active;
-      } catch (error) {
-        console.error('Error checking detection status:', error);
-        isDetecting.value = false;
-      }
-    };
-
-    const toggleDetection = async () => {
-      if (!canToggleDetection.value) return;
-
-      try {
-        // First check current status
-        const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`);
-        const currentlyActive = statusResponse.data.active;
-        
-        if (currentlyActive) {
-          // Detection is already running, inform user
-          alert('Detection is already active for this stream');
-          isDetecting.value = true;
-          return;
-        }
-        
-        // Detection is not active, start it
-        const response = await axios.post('/api/trigger-detection', {
-          stream_url: props.stream.room_url,
-          enable: true
-        });
-        
-        if (response.data.status === 'success') {
-          isDetecting.value = true;
-          emit('detectionToggled', props.stream.id, true);
-        } else {
-          alert('Failed to start detection: ' + response.data.message);
-          isDetecting.value = false;
-        }
-      } catch (error) {
-        console.error('Error toggling detection:', error);
-        alert('Error toggling detection: ' + error.message);
-        isDetecting.value = false;
-      }
-    };
-    
-    // Check status on component mount
     onMounted(() => {
-      checkDetectionStatus();
-    });
+      checkStreamStatus()
+      checkStatusInterval.value = setInterval(checkStreamStatus, 30000)
+    })
+
+    onBeforeUnmount(() => {
+      if (checkStatusInterval.value) {
+        clearInterval(checkStatusInterval.value)
+      }
+    })
     
     return {
       streamType,
@@ -209,12 +238,13 @@ export default {
       openStreamUrl,
       openStreamDetails,
       assignmentsText,
-      statusText,
-      statusIcon,
-      statusClass,
+      isOnline,
+      isLoading,
       isDetecting,
-      checkDetectionStatus,
-      toggleDetection
+      canToggleDetection,
+      checkStreamStatus,
+      toggleDetection,
+      getDetectionButtonText
     }
   }
 }
@@ -245,26 +275,55 @@ export default {
   transform: scale(0.98);
 }
 
-.stream-preview {
+.video-container {
+  position: relative;
   width: 100%;
+  height: 200px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-[data-theme='dark'] .stream-preview {
+[data-theme='dark'] .video-container {
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.stream-card-content-wrapper {
-  display: flex;
+.video-player {
   width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.stream-card-content {
+.stream-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.stream-overlay:hover {
+  opacity: 1;
+}
+
+.view-details-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.stream-info {
   flex: 1;
   padding: 15px;
 }
 
-.stream-header {
+.info-top-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -282,7 +341,7 @@ export default {
   color: var(--dark-text);
 }
 
-.stream-badge {
+.platform-tag {
   font-size: 0.7rem;
   padding: 3px 8px;
   border-radius: 12px;
@@ -290,45 +349,45 @@ export default {
   color: white;
 }
 
-[data-theme='dark'] .stream-badge {
+[data-theme='dark'] .platform-tag {
   background-color: var(--dark-secondary);
 }
 
 /* Platform-specific styling */
-.platform-chaturbate .stream-badge {
+.platform-chaturbate .platform-tag {
   background-color: #f90;
 }
 
-.platform-stripchat .stream-badge {
+.platform-stripchat .platform-tag {
   background-color: #ff0066;
 }
 
-.stream-details {
+.stream-meta {
   display: flex;
   flex-direction: column;
   gap: 8px;
   text-rendering: optimizeSpeed; /* Optimize for performance over aesthetics */
 }
 
-.detail-item {
+.agent-badge {
   display: flex;
   align-items: center;
   font-size: 0.85rem;
   transform: translateZ(0); /* Create a new stacking context for better text rendering */
 }
 
-.detail-icon {
+.agent-badge .fa-icon {
   width: 16px;
   margin-right: 10px;
   color: var(--light-text-secondary);
   flex-shrink: 0; /* Prevent icon from shrinking */
 }
 
-[data-theme='dark'] .detail-icon {
+[data-theme='dark'] .agent-badge .fa-icon {
   color: var(--dark-text-secondary);
 }
 
-.detail-text {
+.agent-badge .agent-text {
   color: var(--light-text-secondary);
   white-space: nowrap; /* Prevent text wrapping for better performance */
   overflow: hidden;
@@ -336,58 +395,81 @@ export default {
   max-width: 100%; /* Limit text width */
 }
 
-[data-theme='dark'] .detail-text {
+[data-theme='dark'] .agent-badge .agent-text {
   color: var(--dark-text-secondary);
 }
 
-.url-text {
-  color: var(--light-primary);
-  cursor: pointer;
-}
-
-[data-theme='dark'] .url-text {
-  color: var(--dark-primary);
-}
-
-.url-text:active {
-  opacity: 0.7;
-}
-
-/* Status styles */
-.status-online {
-  color: var(--light-success) !important;
-}
-
-[data-theme='dark'] .status-online {
-  color: var(--dark-success) !important;
-}
-
-.status-offline {
-  color: var(--light-danger) !important;
-}
-
-[data-theme='dark'] .status-offline {
-  color: var(--dark-danger) !important;
-}
-
-/* Stream actions */
-.stream-actions {
+.stream-stats {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 0 15px;
-  background-color: rgba(0, 0, 0, 0.03);
+  gap: 8px;
+  text-rendering: optimizeSpeed; /* Optimize for performance over aesthetics */
 }
 
-[data-theme='dark'] .stream-actions {
-  background-color: rgba(255, 255, 255, 0.03);
+.stat-item {
+  display: flex;
+  align-items: center;
+  font-size: 0.85rem;
+  transform: translateZ(0); /* Create a new stacking context for better text rendering */
 }
 
-.refresh-button {
+.stat-item .fa-icon {
+  width: 16px;
+  margin-right: 10px;
+  color: var(--light-text-secondary);
+  flex-shrink: 0; /* Prevent icon from shrinking */
+}
+
+[data-theme='dark'] .stat-item .fa-icon {
+  color: var(--dark-text-secondary);
+}
+
+.stat-item .stat-text {
+  color: var(--light-text-secondary);
+  white-space: nowrap; /* Prevent text wrapping for better performance */
+  overflow: hidden;
+  text-overflow: ellipsis; /* Add ellipsis for overflowing text */
+  max-width: 100%; /* Limit text width */
+}
+
+[data-theme='dark'] .stat-item .stat-text {
+  color: var(--dark-text-secondary);
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+}
+
+.detection-btn {
   background: none;
   border: none;
-  height: 40px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  background-color: var(--light-primary);
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+[data-theme='dark'] .detection-btn {
+  background-color: var(--dark-primary);
+}
+
+.detection-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.detection-toggle {
+  background: none;
+  border: none;
   width: 40px;
+  height: 40px;
   border-radius: 20px;
   display: flex;
   align-items: center;
@@ -401,39 +483,76 @@ export default {
   touch-action: manipulation; /* Optimize for touch */
 }
 
-[data-theme='dark'] .refresh-button {
+[data-theme='dark'] .detection-toggle {
   color: var(--dark-text-secondary);
 }
 
-.refresh-button:active {
+.detection-toggle:active {
   background-color: rgba(0, 0, 0, 0.1);
   transform: scale(0.95); /* Slight scale down effect on press */
 }
 
-[data-theme='dark'] .refresh-button:active {
+[data-theme='dark'] .detection-toggle:active {
   background-color: rgba(255, 255, 255, 0.1);
 }
 
-.refresh-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none !important; /* Prevent transform when disabled */
+.detection-toggle.active {
+  background-color: var(--light-success);
 }
 
-.refresh-button.refreshing {
-  color: var(--light-primary);
+[data-theme='dark'] .detection-toggle.active {
+  background-color: var(--dark-success);
 }
 
-[data-theme='dark'] .refresh-button.refreshing {
-  color: var(--dark-primary);
+.detection-toggle.loading {
+  background-color: var(--light-danger);
 }
 
-/* Optimized spin animation for the refresh icon */
-@keyframes optimized-spin {
-  to { transform: rotate(360deg); }
+[data-theme='dark'] .detection-toggle.loading {
+  background-color: var(--dark-danger);
 }
 
-.refresh-button .fa-spin {
-  animation: optimized-spin 1s linear infinite;
+.detection-toggle .detection-icon {
+  font-size: 1.2rem;
+}
+
+.detection-toggle.active .detection-icon {
+  color: var(--light-success);
+}
+
+[data-theme='dark'] .detection-toggle.active .detection-icon {
+  color: var(--dark-success);
+}
+
+.detection-toggle.loading .detection-icon {
+  color: var(--light-danger);
+}
+
+[data-theme='dark'] .detection-toggle.loading .detection-icon {
+  color: var(--dark-danger);
+}
+
+.detecting-indicator {
+  font-size: 0.8rem;
+  color: var(--light-text-secondary);
+}
+
+[data-theme='dark'] .detecting-indicator {
+  color: var(--dark-text-secondary);
+}
+
+.detection-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: var(--light-danger);
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 12px;
+}
+
+[data-theme='dark'] .detection-badge {
+  background-color: var(--dark-danger);
 }
 </style>
