@@ -74,13 +74,31 @@ def get_livestream():
 def trigger_detection():
     data = request.get_json()
     stream_url = data.get("stream_url")
+    stream_id = data.get("stream_id")
     stop = data.get("stop", False)
     
-    if not stream_url:
-        return jsonify({"error": "Missing stream_url"}), 400
+    if not stream_url and not stream_id:
+        return jsonify({"error": "Missing stream_url or stream_id"}), 400
 
     if "user_id" not in session:
         return jsonify({"error": "Unauthorized"}), 401
+
+    # If stream_id is provided, fetch the appropriate M3U8 URL
+    if stream_id and not stream_url:
+        stream = Stream.query.get(stream_id)
+        if not stream:
+            return jsonify({"error": "Stream not found"}), 404
+        # Try to find an attribute ending with _m3u8_url
+        for attr in dir(stream):
+            if attr.endswith('_m3u8_url'):
+                stream_url = getattr(stream, attr, '')
+                if stream_url:
+                    break
+        # Fallback to stream_url or room_url if no M3U8 URL is found
+        if not stream_url:
+            stream_url = getattr(stream, 'stream_url', getattr(stream, 'room_url', ''))
+        if not stream_url:
+            return jsonify({"error": "No valid URL found for stream"}), 400
 
     # Check if we need to stop detection
     if stop:
@@ -143,10 +161,20 @@ def detection_status(stream_id):
     # Find the stream by ID
     stream = Stream.query.get_or_404(stream_id)
     # Check if detection is active for this stream
-    is_active = stream.stream_url in detection_threads
+    # Try to find an attribute ending with _m3u8_url
+    stream_url = ''
+    for attr in dir(stream):
+        if attr.endswith('_m3u8_url'):
+            stream_url = getattr(stream, attr, '')
+            if stream_url:
+                break
+    # Fallback to stream_url or room_url if no M3U8 URL is found
+    if not stream_url:
+        stream_url = getattr(stream, 'stream_url', getattr(stream, 'room_url', ''))
+    is_active = stream_url in detection_threads
     return jsonify({
         "stream_id": stream_id,
-        "stream_url": stream.stream_url,
+        "stream_url": stream_url,
         "active": is_active
     })
 

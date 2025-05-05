@@ -121,7 +121,7 @@ export default {
     const isFullscreen = ref(false)
     
     // Add missing variables for stream status
-    const isOnline = ref(true)
+    const isOnline = ref(false)
     const isLoading = ref(true)
     
     // Detection state variables
@@ -142,6 +142,9 @@ export default {
     
     // Add interval for checking stream status if offline
     let streamStatusCheckInterval = ref(null)
+    
+    // Add new variables for video playback status
+    const isPlaying = ref(false)
     
     // Computed property to determine if compact view should be used
     const isCompactView = computed(() => {
@@ -492,6 +495,23 @@ export default {
       }
     }
 
+    // Function to handle video playback status
+    const handleVideoPlayback = () => {
+      const videoElement = document.querySelector('video')
+      if (videoElement) {
+        videoElement.onplay = () => {
+          isPlaying.value = true
+          isOnline.value = true
+        }
+        videoElement.onpause = () => {
+          isPlaying.value = false
+        }
+        videoElement.onended = () => {
+          isPlaying.value = false
+        }
+      }
+    }
+
     // Listen for global events
     onMounted(() => {
       initializeVideo()
@@ -518,6 +538,9 @@ export default {
           }
         })
       }
+      
+      // Handle video playback status
+      handleVideoPlayback()
     })
 
     onBeforeUnmount(() => {
