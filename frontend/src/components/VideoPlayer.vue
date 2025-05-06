@@ -44,6 +44,7 @@
         :streamer-name="streamerName"
         :is-modal-open="false"
         @refresh-stream="refreshStream"
+        @stream-offline="handleStreamOffline"
         class="inline-player"
       />
       <div v-else class="error-message">No valid stream URL for {{ platform }}.</div>
@@ -61,6 +62,7 @@
             :streamer-name="streamerName"
             :is-modal-open="true"
             @refresh-stream="refreshStream"
+            @stream-offline="handleStreamOffline"
           />
           <button class="close-modal" @click="toggleModal">
             <i class="fas fa-times"></i>
@@ -93,7 +95,7 @@ const HlsPlayer = defineComponent({
     platform: { type: String, required: true },
     streamerName: { type: String, required: true }
   },
-  emits: ['refresh-stream'],
+  emits: ['refresh-stream', 'stream-offline'],
   setup(props, { emit }) {
     const videoRef = ref(null);
     const controlsRef = ref(null);
@@ -206,6 +208,7 @@ const HlsPlayer = defineComponent({
                   hasError.value = true;
                   isLoading.value = false;
                   errorMessage.value = "Network error - check your connection";
+                  emit('stream-offline');
                 }
                 break;
               case window.Hls.ErrorTypes.MEDIA_ERROR:
@@ -224,12 +227,14 @@ const HlsPlayer = defineComponent({
                   hasError.value = true;
                   isLoading.value = false;
                   errorMessage.value = "Media playback error";
+                  emit('stream-offline');
                 }
                 break;
               default:
                 hasError.value = true;
                 isLoading.value = false;
                 errorMessage.value = data.details || "Fatal playback error";
+                emit('stream-offline');
                 break;
             }
           } else {
@@ -260,6 +265,7 @@ const HlsPlayer = defineComponent({
             .catch(err => {
               console.error("Playback error:", err);
               showControls.value = true; // Show play button when autoplay fails
+              emit('stream-offline');
             });
         });
         
@@ -272,6 +278,7 @@ const HlsPlayer = defineComponent({
             hasError.value = true;
             isLoading.value = false;
             errorMessage.value = "Playback error - try refreshing";
+            emit('stream-offline');
           }
         });
       } else {
@@ -1040,6 +1047,12 @@ export default defineComponent({
       }, 100);
     });
     
+    const handleStreamOffline = () => {
+      isOnline.value = false;
+      m3u8Url.value = null;
+      toast.warning(`${props.platform} stream went offline`);
+    };
+    
     return {
       isOnline,
       isModalOpen,
@@ -1055,7 +1068,8 @@ export default defineComponent({
       toggleModal,
       refreshStream,
       handleThumbnailError,
-      viewerCount
+      viewerCount,
+      handleStreamOffline
     };
   }
 });

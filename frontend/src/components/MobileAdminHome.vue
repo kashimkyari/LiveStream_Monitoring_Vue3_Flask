@@ -206,12 +206,12 @@ export default {
   justify-content: center; 
   gap: 16px; 
   margin-bottom: 16px; 
+  margin-top: 0; 
   flex-wrap: nowrap; 
   padding: 0 20px; 
 }
 @media (max-width: 400px) {
   .quick-actions { 
-    flex-wrap: wrap; 
     justify-content: center; 
   }
   .action-button { 

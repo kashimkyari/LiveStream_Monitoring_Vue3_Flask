@@ -25,9 +25,6 @@
             {{ agent.online ? 'Online' : 'Offline' }}
           </span>
         </div>
-        <button class="delete-btn" @click.stop="confirmDeleteAgent(agent.id)">
-          <font-awesome-icon icon="trash" />
-        </button>
       </div>
       <p v-if="loading" class="loading-text">Loading agents...</p>
       <p v-else-if="!filteredAgents.length" class="no-data">No agents found</p>
@@ -101,6 +98,9 @@
         <div class="modal-header">
           <h3>{{ isEditing ? 'Edit Agent' : 'Agent Details' }}</h3>
           <div class="header-actions">
+            <button class="delete-btn" @click="confirmDeleteAgent(selectedAgent.id)">
+              <font-awesome-icon icon="trash" />
+            </button>
             <button v-if="!isEditing" class="edit-btn" @click="startEditing">
               <font-awesome-icon icon="edit" />
             </button>
@@ -210,6 +210,8 @@
                 </div>
               </div>
             </div>
+            <div class="form-actions">
+            </div>
           </div>
         </div>
       </div>
@@ -224,7 +226,6 @@
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { useToast } from 'vue-toastification'
-import Swal from 'sweetalert2'
 
 export default {
   name: 'MobileAdminAgents',
@@ -232,7 +233,7 @@ export default {
     isDarkTheme: Boolean
   },
   emits: ['agent-selected'],
-  setup(props) {
+  setup() {
     const toast = useToast()
     const searchQuery = ref('')
     const showAddModal = ref(false)
@@ -332,15 +333,6 @@ export default {
       showAddModal.value = false
       newAgent.value = { username: '', email: '', password: '', receiveUpdates: false }
     }
-
-    // Helper for theme-based Swal classes
-    const swalThemeClass = () => ({
-      popup: props.isDarkTheme ? 'swal-dark' : 'swal-light',
-      title: 'swal-title',
-      content: 'swal-text',
-      confirmButton: 'swal-confirm',
-      cancelButton: 'swal-cancel'
-    })
 
     const showAgentDetails = async (agent) => {
       selectedAgent.value = agent
@@ -505,18 +497,7 @@ export default {
     }
 
     const confirmDeleteAgent = async (agentId) => {
-      const result = await Swal.fire({
-        title: 'Are you sure?',
-        text: 'This action will permanently delete the agent!',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Delete',
-        cancelButtonText: 'Cancel',
-        customClass: swalThemeClass(),
-        buttonsStyling: false
-      })
-
-      if (result.isConfirmed) {
+      if (confirm('Are you sure you want to delete this agent? This action cannot be undone.')) {
         await deleteAgent(agentId)
       }
     }
@@ -845,8 +826,10 @@ export default {
   color: var(--text-color);
 }
 
+/* Header Actions Buttons */
 .edit-btn,
-.close-btn {
+.close-btn,
+.delete-btn {
   width: 36px;
   height: 36px;
   border-radius: var(--border-radius-sm);
@@ -860,9 +843,18 @@ export default {
   transition: var(--transition);
 }
 
+.delete-btn {
+  background-color: var(--danger-color);
+  color: white;
+}
+
 .edit-btn:hover,
 .close-btn:hover {
   background-color: var(--primary-light);
+}
+
+.delete-btn:hover {
+  background-color: #d32f2f;
 }
 
 /* Form Styles */
@@ -1205,8 +1197,8 @@ export default {
   }
 
   .delete-btn {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
   }
 }
 

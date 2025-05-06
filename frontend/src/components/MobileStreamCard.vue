@@ -17,6 +17,13 @@
       <div v-if="detectionCount > 0" class="detection-badge">
         <span>{{ detectionCount }}</span>
       </div>
+      <!-- Viewer count overlay for Stripchat streams only -->
+      <div v-if="isStripchatStream" class="viewer-count-overlay">
+        <span class="viewer-count">
+          <font-awesome-icon icon="eye" />
+          {{ viewers }}
+        </span>
+      </div>
       <div class="stream-overlay">
         <button class="view-details-btn">
           <font-awesome-icon icon="eye" />
@@ -63,6 +70,11 @@
         <div class="stat-item alert-stat" :class="{'has-alerts': detectionCount > 0}">
           <font-awesome-icon icon="bell" />
           <span>{{ detectionCount }} {{ detectionCount === 1 ? 'alert' : 'alerts' }}</span>
+        </div>
+        <!-- Add viewer count stat item for Stripchat streams -->
+        <div v-if="isStripchatStream" class="stat-item viewer-stat">
+          <font-awesome-icon icon="eye" />
+          <span>{{ viewers }} viewers</span>
         </div>
         <div v-if="isDetecting" class="stat-item monitor-stat">
           <font-awesome-icon icon="eye" />
@@ -127,9 +139,14 @@ export default {
     const eventBus = inject('eventBus', null)
     const isDarkTheme = inject('theme', ref(true))
     const toast = useToast()
+    // Viewer count for Stripchat streams
+    const viewers = ref(0)
+    const viewersRefreshInterval = ref(null)
     
     let hls = null
     let detectionInterval = null
+    let streamStatusCheckInterval = ref(null)
+    const isPlaying = ref(false)
 
     const showToast = (message, type = 'success') => {
       console.log(`[Toast ${type}]: ${message}`)
@@ -151,6 +168,11 @@ export default {
         }
       })
       return names.join(', ')
+    })
+    
+    // Computed property to check if stream is from Stripchat
+    const isStripchatStream = computed(() => {
+      return props.stream?.platform?.toLowerCase() === 'stripchat'
     })
 
     const fetchAllAgents = async () => {
@@ -187,6 +209,60 @@ export default {
         }
       }
     }
+    
+    // Fetch viewer count for Stripchat streams
+    const fetchViewerCount = async () => {
+      // Only proceed if this is a Stripchat stream
+      if (!isStripchatStream.value) return
+      
+      const username = getStreamerUsername()
+      if (!username) return
+      
+      try {
+        const response = await axios.get(`/api/stripchat-viewers/${username}`)
+        
+        // Extract guest count from response
+        if (response.data && response.data.guests !== undefined) {
+          // Update viewers with just the guests count for Stripchat
+          viewers.value = response.data.guests
+          
+          // Add animation for viewer count update
+          anime({
+            targets: '.viewer-count',
+            scale: [1, 1.1, 1],
+            duration: 300,
+            easing: 'easeOutQuad'
+          })
+        }
+      } catch (error) {
+        console.error('Error fetching viewer count:', error)
+      }
+    }
+    
+    // Get username from stream data
+    const getStreamerUsername = () => {
+      if (!props.stream || !props.stream.streamer_username) return null
+      return props.stream.streamer_username
+    }
+    
+    // Set up viewer count refresh for Stripchat streams
+    const setupViewerCountRefresh = () => {
+      if (isStripchatStream.value) {
+        // Initial fetch
+        fetchViewerCount()
+        
+        // Set up interval for periodic refresh (every 30 seconds)
+        viewersRefreshInterval.value = setInterval(fetchViewerCount, 30000)
+      }
+    }
+    
+    // Clean up viewer count refresh interval
+    const cleanupViewerCountRefresh = () => {
+      if (viewersRefreshInterval.value) {
+        clearInterval(viewersRefreshInterval.value)
+        viewersRefreshInterval.value = null
+      }
+    }
 
     watch(() => props.stream.assignments, () => {
       if (!allAgentsFetched.value) {
@@ -196,11 +272,19 @@ export default {
 
     const checkStreamStatus = async () => {
       try {
-        const response = await axios.get(`/api/streams/${props.stream.id}/status`)
-        isOnline.value = response.data.status === 'online'
+        const response = await axios.get(`/api/detection-status/${props.stream.id}`)
+        isDetecting.value = response.data.active
+        streamStatus.value = response.data.status || 'unknown'
+        isOnline.value = streamStatus.value === 'online'
+        isLoading.value = false
+        if (isPlaying.value && streamStatus.value !== 'online') {
+          await axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
+          streamStatus.value = 'online'
+          isOnline.value = true
+        }
       } catch (error) {
-        console.error('Status check failed:', error)
-        isOnline.value = false
+        console.error('Error checking stream status:', error)
+        isLoading.value = false
       }
     }
 
@@ -288,31 +372,83 @@ export default {
     const initializeVideo = () => {
       const m3u8Url = getStreamUrl()
       if (!m3u8Url) {
+        console.error('No HLS URL available for this stream')
         isOnline.value = false
+        streamStatus.value = 'offline'
+        isLoading.value = false
         return
       }
 
       if (Hls.isSupported() && videoPlayer.value) {
-        hls = new Hls()
+        hls = new Hls({
+          startLevel: 0,
+          capLevelToPlayerSize: true,
+          maxBufferLength: 30
+        })
         hls.loadSource(m3u8Url)
         hls.attachMedia(videoPlayer.value)
         
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          videoPlayer.value.play()
+          videoPlayer.value.muted = true
+          videoPlayer.value.play().catch(e => {
+            console.warn('Autoplay prevented:', e)
+          })
           isOnline.value = true
+          streamStatus.value = 'online'
+          isLoading.value = false
+          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
+            .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
+            .catch(error => console.error('Failed to update stream status:', error))
         })
         
         hls.on(Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
-            isOnline.value = false
-            hls.destroy()
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.error('HLS network error:', data)
+                isOnline.value = false
+                streamStatus.value = 'offline'
+                isLoading.value = false
+                hls.stopLoad()
+                hls.detachMedia()
+                reportStreamOffline(props.stream.id)
+                break
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.error('HLS media error:', data)
+                hls.recoverMediaError()
+                break
+              default:
+                console.error('Unrecoverable HLS error:', data)
+                hls.destroy()
+                isOnline.value = false
+                streamStatus.value = 'offline'
+                isLoading.value = false
+                reportStreamOffline(props.stream.id)
+                break
+            }
           }
         })
-      } else if (videoPlayer.value?.canPlayType('application/vnd.apple.mpegurl')) {
+      } else if (videoPlayer.value && videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) {
         videoPlayer.value.src = m3u8Url
         videoPlayer.value.addEventListener('loadedmetadata', () => {
-          videoPlayer.value.play()
+          videoPlayer.value.muted = true
+          videoPlayer.value.play().catch(e => {
+            console.warn('Autoplay prevented:', e)
+          })
           isOnline.value = true
+          streamStatus.value = 'online'
+          isLoading.value = false
+          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
+            .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
+            .catch(error => console.error('Failed to update stream status:', error))
+        })
+        videoPlayer.value.addEventListener('error', () => {
+          isOnline.value = false
+          streamStatus.value = 'offline'
+          isLoading.value = false
+          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'offline' })
+            .then(() => console.log(`Updated stream ${props.stream.id} status to offline`))
+            .catch(error => console.error('Failed to update stream status:', error))
         })
       }
     }
@@ -330,9 +466,39 @@ export default {
     const handleVideoPlayback = () => {
       const videoElement = videoPlayer.value
       if (videoElement) {
-        videoElement.onplay = () => isOnline.value = true
-        videoElement.onerror = () => isOnline.value = false
-        videoElement.onended = () => isOnline.value = false
+        videoElement.onplay = () => {
+          isPlaying.value = true
+          isOnline.value = true
+          streamStatus.value = 'online'
+          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
+            .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
+            .catch(error => console.error('Failed to update stream status:', error))
+        }
+        videoElement.onpause = () => {
+          isPlaying.value = false
+        }
+        videoElement.onended = () => {
+          isPlaying.value = false
+        }
+        videoElement.onerror = () => {
+          isOnline.value = false
+          streamStatus.value = 'offline'
+          isLoading.value = false
+          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'offline' })
+            .then(() => console.log(`Updated stream ${props.stream.id} status to offline`))
+            .catch(error => console.error('Failed to update stream status:', error))
+        }
+      }
+    }
+
+    const reportStreamOffline = async (streamId) => {
+      try {
+        await axios.post(`/api/streams/${streamId}/status`, { status: 'offline' })
+        streamStatus.value = 'offline'
+        isOnline.value = false
+        console.log(`Reported stream ${streamId} as offline`)
+      } catch (error) {
+        console.error('Failed to report stream offline:', error)
       }
     }
 
@@ -369,6 +535,19 @@ export default {
         isDetecting.value = false
       }
     })
+    
+    // Watch for platform changes and set up viewer count refresh accordingly
+    watch(() => props.stream.platform, (newPlatform) => {
+      // Clean up existing interval if any
+      cleanupViewerCountRefresh()
+      
+      // Reset viewers count when platform changes
+      viewers.value = 0
+      
+      if (newPlatform?.toLowerCase() === 'stripchat') {
+        setupViewerCountRefresh()
+      }
+    })
 
     onMounted(async () => {
       initializeVideo()
@@ -377,11 +556,20 @@ export default {
       if (isOnline.value) {
         startDetectionInterval()
       }
+      streamStatusCheckInterval.value = setInterval(checkStreamStatus, 120000) // Check every 2 minutes
+      // Set up viewer count refresh for Stripchat
+      setupViewerCountRefresh()
     })
 
     onBeforeUnmount(() => {
       stopDetectionInterval()
       if (hls) hls.destroy()
+      if (streamStatusCheckInterval.value) {
+        clearInterval(streamStatusCheckInterval.value)
+      }
+      if (viewersRefreshInterval.value) {
+        clearInterval(viewersRefreshInterval.value)
+      }
     })
 
     watch(() => props.stream.status, (newStatus) => {
@@ -398,6 +586,8 @@ export default {
       detectionCount: props.detectionCount,
       hasAssignedAgents,
       assignedAgentNames,
+      viewers,
+      isStripchatStream,
       toggleDetection,
       getDetectionButtonText,
       getStreamTime,
@@ -742,5 +932,31 @@ export default {
 [data-theme='light'] .offline-watermark {
   background-color: rgba(255, 255, 255, 0.7);
   color: black;
+}
+
+/* Add viewer count overlay styles */
+.viewer-count-overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+}
+
+.viewer-count {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(2px);
+  transition: all 0.2s ease;
+}
+
+.viewer-count:hover {
+  background-color: rgba(0, 0, 0, 0.85);
 }
 </style>
