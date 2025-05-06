@@ -236,7 +236,10 @@
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { useToast } from 'vue-toastification'
+<<<<<<< HEAD
 import ConfirmationModal from './ConfirmationModal.vue'
+=======
+>>>>>>> 7f0dea9 (Added online/offline stream sections to MobileAdminStreams.vue and MobileAgentStreams.vue based on DashboardTab.vue structure)
 
 export default {
   name: 'MobileAdminAgents',
@@ -518,12 +521,17 @@ export default {
     }
 
     const confirmDeleteAgent = async (agentId) => {
+<<<<<<< HEAD
       showConfirmationModal.value = true
       confirmationConfig.value = {
         title: 'Delete Agent',
         message: 'Are you sure you want to delete this agent? This action cannot be undone.',
         actionText: 'Delete',
         onConfirm: () => deleteAgent(agentId)
+=======
+      if (confirm('Are you sure you want to delete this agent? This action cannot be undone.')) {
+        await deleteAgent(agentId)
+>>>>>>> 7f0dea9 (Added online/offline stream sections to MobileAdminStreams.vue and MobileAgentStreams.vue based on DashboardTab.vue structure)
       }
     }
 
