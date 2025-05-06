@@ -33,6 +33,24 @@ const FlagSettingsPage = () => import('../components/FlagSettingsPage.vue');
 
 // Define routes
 const routes = [
+  {
+    path: '/',
+    name: 'Login',
+    component: MobileLogin,
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/admin-dashboard',
+    name: 'AdminDashboard',
+    component: MobileAdminDashboard,
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/agent-dashboard',
+    name: 'AgentDashboard',
+    component: MobileAgentDashboard,
+    meta: { requiresAuth: true, requiresAgent: true }
+  },
   { path: '/agent/streams', component: MobileAgentStreams, meta: { requiresAuth: true, role: 'agent' } },
   { path: '/admin/streams', component: MobileAdminStreams, meta: { requiresAuth: true, role: 'admin' } },
   { path: '/admin/agents', component: MobileAdminAgents, meta: { requiresAuth: true, role: 'admin' } },
@@ -70,5 +88,33 @@ const router = createRouter({
   history: createWebHistory(),
   routes,
 });
+
+// Route guard to check user roles
+const checkUserRole = (to, from, next) => {
+  const userRole = localStorage.getItem('userRole')
+  
+  // If no role is set, redirect to login
+  if (!userRole) {
+    next('/')
+    return
+  }
+
+  // Check if trying to access admin routes
+  if (to.meta.requiresAdmin && userRole !== 'admin') {
+    next('/agent-dashboard')
+    return
+  }
+
+  // Check if trying to access agent routes
+  if (to.meta.requiresAgent && userRole !== 'agent') {
+    next('/admin-dashboard')
+    return
+  }
+
+  next()
+}
+
+// Add the guard to all routes
+router.beforeEach(checkUserRole)
 
 export default router; 

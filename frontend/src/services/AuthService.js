@@ -42,11 +42,14 @@ class AuthService {
       });
       
       if (response.data && response.data.success) {
+        // Validate user role from server response
+        const userRole = response.data.user.role || (username === 'admin' ? 'admin' : 'agent');
+        
         // Create session with user data and token
-        sessionService.createSession(
-          response.data.user, 
-          response.data.token || null
-        );
+        sessionService.createSession({
+          ...response.data.user,
+          role: userRole // Ensure role is set
+        }, response.data.token || null);
         
         // Set theme if not set
         if (!localStorage.getItem('theme')) {
@@ -55,7 +58,10 @@ class AuthService {
         
         return {
           success: true,
-          user: response.data.user
+          user: {
+            ...response.data.user,
+            role: userRole
+          }
         };
       } else {
         return {

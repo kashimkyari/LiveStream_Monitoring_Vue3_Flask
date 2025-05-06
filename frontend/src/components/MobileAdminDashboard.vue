@@ -1,16 +1,6 @@
 <template>
   <div class="mobile-admin-dashboard" :data-theme="isDarkTheme ? 'dark' : 'light'">
-    <div class="mobile-header">
-      <div class="header-title">
-        <h1>Admin Dashboard</h1>
-        <span class="mobile-tag">Mobile</span>
-      </div>
-      <div class="header-actions">
-        <button class="refresh-button" @click="refreshData" :disabled="refreshing">
-          <font-awesome-icon icon="sync" :class="{ 'fa-spin': refreshing }" />
-        </button>
-      </div>
-    </div>
+    
 
     <div class="mobile-tabs">
       <div

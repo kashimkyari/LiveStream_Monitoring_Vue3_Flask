@@ -214,6 +214,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Blur effect for parent component when modal is open -->
+    <div class="modal-overlay" v-if="showAddModal || showDetailsModal"></div>
   </div>
 </template>
 
@@ -1249,5 +1252,22 @@ export default {
 
 .status-icon.assigned-icon {
   color: var(--success-color);
+}
+
+/* Blur effect for parent component when modal is open */
+.mobile-admin-agents.modal-open {
+  filter: blur(5px);
+  pointer-events: none;
+}
+
+/* Overlay for blur effect */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 999;
 }
 </style>
