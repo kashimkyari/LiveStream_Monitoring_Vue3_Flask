@@ -361,7 +361,7 @@ import { io } from 'socket.io-client';
 import anime from 'animejs/lib/anime.es.js';
 
 // Configure axios to use the backend URL
-axios.defaults.baseURL = 'https://monitor-backend.jetcamstudio.com:5000';
+axios.defaults.baseURL = 'http://localhost:5000';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import { 
   faSearch, faArrowLeft, faPhone, faVideo, faInfoCircle, 
@@ -479,15 +479,15 @@ export default {
     
     // Methods
     const initSocket = () => {
-      // Connect to the backend at https://monitor-backend.jetcamstudio.com:5000
-      socket.value = io('https://monitor-backend.jetcamstudio.com:5000', { 
+      // Connect to the backend at http://localhost:5000
+      socket.value = io('http://localhost:5000', { 
         path: '/ws',
         transports: ['websocket'],
         secure: true
       });
       
       socket.value.on('connect', () => {
-        console.log('Connected to WebSocket server at https://monitor-backend.jetcamstudio.com:5000');
+        console.log('Connected to WebSocket server at http://localhost:5000');
         isConnected.value = true;
         
         // Send pending messages if any

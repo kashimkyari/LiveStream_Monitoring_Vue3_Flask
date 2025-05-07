@@ -70,6 +70,7 @@
         <StreamCard 
           v-for="(stream, index) in filteredOnlineStreams" 
           :key="stream.id"
+          :data-stream-id="stream.id"
           :stream="enhanceStreamWithUsername(stream)" 
           :index="index"
           :detectionCount="getDetectionCount(stream)"
@@ -77,6 +78,7 @@
           class="stream-card"
           @click="openStream(stream, index)"
           @detection-toggled="handleDetectionToggled"
+          @status-change="handleStreamStatusChange"
         ></StreamCard>
       </div>
       
@@ -90,6 +92,7 @@
         <StreamCard 
           v-for="(stream, index) in filteredOfflineStreams" 
           :key="stream.id"
+          :data-stream-id="stream.id"
           :stream="enhanceStreamWithUsername(stream)" 
           :index="index"
           :detectionCount="getDetectionCount(stream)"
@@ -97,6 +100,7 @@
           class="stream-card"
           @click="openStream(stream, index)"
           @detection-toggled="handleDetectionToggled"
+          @status-change="handleStreamStatusChange"
         ></StreamCard>
       </div>
     </div>
@@ -125,7 +129,7 @@ export default {
       default: () => []
     }
   },
-  emits: ['open-stream', 'refresh-streams'],
+  emits: ['open-stream', 'refresh-streams', 'update-streams'],
   setup(props, { emit }) {
     const statsSection = ref(null);
     const searchQuery = ref('');
@@ -220,11 +224,67 @@ export default {
       };
     };
 
-    const handleDetectionToggled = (data) => {
-      console.log(`Detection ${data.active ? 'started' : 'stopped'} for ${data.stream.streamer_username}`);
-      // You can add additional logic here, like showing a notification
+    const handleDetectionToggled = async (data) => {
+      // Create a copy of the streams array to modify
+      const updatedStreams = [...props.streams];
+      const streamIndex = updatedStreams.findIndex(s => s.id === data.streamId);
+      
+      if (streamIndex !== -1) {
+        // Update the stream's detection status in the local copy
+        updatedStreams[streamIndex] = {
+          ...updatedStreams[streamIndex],
+          isDetecting: data.active
+        };
+        
+        // Emit an event to update the parent's streams
+        emit('update-streams', updatedStreams);
+        
+        console.log(`Detection ${data.active ? 'started' : 'stopped'} for stream ID: ${data.streamId}`);
+      }
     };
-    
+
+    const handleStreamStatusChange = async ({ streamId, oldStatus, newStatus }) => {
+      // Create a copy of the streams array to modify
+      const updatedStreams = [...props.streams];
+      const streamIndex = updatedStreams.findIndex(s => s.id === streamId);
+      
+      if (streamIndex !== -1) {
+        // Update the stream's status in the local copy
+        updatedStreams[streamIndex] = {
+          ...updatedStreams[streamIndex],
+          status: newStatus
+        };
+        
+        // Emit an event to update the parent's streams
+        emit('update-streams', updatedStreams);
+        
+        console.log(`Stream ${streamId} status changed from ${oldStatus} to ${newStatus}`);
+        
+        // Animate the transition if the element exists
+        const streamCard = document.querySelector(`[data-stream-id="${streamId}"]`);
+        if (streamCard) {
+          anime({
+            targets: streamCard,
+            opacity: [1, 0],
+            translateY: [0, -20],
+            duration: 300,
+            easing: 'easeOutQuad',
+            complete: () => {
+              // After fade out, update status and fade back in
+              anime({
+                targets: streamCard,
+                opacity: [0, 1],
+                translateY: [20, 0],
+                duration: 300,
+                easing: 'easeOutQuad',
+                delay: 100
+              });
+            }
+          });
+        }
+      }
+    };
+
     const getDetectionCount = (stream) => {
       return props.detections[stream.room_url]?.length || 0;
     };
@@ -351,6 +411,7 @@ export default {
       openStream,
       handleDetectionToggled,
       enhanceStreamWithUsername,
+      handleStreamStatusChange,
       onlineStreams,
       offlineStreams,
       filteredOnlineStreams,

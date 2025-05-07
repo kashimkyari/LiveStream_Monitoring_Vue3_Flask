@@ -38,14 +38,18 @@
         <span>OFFLINE</span>
       </div>
       
-      <!-- Detection toggle button (single instance) -->
+      <!-- Detection toggle button -->
       <div class="detection-controls">
-        <button 
-          class="detection-toggle" 
-          :class="{ 'active': isDetecting, 'loading': !canToggleDetection }"
+        <button
+          class="detection-toggle"
+          :class="{ 
+            'active': isDetecting, 
+            'loading': !canToggleDetection,
+            'online': isOnline 
+          }"
           @click.stop="toggleDetection"
           :title="isDetecting ? 'Stop detection' : 'Start detection'"
-          :disabled="!isOnline"
+          :disabled="!canToggleDetection"
         >
           <span class="detection-icon">
             <font-awesome-icon v-if="!canToggleDetection" icon="spinner" spin />
@@ -121,7 +125,7 @@ export default {
       default: 1
     }
   },
-  emits: ['click', 'assign', 'bookmark', 'mute-change', 'fullscreen', 'detection-toggled'],
+  emits: ['click', 'assign', 'bookmark', 'mute-change', 'fullscreen', 'detection-toggled', 'status-change'],
   setup(props, { emit }) {
     const streamCard = ref(null)
     const videoPlayer = ref(null)
@@ -161,10 +165,18 @@ export default {
     })
 
     // Watch for changes in stream status
-    watch(() => props.stream.status, (newStatus) => {
-      isOnline.value = newStatus === 'online';
-      streamStatus.value = newStatus || 'unknown';
-    });
+    watch(() => props.stream.status, (newStatus, oldStatus) => {
+      if (newStatus !== oldStatus) {
+        isOnline.value = newStatus === 'online';
+        streamStatus.value = newStatus || 'unknown';
+        emit('status-change', {
+          streamId: props.stream.id,
+          oldStatus,
+          newStatus,
+          stream: props.stream
+        });
+      }
+    }, { immediate: true });
 
     // Computed property to get the stream URL (m3u8)
     const streamUrl = computed(() => {
@@ -721,12 +733,18 @@ export default {
     // Add method to report stream offline
     const reportStreamOffline = async (streamId) => {
       try {
-        await axios.post(`/api/streams/${streamId}/status`, { status: 'offline' })
-        streamStatus.value = 'offline'
-        isOnline.value = false
-        console.log(`Reported stream ${streamId} as offline`)
+        await axios.post(`/api/streams/${streamId}/status`, { status: 'offline' });
+        streamStatus.value = 'offline';
+        isOnline.value = false;
+        emit('status-change', {
+          streamId,
+          oldStatus: 'online',
+          newStatus: 'offline',
+          stream: props.stream
+        });
+        console.log(`Reported stream ${streamId} as offline`);
       } catch (error) {
-        console.error('Failed to report stream offline:', error)
+        console.error('Failed to report stream offline:', error);
       }
     }
 
@@ -820,38 +838,51 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  background-color: rgba(40, 167, 69, 0.85); /* Green for idle state */
-  color: white;
-  border: none;
+  padding: 8px 12px;
   border-radius: 20px;
-  padding: 6px 12px;
-  font-size: 0.8rem;
+  border: none;
   cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
   transition: all 0.2s ease;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  background-color: rgba(108, 117, 125, 0.9);
+  color: white;
 }
 
-.detection-toggle:hover:not(:disabled) {
-  background-color: rgba(40, 167, 69, 1); /* Darker green on hover for idle state */
-  transform: translateY(-2px);
+.detection-toggle.online {
+  background-color: rgba(40, 167, 69, 0.9);
 }
 
 .detection-toggle.active {
-  background-color: rgba(255, 193, 7, 0.85); /* Yellow for running state */
+  background-color: rgba(255, 193, 7, 0.9);
 }
 
 .detection-toggle.active:hover:not(:disabled) {
-  background-color: rgba(220, 53, 69, 0.85); /* Red on hover for stop state */
-  transform: translateY(-2px);
-}
-
-.detection-toggle.loading {
-  background-color: rgba(255, 193, 7, 0.85); /* Yellow for loading state */
-  pointer-events: none;
+  background-color: rgba(220, 53, 69, 0.9);
 }
 
 .detection-toggle:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  background-color: rgba(108, 117, 125, 0.9);
+}
+
+.detection-toggle:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.detection-toggle .detection-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.detection-toggle.loading {
+  background-color: rgba(108, 117, 125, 0.9);
 }
 
 /* Monitor stat for active detection */

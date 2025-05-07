@@ -14,7 +14,6 @@ from werkzeug.security import generate_password_hash
 import secrets
 import string
 from flask_cors import CORS
-from flask_migrate import upgrade, current
 
 # Configure logging
 logging.basicConfig(
@@ -173,17 +172,6 @@ def configure_ssl_context():
             
     return ssl_context
 
-def run_migrations(app):
-    '''Run Alembic migrations to ensure database schema is up to date.'''
-    with app.app_context():
-        try:
-            current()  # Check current migration version
-            upgrade()  # Apply any pending migrations
-            app.logger.info('Database migrations applied successfully.')
-        except Exception as e:
-            app.logger.error(f'Failed to apply database migrations: {e}')
-            raise
-
 # === Main Execution ===
 if __name__ == "__main__":
     ssl_context = configure_ssl_context()
@@ -192,16 +180,19 @@ if __name__ == "__main__":
     logging.info(f"Starting server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
     
     app = create_app()
-    run_migrations(app)  # Run migrations before starting the app
-    socketio.run(
-        app,
-        host='0.0.0.0',
-        port=int(os.getenv('PORT', 5000)),
-        debug=debug_mode,
-        use_reloader=debug_mode,
-        allow_unsafe_werkzeug=True,  # Required for gevent with Werkzeug >= 2.0
-        engineio_options={
-            'async_mode': 'gevent',
-            'cors_allowed_origins': allowed_origins
-        }
-    )
+    
+    # Configure Socket.IO options
+    socketio_kwargs = {
+        'app': app,
+        'host': '0.0.0.0',
+        'port': int(os.getenv('PORT', 5000)),
+        'debug': debug_mode,
+        'use_reloader': debug_mode,
+        'allow_unsafe_werkzeug': True
+    }
+
+    # Only add SSL context if SSL is enabled
+    if ssl_context:
+        socketio_kwargs['ssl_context'] = ssl_context
+        
+    socketio.run(**socketio_kwargs)

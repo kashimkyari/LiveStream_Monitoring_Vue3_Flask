@@ -3,7 +3,7 @@ from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-from extensions import db, migrate
+from extensions import db
 from utils.notifications import init_socketio
 
 # Load .env into environment (must be in project root)
@@ -65,7 +65,6 @@ def create_app(config_class=Config):
     # ─── Initialize Extensions ───────────────────────────────────────────
     try:
         db.init_app(app)                     # SQLAlchemy
-        migrate.init_app(app, db)            # Flask-Migrate
     except Exception as e:
         app.logger.error(f"Extension init failed: {e}")
         raise

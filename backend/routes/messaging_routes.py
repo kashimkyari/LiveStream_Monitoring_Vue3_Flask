@@ -1,6 +1,8 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, current_app
+from werkzeug.utils import secure_filename
+import os
 from extensions import db
-from models import ChatMessage, User
+from models import ChatMessage, User, MessageAttachment
 from utils import login_required
 from datetime import datetime
 from utils.notifications import emit_message_update
@@ -84,13 +86,13 @@ def get_messages(receiver_id):
 @login_required()
 def get_online_users():
     try:
-    agents = User.query.filter(User.role.in_(["agent", "admin"])).all()
-    return jsonify([{
-        "id": agent.id,
-        "username": agent.username,
-        "online": agent.online,
-        "last_active": agent.last_active.isoformat() if agent.last_active else None
-    } for agent in agents])
+        agents = User.query.filter(User.role.in_(["agent", "admin"])).all()
+        return jsonify([{
+            "id": agent.id,
+            "username": agent.username,
+            "online": agent.online,
+            "last_active": agent.last_active.isoformat() if agent.last_active else None
+        } for agent in agents])
     except Exception as e:
         current_app.logger.error(f"Error fetching online users: {str(e)}")
         return jsonify({"error": "Failed to fetch online users due to internal error."}), 500
@@ -150,7 +152,7 @@ def upload_attachment():
         mime_type = file.content_type or 'application/octet-stream'
         
         # Create uploads directory if it doesn't exist
-        uploads_dir = os.path.join(app.static_folder, 'uploads')
+        uploads_dir = os.path.join(current_app.static_folder, 'uploads')
         os.makedirs(uploads_dir, exist_ok=True)
         
         # Save file

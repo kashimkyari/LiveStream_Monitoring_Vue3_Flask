@@ -36,7 +36,10 @@ import {
   faUserCheck,
   faUserSecret,
   faChartBar,
-  faSatelliteDish
+  faSatelliteDish,
+  faUserPlus, 
+  faUserClock,
+  faUserCircle
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import Toast from 'vue-toastification';
@@ -81,7 +84,11 @@ library.add(
   faUserCheck,
   faUserSecret,
   faChartBar,
-  faSatelliteDish
+  faSatelliteDish,
+  faUserPlus,
+  faUserClock,
+  faUserCircle
+  
 );
 
 // Create a single app instance
@@ -109,7 +116,7 @@ app.use(Toast, {
   rtl: false
 });
 
-app.config.globalProperties.$socket = io('https://monitor-backend.jetcamstudio.com:5000', {
+app.config.globalProperties.$socket = io('http://localhost:5000', {
   path: '/ws',
   withCredentials: true,
   transports: ['websocket'],

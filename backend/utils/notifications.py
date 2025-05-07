@@ -10,44 +10,17 @@ logger = logging.getLogger(__name__)
 socketio = None
 
 def init_socketio(app):
-    """Initialize socketio with the Flask app"""
-    global socketio
-    if socketio is None:
-        # Get URL scheme from environment or default to http
-        scheme = os.getenv('WEBSOCKET_SCHEME', 'http')
-        
-        # Handle environment configuration
-        is_production = os.getenv('FLASK_ENV', 'development') == 'production'
-        
-        # In production, default to HTTP mode for websockets if not specified
-        if is_production and scheme == 'https':
-            logger.warning(
-                "Production environment detected with HTTPS. "
-                "If certificate issues occur, set WEBSOCKET_SCHEME=http"
-            )
-        
-        socketio = SocketIO(
-            app,
-            cors_allowed_origins=os.getenv('ALLOWED_ORIGINS', '*').split(','),
-            path="/ws",
-            async_mode='gevent',  # Consistent with your original implementation
-            logger=True,
-            engineio_logger=False,
-            # Force HTTP mode for websockets to avoid certificate issues
-            websocket_transport='polling' if scheme == 'https' else 'websocket'
-        )
-        
-        logger.info(f"SocketIO initialized with {scheme} scheme")
-        
-        # Register connection handlers for debugging
-        @socketio.on('connect', namespace='/notifications')
-        def handle_connect():
-            logger.info("Client connected to notifications namespace")
-            
-        @socketio.on('disconnect', namespace='/notifications')
-        def handle_disconnect():
-            logger.info("Client disconnected from notifications namespace")
-            
+    """Initialize SocketIO with proper configuration"""
+    allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else ['*']
+    
+    socketio = SocketIO(
+        app,
+        async_mode='gevent',
+        cors_allowed_origins=allowed_origins,
+        logger=True,
+        engineio_logger=True
+    )
+    
     return socketio
 
 def get_socketio():
