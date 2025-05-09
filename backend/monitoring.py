@@ -20,14 +20,20 @@ import tempfile
 import subprocess
 import queue
 import ffmpeg
+from bs4 import BeautifulSoup
+import pytesseract
+from urllib.parse import urlparse
+from scipy import signal
+from io import BytesIO
 
 from flask import current_app
 from models import (
     ChatKeyword, FlaggedObject, DetectionLog, Stream, User, Assignment,
-    ChaturbateStream, StripchatStream
+    ChaturbateStream, StripchatStream, TelegramRecipient, Log
 )
 from extensions import db
 from utils.notifications import emit_notification, emit_stream_update
+from notifications import send_notifications, send_text_message
 
 # Configure logging
 logging.basicConfig(
@@ -145,8 +151,8 @@ def get_stream_assignment(stream_url):
             return None, None
             
         assignment = Assignment.query.filter_by(stream_id=stream.id).first()
-        if assignment and assignment.agent:
-            return assignment.id, assignment.agent_username
+        if assignment:
+            return assignment.id, assignment.agent_id
         
     return None, None
 
@@ -274,7 +280,7 @@ def process_audio_realtime(stream_url, cancel_event):
 def process_audio_segment(audio_data, stream_url):
     """Process an audio segment for transcription and analysis"""
     try:
-    model = load_whisper_model()
+        model = load_whisper_model()
         if model is None:
             logger.error("Whisper model not loaded")
             return None
@@ -296,13 +302,13 @@ def process_audio_segment(audio_data, stream_url):
             f.write(transcript)
         logger.info(f"Transcript saved to {transcript_file}")
         # Check for keywords
-    keywords = refresh_flagged_keywords()
+        keywords = refresh_flagged_keywords()
         detected_keywords = []
         for kw in keywords:
             if kw in transcript.lower():
                 detected_keywords.append(kw)
         if detected_keywords:
-        sentiment = _sentiment_analyzer.polarity_scores(transcript)
+            sentiment = _sentiment_analyzer.polarity_scores(transcript)
             compound_score = sentiment.get("compound", 0.0)
             detection = {
                 "timestamp": datetime.now().isoformat(),
@@ -646,6 +652,9 @@ def log_chat_detection(detections, stream_url):
 
 def handle_audio_detection(stream_url, transcript, keyword, sentiment_score, platform, streamer_name):
     try:
+        # Get assignment info
+        assignment_id, agent_id = get_stream_assignment(stream_url)
+        
         # Create detection log in database
         detection_log = DetectionLog(
             event_type='audio_detection',
@@ -656,9 +665,12 @@ def handle_audio_detection(stream_url, transcript, keyword, sentiment_score, pla
                 'keyword': keyword,
                 'sentiment_score': sentiment_score,
                 'platform': platform,
-                'streamer_name': streamer_name
+                'streamer_name': streamer_name,
+                'assigned_agent': agent_id
             },
-            read=False
+            read=False,
+            assigned_agent=agent_id,
+            assignment_id=assignment_id
         )
         db.session.add(detection_log)
         db.session.commit()
@@ -673,7 +685,7 @@ def handle_audio_detection(stream_url, transcript, keyword, sentiment_score, pla
             "room_url": stream_url,
             "streamer": streamer_name,
             "platform": platform,
-            "assigned_agent": detection_log.details.get('assigned_agent', 'Unassigned')
+            "assigned_agent": agent_id or "Unassigned"
         }
         
         # Emit real-time notification
@@ -686,6 +698,9 @@ def handle_audio_detection(stream_url, transcript, keyword, sentiment_score, pla
 
 def handle_visual_detection(stream_url, detections, annotated_image, platform, streamer_name):
     try:
+        # Get assignment info
+        assignment_id, agent_id = get_stream_assignment(stream_url)
+        
         # Create detection log in database
         detection_log = DetectionLog(
             event_type='object_detection',
@@ -695,9 +710,12 @@ def handle_visual_detection(stream_url, detections, annotated_image, platform, s
                 'detections': detections,
                 'annotated_image': annotated_image,
                 'platform': platform,
-                'streamer_name': streamer_name
+                'streamer_name': streamer_name,
+                'assigned_agent': agent_id
             },
-            read=False
+            read=False,
+            assigned_agent=agent_id,
+            assignment_id=assignment_id
         )
         db.session.add(detection_log)
         db.session.commit()
@@ -712,7 +730,7 @@ def handle_visual_detection(stream_url, detections, annotated_image, platform, s
             "room_url": stream_url,
             "streamer": streamer_name,
             "platform": platform,
-            "assigned_agent": detection_log.details.get('assigned_agent', 'Unassigned')
+            "assigned_agent": agent_id or "Unassigned"
         }
         
         # Emit real-time notification
@@ -725,6 +743,9 @@ def handle_visual_detection(stream_url, detections, annotated_image, platform, s
 
 def handle_chat_detection(stream_url, message, keywords, sender, platform, streamer_name):
     try:
+        # Get assignment info
+        assignment_id, agent_id = get_stream_assignment(stream_url)
+        
         # Create detection log in database
         detection_log = DetectionLog(
             event_type='chat_detection',
@@ -735,9 +756,12 @@ def handle_chat_detection(stream_url, message, keywords, sender, platform, strea
                 'keywords': keywords,
                 'sender': sender,
                 'platform': platform,
-                'streamer_name': streamer_name
+                'streamer_name': streamer_name,
+                'assigned_agent': agent_id
             },
-            read=False
+            read=False,
+            assigned_agent=agent_id,
+            assignment_id=assignment_id
         )
         db.session.add(detection_log)
         db.session.commit()
@@ -752,7 +776,7 @@ def handle_chat_detection(stream_url, message, keywords, sender, platform, strea
             "room_url": stream_url,
             "streamer": streamer_name,
             "platform": platform,
-            "assigned_agent": detection_log.details.get('assigned_agent', 'Unassigned')
+            "assigned_agent": agent_id or "Unassigned"
         }
         
         # Emit real-time notification
@@ -868,20 +892,20 @@ def start_monitoring(stream_url):
         db.session.commit()
     logger.info(f"Starting monitoring for {stream_url}")
     cancel_event = threading.Event()
-        thread = threading.Thread(
+    thread = threading.Thread(
         target=process_combined_detection,
-            args=(stream_url, cancel_event)
-        )
-        thread.daemon = True
-        thread.start()
-        stream_processors[stream_url] = (cancel_event, thread)
-        emit_stream_update({
-            'id': stream.id,
-            'url': stream_url,
-            'status': 'monitoring',
-            'type': stream.type
-        })
-        return True
+        args=(stream_url, cancel_event)
+    )
+    thread.daemon = True
+    thread.start()
+    stream_processors[stream_url] = (cancel_event, thread)
+    emit_stream_update({
+        'id': stream.id,
+        'url': stream_url,
+        'status': 'monitoring',
+        'type': stream.type
+    })
+    return True
 
 def stop_monitoring(stream_url, cancel_event=None, thread=None):
     """Stop monitoring a stream"""
@@ -894,16 +918,16 @@ def stop_monitoring(stream_url, cancel_event=None, thread=None):
             cancel_event, thread = stream_processors.get(stream_url, (None, None))
     if cancel_event:
         cancel_event.set()
-            if thread:
-                thread.join(timeout=2.0)
+        if thread:
+            thread.join(timeout=2.0)
         del stream_processors[stream_url]
     logger.info(f"Stopped monitoring {stream_url}")
-        emit_stream_update({
-            'id': stream.id if stream else 0,
-            'url': stream_url,
-            'status': 'stopped',
-            'type': stream.type if stream else 'unknown'
-        })
+    emit_stream_update({
+        'id': stream.id if stream else 0,
+        'url': stream_url,
+        'status': 'stopped',
+        'type': stream.type if stream else 'unknown'
+    })
 
 # =============== EXPORTS ===============
 __all__ = [

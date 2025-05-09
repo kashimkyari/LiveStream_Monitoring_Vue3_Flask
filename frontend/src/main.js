@@ -116,7 +116,7 @@ app.use(Toast, {
   rtl: false
 });
 
-app.config.globalProperties.$socket = io('http://localhost:5000', {
+app.config.globalProperties.$socket = io('https://monitor-backend.jetcamstudio:5000', {
   path: '/ws',
   withCredentials: true,
   transports: ['websocket'],

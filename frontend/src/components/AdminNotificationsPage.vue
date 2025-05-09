@@ -496,6 +496,11 @@ export default {
     const newNotificationIds = ref([])
     const toasts = ref([])
     let toastCounter = 0
+    let reconnectAttempts = 0
+    const maxReconnectAttempts = 3
+    const reconnectDelayMs = 2000 // Initial delay 2s
+    let lastReconnectTime = 0
+    const minReconnectInterval = 5000 // Minimum 5s between attempts
 
     // Computed
     const filteredNotifications = computed(() => {
@@ -517,37 +522,82 @@ export default {
 
     // Socket setup and handlers
     const setupSocketConnection = () => {
+      // Rate limiting check
+      const now = Date.now()
+      if (now - lastReconnectTime < minReconnectInterval) {
+        console.log('Rate limited: Too many connection attempts')
+        return
+      }
+      lastReconnectTime = now
+
+      // Max attempts check
+      if (reconnectAttempts >= maxReconnectAttempts) {
+        console.log('Max reconnection attempts reached')
+        showToast('Unable to connect to notification server', 'error')
+        return
+      }
+
       try {
-        socket.value = io('http://localhost:5000/notifications', {
+        socket.value = io('https://monitor-backend.jetcamstudio:5000/notifications', {
           path: '/ws',
           transports: ['websocket', 'polling'],
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000,
+          reconnection: false, // We'll handle reconnection manually
           withCredentials: true,
           autoConnect: true
         })
 
         socket.value.on('connect', () => {
           socketInitialized.value = true
+          reconnectAttempts = 0 // Reset attempts on successful connection
           console.log('Socket connected')
           showToast('Connected to notification server', 'success')
         })
 
         socket.value.on('connect_error', (err) => {
           console.error('Connection error:', err)
-          setTimeout(setupSocketConnection, 5000)
+          reconnectAttempts++
+          if (reconnectAttempts < maxReconnectAttempts) {
+            const delay = reconnectDelayMs * Math.pow(2, reconnectAttempts - 1) // Exponential backoff
+            setTimeout(setupSocketConnection, delay)
+          } else {
+            showToast('Failed to connect to notification server', 'error')
+          }
         })
 
         socket.value.on('disconnect', () => {
           console.log('Socket disconnected')
+          socketInitialized.value = false
+          // Only attempt reconnect if we haven't reached max attempts
+          if (reconnectAttempts < maxReconnectAttempts) {
+            const delay = reconnectDelayMs * Math.pow(2, reconnectAttempts)
+            setTimeout(setupSocketConnection, delay)
+          }
         })
 
         socket.value.on('notification', handleNewNotification)
         socket.value.on('notification_update', handleNotificationUpdate)
       } catch (err) {
         console.error('Socket initialization failed:', err)
-        setTimeout(setupSocketConnection, 5000)
+        reconnectAttempts++
+        if (reconnectAttempts < maxReconnectAttempts) {
+          const delay = reconnectDelayMs * Math.pow(2, reconnectAttempts - 1)
+          setTimeout(setupSocketConnection, delay)
+        }
+      }
+    }
+
+    // Modified safeSocketEmit to check connection state
+    const safeSocketEmit = (event, data) => {
+      if (!socket.value || !socket.value.connected) {
+        console.warn('Socket not connected, event dropped:', event)
+        return false
+      }
+      try {
+        socket.value.emit(event, data)
+        return true
+      } catch (err) {
+        console.error('Socket emit error:', err)
+        return false
       }
     }
 
@@ -570,15 +620,6 @@ export default {
       } else if (type === 'deleted') {
         notifications.value = notifications.value.filter(x => x.id !== id)
         if (selectedNotification.value?.id === id) selectedNotification.value = null
-      }
-    }
-
-    const safeSocketEmit = (event, data) => {
-      if (socket.value?.connected) {
-        socket.value.emit(event, data)
-      } else {
-        console.warn('Socket not connected, event queued:', event)
-        // Optionally implement queue logic here
       }
     }
 
@@ -830,6 +871,15 @@ export default {
       window.addEventListener('online', setupSocketConnection)
       // Set dark mode based on system preference
       isDarkMode.value = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+    })
+
+    onBeforeUnmount(() => {
+      if (socket.value) {
+        socket.value.off('notification', handleNewNotification)
+        socket.value.off('notification_update', handleNotificationUpdate)
+        socket.value.disconnect()
+      }
+      window.removeEventListener('resize', handleResize)
     })
 
     onBeforeUnmount(() => {

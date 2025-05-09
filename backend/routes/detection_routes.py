@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload
 from utils.notifications import emit_notification, emit_stream_update
-
+from monitoring import process_combined_detection, start_monitoring, stop_monitoring
 
 detection_bp = Blueprint('detection', __name__)
 detection_threads = {}  # Global variable
@@ -30,19 +30,16 @@ def unified_detect():
     data = request.get_json()
     text = data.get("text", "")
     visual_frame = data.get("visual_frame", None)
-    audio_flag = None
     visual_results = []
     
-    # These functions need to be imported or defined elsewhere
     if visual_frame:
-        from detection import detect_frame
-        visual_results = detect_frame(np.array(visual_frame))
+        from monitoring import process_video_frame
+        visual_results = process_video_frame(np.array(visual_frame), "unified_detect")
     
-    from detection import detect_chat
-    chat_results = detect_chat(text)
+    from monitoring import process_chat_messages
+    chat_results = process_chat_messages([{"message": text}], "unified_detect")
     
     return jsonify({
-        "audio": audio_flag,
         "chat": chat_results,
         "visual": visual_results
     })
@@ -100,54 +97,21 @@ def trigger_detection():
             stream_url = getattr(stream, 'stream_url', getattr(stream, 'room_url', ''))
         if not stream_url:
             return jsonify({"error": "No valid URL found for stream"}), 400
-        # Update stream status if available
-        if hasattr(stream, 'status'):
-            stream.status = 'online' if not stop else 'offline'
-            db.session.commit()
-            # Emit update to connected clients
-            stream_data = {
-                'id': stream.id,
-                'type': stream.type,
-                'room_url': stream.room_url,
-                'streamer_username': stream.streamer_username,
-                'status': stream.status,
-                'action': 'status_update'
-            }
-            emit_stream_update(stream_data)
 
-    # Check if we need to stop detection
+    # Stop detection if requested
     if stop:
-        if stream_url in detection_threads:
-            detection_thread, chat_thread, cancel_event = detection_threads[stream_url]
-            cancel_event.set()
-            detection_thread.join(timeout=2)
-            chat_thread.join(timeout=2)
-            del detection_threads[stream_url]
-            return jsonify({"message": "Detection stopped successfully", "stream_url": stream_url, "stream_id": stream_id}), 200
-        else:
-            return jsonify({"message": "No detection running for this stream", "stream_url": stream_url, "stream_id": stream_id}), 404
-
-    # Check if detection is already running
-    if stream_url in detection_threads:
-        return jsonify({"message": "Detection already running for this stream", "stream_url": stream_url, "stream_id": stream_id}), 200
-
+        return stop_monitoring(stream_url)
+    
+    # Start detection
     try:
-        from detection import process_combined_detection, chat_detection_loop
-        cancel_event = threading.Event()
-        detection_thread = threading.Thread(
-            target=process_combined_detection,
-            args=(stream_url, cancel_event),
-            daemon=True
-        )
-        detection_thread.start()
-        chat_thread = threading.Thread(
-            target=chat_detection_loop,
-            args=(stream_url, cancel_event, 60),
-            daemon=True
-        )
-        chat_thread.start()
-        detection_threads[stream_url] = (detection_thread, chat_thread, cancel_event)
-        return jsonify({"message": "Detection started successfully", "stream_url": stream_url, "stream_id": stream_id}), 200
+        if start_monitoring(stream_url):
+            return jsonify({
+                "message": "Detection started successfully", 
+                "stream_url": stream_url, 
+                "stream_id": stream_id
+            }), 200
+        else:
+            return jsonify({"error": "Failed to start monitoring"}), 500
     except Exception as e:
         return jsonify({"error": f"Error starting detection: {str(e)}"}), 500
 
