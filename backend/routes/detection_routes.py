@@ -1,19 +1,11 @@
 # routes/detection_routes.py
-from flask import Blueprint, request, jsonify, send_from_directory, Response, current_app, session
-from extensions import db
-from models import DetectionLog, Stream, Assignment, User, Log, ChatKeyword
+from flask import Blueprint, request, jsonify, send_from_directory, session
+from models import Stream
 from utils import login_required
-import threading
 import requests
 import m3u8
-import json
 import numpy as np
-import base64
-import logging
-from datetime import datetime, timedelta
-from sqlalchemy.orm import joinedload
-from utils.notifications import emit_notification, emit_stream_update
-from monitoring import process_combined_detection, start_monitoring, stop_monitoring
+from monitoring import start_monitoring, stop_monitoring
 
 detection_bp = Blueprint('detection', __name__)
 detection_threads = {}  # Global variable

@@ -19,7 +19,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://monitor-backend.jetcamstudio:5000',
+        target: 'https://monitor-backend.jetcamstudio.com:5000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/api'),
       },

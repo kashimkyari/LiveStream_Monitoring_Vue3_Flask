@@ -2,7 +2,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: 'https://monitor-backend.jetcamstudio:5000',
+  baseURL: 'https://monitor-backend.jetcamstudio.com:5000',
   withCredentials: true,               // Include cookies/credentials
   headers: {
     'Content-Type': 'application/json'
