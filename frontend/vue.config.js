@@ -12,8 +12,14 @@ module.exports = defineConfig({
     },
   },
   configureWebpack: {
+    performance: {
+      hints: false
+    },
     optimization: {
       splitChunks: {
+        minSize: 10000,
+        maxSize: 250000,
+
         chunks: 'all', // Split vendor and app code into separate chunks
         cacheGroups: {
           vendors: {

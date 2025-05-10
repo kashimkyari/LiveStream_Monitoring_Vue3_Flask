@@ -88,7 +88,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useAgentStore } from '@/stores/agent'
+import { useAgentStore } from '../stores/agent'
 import { ClockIcon, VideoIcon, AlertCircleIcon, MessageIcon, MusicIcon } from 'vue-tabler-icons'
 import apexchart from 'vue3-apexcharts'
 import io from 'socket.io-client'
