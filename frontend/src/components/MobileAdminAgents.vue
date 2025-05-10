@@ -219,6 +219,16 @@
 
     <!-- Blur effect for parent component when modal is open -->
     <div class="modal-overlay" v-if="showAddModal || showDetailsModal"></div>
+
+    <!-- Add ConfirmationModal at the end of template -->
+    <ConfirmationModal
+      v-if="showConfirmationModal"
+      :title="confirmationConfig.title"
+      :message="confirmationConfig.message"
+      :action-text="confirmationConfig.actionText"
+      @close="onConfirmationClose"
+      @confirm="confirmationConfig.onConfirm"
+    />
   </div>
 </template>
 
@@ -226,9 +236,13 @@
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { useToast } from 'vue-toastification'
+import ConfirmationModal from './ConfirmationModal.vue'
 
 export default {
   name: 'MobileAdminAgents',
+  components: {
+    ConfirmationModal
+  },
   props: {
     isDarkTheme: Boolean
   },
@@ -238,6 +252,13 @@ export default {
     const searchQuery = ref('')
     const showAddModal = ref(false)
     const showDetailsModal = ref(false)
+    const showConfirmationModal = ref(false)
+    const confirmationConfig = ref({
+      title: '',
+      message: '',
+      actionText: '',
+      onConfirm: null
+    })
     const addingAgent = ref(false)
     const assignedStreamsLoading = ref(false)
     const assignedStreams = ref([])
@@ -497,8 +518,12 @@ export default {
     }
 
     const confirmDeleteAgent = async (agentId) => {
-      if (confirm('Are you sure you want to delete this agent? This action cannot be undone.')) {
-        await deleteAgent(agentId)
+      showConfirmationModal.value = true
+      confirmationConfig.value = {
+        title: 'Delete Agent',
+        message: 'Are you sure you want to delete this agent? This action cannot be undone.',
+        actionText: 'Delete',
+        onConfirm: () => deleteAgent(agentId)
       }
     }
 
@@ -519,6 +544,10 @@ export default {
         const message = error.response?.data?.message || 'Failed to delete agent'
         toast.error(message)
       }
+    }
+
+    const onConfirmationClose = () => {
+      showConfirmationModal.value = false
     }
 
     // Load agents on component mount
@@ -556,7 +585,10 @@ export default {
       streamSearchQuery,
       filteredStreams,
       filterStreams,
-      toggleStreamAssignment
+      toggleStreamAssignment,
+      showConfirmationModal,
+      confirmationConfig,
+      onConfirmationClose
     }
   }
 }
@@ -1049,7 +1081,7 @@ export default {
 
 .stream-search-input:focus {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px var(--primary-light);
+  box-shadow: 0 0 0 2px var (--primary-light);
 }
 
 .stream-list-container {

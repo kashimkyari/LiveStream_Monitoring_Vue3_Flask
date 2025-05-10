@@ -1,9 +1,8 @@
 // src/composables/useModalActions.js
 import { ref } from 'vue'
 import axios from 'axios'
-import Swal from 'sweetalert2'
 
-export function useModalActions(toast, fetchDashboardData, agentsRef) {
+export function useModalActions(toast, fetchDashboardData) {
   // Modals
   const selectedStream = ref(null)
   const showCreateStreamModal = ref(false)
@@ -261,34 +260,25 @@ const createStream = async (streamData) => {
   
   const assignAgent = async (stream) => {
     try {
-      // Create an options object from the agents array
-      const agentOptions = agentsRef.value.reduce((options, agent) => {
-        options[agent.id] = agent.username
-        return options
-      }, {})
-      
-      const { value: agentId } = await Swal.fire({
+      confirmationModal.value = {
+        show: true,
         title: 'Assign Agent',
-        input: 'select',
-        inputOptions: agentOptions,
-        inputPlaceholder: 'Select an agent',
-        showCancelButton: true,
-        confirmButtonText: 'Assign',
-        inputValidator: (value) => {
-          if (!value) {
-            return 'You need to select an agent!'
+        message: 'Please select an agent to assign:',
+        action: async (agentId) => {
+          if (!agentId) {
+            toast.error('Please select an agent!')
+            return
           }
-        }
-      })
-      
-      if (agentId) {
-        await axios.post('/api/assign', {
-          agent_id: agentId,
-          stream_id: stream.id
-        })
-        fetchDashboardData()
-        closeModal()
-        toast.success('Agent assigned successfully')
+          
+          await axios.post('/api/assign', {
+            agent_id: agentId,
+            stream_id: stream.id
+          })
+          fetchDashboardData()
+          closeModal()
+          toast.success('Agent assigned successfully')
+        },
+        actionText: 'Assign'
       }
     } catch (error) {
       console.error('Failed to assign agent:', error)

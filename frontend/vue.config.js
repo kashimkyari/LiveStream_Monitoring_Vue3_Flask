@@ -6,7 +6,7 @@ module.exports = defineConfig({
   devServer: {
     proxy: {
       '/api': {
-        target: 'https://monitor-backend.jetcamstudio.com:5000',
+        target: 'http://localhost:5000',
         changeOrigin: true,
       },
     },
@@ -35,7 +35,6 @@ module.exports = defineConfig({
     extract: true, // Extract CSS into separate files for better caching
     loaderOptions: {
       css: {
-        // Minimize CSS in production
         modules: {
           auto: true,
         },
@@ -43,15 +42,16 @@ module.exports = defineConfig({
     },
   },
   chainWebpack: (config) => {
-    // Optimize images to reduce bundle size
+    // Use default Vue CLI image handling (file-loader)
     config.module
       .rule('images')
-      .use('url-loader')
-      .loader('url-loader')
-      .tap((options) => ({
-        ...options,
-        limit: 8192, // Inline images < 8KB, otherwise use file
-      }));
+      .test(/\.(png|jpe?g|gif|webp)(\?.*)?$/)
+      .use('file-loader')
+      .loader('file-loader')
+      .options({
+        name: 'img/[name].[hash:8].[ext]', // Output images to img/ folder
+        limit: 8192, // Inline images < 8KB (optional, can remove if not needed)
+      });
 
     // Minimize and optimize output in production
     config.when(process.env.NODE_ENV === 'production', (config) => {
