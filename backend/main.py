@@ -156,7 +156,7 @@ def health_check():
 def configure_ssl_context():
     """Configure SSL context for the Flask application"""
     ssl_context = None
-    enable_ssl = os.getenv('ENABLE_SSL', 'true').lower() == 'true'
+    enable_ssl = os.getenv('ENABLE_SSL', 'false').lower() == 'true'
     
     if enable_ssl:
         cert_dir = os.getenv('CERT_DIR', '/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend')
@@ -176,7 +176,7 @@ def configure_ssl_context():
 if __name__ == "__main__":
     ssl_context = configure_ssl_context()
     server_mode = "HTTPS" if ssl_context else "HTTP"
-    debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+    debug_mode = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
     logging.info(f"Starting server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
     
     app = create_app()

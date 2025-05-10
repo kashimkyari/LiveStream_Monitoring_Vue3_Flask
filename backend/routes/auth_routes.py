@@ -63,6 +63,14 @@ def login():
                 "role": user.role,
                 "username": user.username
             })
+            response.set_cookie(
+                'user_role',
+                user.role,
+                max_age=30*24*60*60,
+                httponly=False,
+                secure=True,
+                samesite='None'
+            )
             
             is_production = current_app.config.get('ENV') == 'production'
             domain = None  # Let browser determine domain

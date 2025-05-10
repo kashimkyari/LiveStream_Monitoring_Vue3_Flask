@@ -288,6 +288,13 @@ export default {
             })
 
         if (response.status === 200 && response.data.message === "Login successful") {
+          const role = response.data.role;
+          localStorage.setItem('userRole', role);
+          if (role === 'admin') {
+            this.$router.push('/admin/dashboard');
+          } else {
+            this.$router.push('/agent/dashboard');
+          }
           this.animateSuccessfulLogin();
           this.toast.success("Login successful!", {
             timeout: 2000,
