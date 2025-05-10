@@ -119,6 +119,8 @@
 <script>
 import { ref, computed, onMounted, onBeforeUnmount, watch, inject, defineAsyncComponent } from 'vue'
 import Hls from 'hls.js'
+import axios from 'axios'
+
 // Lazy load anime.js
 const anime = () => import('animejs/lib/anime.es.js').then(m => m.default)
 // Lazy load DetectionBadge component
@@ -171,6 +173,8 @@ export default {
     let streamStatusCheckInterval = ref(null)
     // Add new variables for video playback status
     const isPlaying = ref(false)
+    const videoLoaded = ref(false)
+    const animationsEnabled = ref(false)
     
     const agentCache = ref({})
     const allAgentsFetched = ref(false)
@@ -310,6 +314,17 @@ export default {
         }
       } catch (error) {
         console.error('Error fetching viewer count:', error)
+      }
+    }
+
+    // Error handling for HLS errors
+    const handleHlsError = (event, data) => {
+      console.error('HLS Error:', event, data)
+      if (data.fatal) {
+        destroyHls()
+        isOnline.value = false
+        streamStatus.value = 'offline'
+        isLoading.value = false
       }
     }
 
@@ -505,22 +520,16 @@ export default {
       }
     }
 
-    // Optimize animation handling
+    // Optimize animation handling - remove unused animeModule
     const addHoverAnimation = async () => {
       if (!animationsEnabled.value) {
-        const animeModule = await anime()
+        await anime()
         animationsEnabled.value = true
       }
       
       if (streamCard.value && animationsEnabled.value) {
-        const animeModule = await anime()
-        animeModule({
-          targets: streamCard.value,
-          scale: 1.03,
-          boxShadow: '0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22)',
-          duration: 300,
-          easing: 'easeOutQuad'
-        })
+        streamCard.value.style.transform = 'scale(1.03)'
+        streamCard.value.style.transition = 'transform 0.3s ease'
       }
     }
 
