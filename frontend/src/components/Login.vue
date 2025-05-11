@@ -59,7 +59,7 @@
 
       <div class="additional-links" ref="additionalLinks">
         <a href="#" class="link-text" @click.prevent="forgotPassword">Forgot password?</a>
-        <span class="separator">•</span>
+    
       </div>
       
       <div class="decorative-circles">
@@ -302,7 +302,7 @@ export default {
             icon: true
           })
           setTimeout(() => {
-            this.$emit('login-success', response.data.role)
+            this.$emit('login-success', response.data);
           }, 1200);
         } else {
           this.showError(response.data.message || 'Login failed. Please try again.')

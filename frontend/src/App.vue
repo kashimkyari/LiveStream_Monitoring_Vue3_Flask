@@ -91,7 +91,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, provide } from 'vue'
+import { ref, onMounted, onUnmounted, watch, provide, nextTick } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import {
@@ -341,12 +341,17 @@ const handleAuthSuccess = (user) => {
   userRole.value = user.username === 'admin' ? 'admin' : 'agent'
   localStorage.setItem(USER_ROLE_KEY, userRole.value)
   animateControls()
-  
+
+  // Force re-render by resetting a temporary state
+  nextTick(() => {
+    userRole.value = user.username === 'admin' ? 'admin' : 'agent'
+  })
+
   // Store session info
   if (user.token) {
     storeSessionToken(user.token, user.expiresIn || 86400)
   }
-  
+
   // Record the last time we checked the session
   const now = new Date().getTime()
   localStorage.setItem(LAST_CHECKED_KEY, now.toString())
@@ -653,7 +658,7 @@ onMounted(() => {
   checkNetworkStatus()
   
   // Delay checking authentication slightly to allow spinner animation
-  setTimeout(checkAuthentication, 800)
+  setTimeout(checkAuthentication, 1500)
 })
 </script>
 

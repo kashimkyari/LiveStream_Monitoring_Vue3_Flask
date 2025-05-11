@@ -19,9 +19,6 @@
         <button class="icon-btn refresh-btn" @click="fetchNotifications" title="Refresh">
           <span class="icon">↻</span>
         </button>
-        <button class="icon-btn" @click="toggleDarkMode" :title="isDarkMode ? 'Light Mode' : 'Dark Mode'">
-          <span class="icon">{{ isDarkMode ? '☀️' : '🌙' }}</span>
-        </button>
         <button class="icon-btn menu-btn" @click="isMenuOpen = !isMenuOpen" title="More Actions">
           <span class="icon">⋮</span>
         </button>
@@ -29,6 +26,7 @@
       
       <!-- Dropdown menu -->
       <div v-if="isMenuOpen" class="dropdown-menu">
+        <button @click="prepareCreateForm">Create Notification</button>
         <button 
           @click="markAllAsRead"
           :disabled="filteredNotifications.filter(n => !n.read).length === 0"
@@ -37,7 +35,7 @@
         </button>
         <button 
           @click="isDeleteModalOpen = true"
-          :disabled="filteredNotifications.length === 0"
+          :disabled="notifications.length === 0"
         >
           Delete All
         </button>
@@ -172,17 +170,24 @@
                 Mark as Read
               </button>
               <button 
+                class="action-btn" 
+                @click="prepareEditForm"
+              >
+                Edit
+              </button>
+              <button 
                 class="action-btn delete-btn" 
                 @click="isDeleteModalOpen = true"
               >
                 Delete
               </button>
+              
               <button 
-                v-if="assignedToMe"
-                class="action-btn view-stream-btn"
-                @click="viewStreamDetails(selectedNotification)"
+                v-if="user && user.role === 'admin'" 
+                class="action-btn forward-btn" 
+                @click="isAgentDropdownOpen = true"
               >
-                View Stream
+                Forward
               </button>
             </div>
           </div>
@@ -217,94 +222,51 @@
               <span>{{ selectedNotification.details?.streamer_name || 'Unknown' }}</span>
             </div>
             <div v-if="selectedNotification.assigned_agent" class="detail-field">
-              <label>Assigned To:</label>
-              <span>
-                {{ selectedNotification.assigned_agent }}
-                <span v-if="assignedToMe" class="assigned-badge">You</span>
-              </span>
+              <label>Assigned Agent:</label>
+              <span>{{ selectedNotification.assigned_agent }}</span>
             </div>
             
-            <!-- Detection-specific details -->
+            <!-- Specific details based on notification type -->
             <div v-if="selectedNotification.event_type === 'object_detection'" class="type-details detection-details">
-              <h3>Visual Detection</h3>
-              
-              <!-- Detection images -->
-              <div class="detection-images">
-                <div v-if="selectedNotification.details?.annotated_image" class="image-container">
-                  <h4>Annotated Image</h4>
-                  <img 
-                    :src="formatImage(selectedNotification.details.annotated_image)"
-                    alt="Annotated Detection"
-                    class="detection-image"
-                    @click="openImageModal(selectedNotification.details.annotated_image)"
-                  />
-                </div>
-                
-                <div v-if="selectedNotification.details?.captured_image" class="image-container">
-                  <h4>Captured Image</h4>
-                  <img 
-                    :src="formatImage(selectedNotification.details.captured_image)"
-                    alt="Captured Image"
-                    class="detection-image"
-                    @click="openImageModal(selectedNotification.details.captured_image)"
-                  />
-                </div>
-              </div>
-              
-              <!-- Detected objects -->
-              <div v-if="selectedNotification.details?.detections?.length" class="detected-objects">
-                <h4>Detected Objects</h4>
-                <div class="detections-grid">
-                  <div 
-                    v-for="(detection, index) in selectedNotification.details.detections" 
-                    :key="index"
-                    class="detection-item"
-                    :class="{ 'high-confidence': detection.confidence > 0.8 }"
-                  >
-                    <span class="detection-class">{{ detection.class }}</span>
-                    <span 
-                      class="confidence-badge"
-                      :style="{ backgroundColor: getConfidenceColor(detection.confidence) }"
-                    >
-                      {{ formatConfidence(detection.confidence) }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div v-if="selectedNotification.event_type === 'audio_detection'" class="type-details audio-details">
-              <h3>Audio Detection</h3>
-              
-              <div v-if="selectedNotification.details?.keyword" class="keyword-section">
-                <h4>Flagged Keyword</h4>
-                <div class="keyword-tag">{{ selectedNotification.details.keyword }}</div>
-              </div>
-              
-              <div v-if="selectedNotification.details?.transcript" class="transcript-section">
-                <h4>Transcript</h4>
-                <div class="transcript-text">
-                  {{ selectedNotification.details.transcript }}
-                </div>
-              </div>
-              
-              <div v-if="selectedNotification.details?.sentiment_score" class="sentiment-section">
-                <h4>Sentiment Analysis</h4>
+              <h3>Detection Details</h3>
+              <div 
+                v-if="selectedNotification.details?.detections?.length" 
+                class="detections-grid"
+              >
                 <div 
-                  class="sentiment-indicator"
-                  :class="getSentimentClass(selectedNotification.details.sentiment_score)"
+                  v-for="(detection, index) in selectedNotification.details.detections" 
+                  :key="index"
+                  class="detection-item"
                 >
-                  {{ formatSentiment(selectedNotification.details.sentiment_score) }}
+                  <span class="detection-class">{{ detection.class }}</span>
+                  <span class="detection-confidence">
+                    {{ formatConfidence(detection.confidence) }}
+                  </span>
                 </div>
+              </div>
+              <div 
+                v-if="selectedNotification.details?.annotated_image"
+                class="detection-image"
+              >
+                <img 
+                  :src="`data:image/png;base64,${selectedNotification.details.annotated_image}`"
+                  alt="Detection Image"
+                  @click="openImageModal(selectedNotification.details.annotated_image)"
+                />
               </div>
             </div>
             
             <div v-if="selectedNotification.event_type === 'chat_detection'" class="type-details chat-details">
-              <h3>Chat Detection</h3>
-              
-              <div v-if="selectedNotification.details?.keywords?.length" class="keyword-section">
-                <h4>Flagged Keywords</h4>
-                <div class="keywords-list">
+              <h3>Chat Details</h3>
+              <div class="chat-message">
+                <p>{{ selectedNotification.details?.message || 'No message content' }}</p>
+              </div>
+              <div 
+                v-if="selectedNotification.details?.keywords?.length"
+                class="keywords-list"
+              >
+                <h4>Flagged Keywords:</h4>
+                <div class="keywords">
                   <span 
                     v-for="(keyword, index) in selectedNotification.details.keywords" 
                     :key="index"
@@ -314,37 +276,60 @@
                   </span>
                 </div>
               </div>
-              
-              <div class="message-section">
-                <h4>Chat Message</h4>
-                <div class="chat-message">
-                  <div v-if="selectedNotification.details?.sender" class="message-sender">
-                    From: {{ selectedNotification.details.sender }}
-                  </div>
-                  <div class="message-text">
-                    {{ selectedNotification.details?.message || 'No message content' }}
-                  </div>
-                </div>
+            </div>
+            
+            <div v-if="selectedNotification.event_type === 'audio_detection'" class="type-details audio-details">
+              <h3>Audio Details</h3>
+              <div class="audio-transcript">
+                <h4>Transcript:</h4>
+                <p>{{ selectedNotification.details?.transcript || 'No transcript available' }}</p>
+              </div>
+              <div v-if="selectedNotification.details?.keyword" class="keyword">
+                <h4>Flagged Keyword:</h4>
+                <span class="keyword-tag">{{ selectedNotification.details.keyword }}</span>
               </div>
             </div>
             
-            <div v-if="selectedNotification.event_type === 'stream_created'" class="type-details stream-details">
-              <h3>Stream Created</h3>
-              
-              <div class="stream-info">
-                <p>A new stream has been created and assigned to you.</p>
-                <button 
-                  class="action-btn view-stream-btn"
-                  @click="viewStreamDetails(selectedNotification)"
-                >
-                  View Stream Details
-                </button>
+            <!-- Raw JSON (admin only) -->
+            <div v-if="user && user.role === 'admin'" class="raw-json">
+              <h3>Raw Data</h3>
+              <div class="json-toggle" @click="showRawJson = !showRawJson">
+                {{ showRawJson ? 'Hide' : 'Show' }} Raw JSON
               </div>
+              <pre v-if="showRawJson">{{ JSON.stringify(selectedNotification.details, null, 2) }}</pre>
             </div>
           </div>
         </div>
       </div>
     </div>
+    
+    <!-- Forward to agent modal -->
+    <Teleport to="body">
+      <div v-if="isAgentDropdownOpen" class="modal-overlay" @click="isAgentDropdownOpen = false">
+        <div class="modal-container" @click.stop>
+          <div class="modal-header">
+            <h3>Forward to Agent</h3>
+            <button class="close-btn" @click="isAgentDropdownOpen = false">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="agent-list">
+              <div 
+                v-for="agent in agents" 
+                :key="agent.id" 
+                class="agent-item"
+                @click="forwardNotification(agent.id)"
+              >
+                <div :class="['status-indicator', agent.online ? 'online' : 'offline']"></div>
+                <div class="agent-info">
+                  <div class="agent-name">{{ agent.username }}</div>
+                  <div class="agent-email">{{ agent.email || 'No email' }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
     
     <!-- Delete confirmation modal -->
     <Teleport to="body">
@@ -371,12 +356,84 @@
       </div>
     </Teleport>
     
+    <!-- Create/Edit notification modal -->
+    <Teleport to="body">
+      <div v-if="isFormModalOpen" class="modal-overlay" @click="isFormModalOpen = false">
+        <div class="modal-container form-modal" @click.stop>
+          <div class="modal-header">
+            <h3>{{ isEditMode ? 'Edit' : 'Create' }} Notification</h3>
+            <button class="close-btn" @click="isFormModalOpen = false">&times;</button>
+          </div>
+          <div class="modal-body">
+            <form @submit.prevent="submitNotificationForm">
+              <div class="form-group">
+                <label for="event_type">Event Type</label>
+                <select id="event_type" v-model="notificationForm.event_type" required>
+                  <option value="object_detection">Object Detection</option>
+                  <option value="audio_detection">Audio Detection</option>
+                  <option value="chat_detection">Chat Detection</option>
+                  <option value="general">General</option>
+                </select>
+              </div>
+              
+              <div class="form-group">
+                <label for="room_url">Stream URL</label>
+                <input 
+                  type="text" 
+                  id="room_url" 
+                  v-model="notificationForm.room_url" 
+                  placeholder="https://example.com/stream"
+                  required
+                />
+              </div>
+              
+              <div class="form-group">
+                <label for="streamer_name">Streamer Name</label>
+                <input 
+                  type="text" 
+                  id="streamer_name" 
+                  v-model="notificationForm.details.streamer_name" 
+                  placeholder="Streamer name"
+                />
+              </div>
+              
+              <div class="form-group">
+                <label for="platform">Platform</label>
+                <input 
+                  type="text" 
+                  id="platform" 
+                  v-model="notificationForm.details.platform" 
+                  placeholder="Platform name"
+                />
+              </div>
+              
+              <div class="form-group">
+                <label for="message">Message</label>
+                <textarea 
+                  id="message" 
+                  v-model="notificationForm.details.message" 
+                  placeholder="Notification message"
+                  rows="3"
+                ></textarea>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button class="cancel-btn" @click="isFormModalOpen = false">Cancel</button>
+            <button class="confirm-btn" @click="submitNotificationForm">
+              {{ isEditMode ? 'Update' : 'Create' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+    
     <!-- Image viewer modal -->
     <Teleport to="body">
       <div v-if="imageModalSrc" class="modal-overlay" @click="imageModalSrc = null">
         <div class="image-modal" @click.stop>
           <button class="close-btn" @click="imageModalSrc = null">&times;</button>
-          <img :src="imageModalSrc" alt="Full size image" />
+          <img :src="`data:image/png;base64,${imageModalSrc}`" alt="Full size image" />
         </div>
       </div>
     </Teleport>
@@ -397,515 +454,510 @@
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch, defineProps, defineEmits } from 'vue';
-import axios from 'axios';
-import anime from 'animejs/lib/anime.es.js';
-import { io } from 'socket.io-client';
-import { formatDistanceToNow, parseISO } from 'date-fns';
+<script>
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import axios from 'axios'
+import { io } from 'socket.io-client'
+import { formatDistanceToNow, parseISO } from 'date-fns'
 
-// Props
-const props = defineProps({
-  user: {
-    type: Object,
-    default: null
-  },
-  ongoingStreams: {
-    type: Array,
-    default: () => []
-  }
-});
-
-// Emits
-const emit = defineEmits(['view-stream']);
-
-// State
-const notifications = ref([]);
-const filteredNotifications = ref([]);
-const selectedNotification = ref(null);
-const loading = ref(true);
-const error = ref(null);
-const mainFilter = ref('All');
-const detectionSubFilter = ref('Visual');
-const isMenuOpen = ref(false);
-const isDeleteModalOpen = ref(false);
-const isDarkMode = ref(localStorage.getItem('darkMode') === 'true');
-const soundEnabled = ref(localStorage.getItem('notificationSound') !== 'false');
-const isMobile = ref(window.innerWidth < 768);
-const imageModalSrc = ref(null);
-const newNotificationIds = ref([]);
-const toasts = ref([]);
-const socket = ref(null);
-let toastCounter = 0;
-
-// Computed
-const unreadCount = computed(() => {
-  return notifications.value.filter(n => !n.read).length;
-});
-
-const assignedToMe = computed(() => {
-  if (!selectedNotification.value || !props.user) return false;
-  
-  const assignedAgent = selectedNotification.value.assigned_agent;
-  return assignedAgent === props.user.username;
-});
-
-// Methods
-const fetchNotifications = async () => {
-  loading.value = true;
-  error.value = null;
-  
-  try {
-    const response = await axios.get('/api/notifications');
-    notifications.value = response.data;
-    applyFilters();
-    loading.value = false;
-  } catch (err) {
-    console.error('Error fetching notifications:', err);
-    error.value = 'Failed to load notifications. Please try again.';
-    loading.value = false;
-  }
-};
-
-const applyFilters = () => {
-  let filtered = [...notifications.value];
-  
-  // Apply main filter
-  if (mainFilter.value === 'Unread') {
-    filtered = filtered.filter(n => !n.read);
-  } else if (mainFilter.value === 'Detections') {
-    filtered = filtered.filter(n => {
-      // Apply detection sub-filter
-      if (detectionSubFilter.value === 'Visual') {
-        return n.event_type === 'object_detection';
-      } else if (detectionSubFilter.value === 'Audio') {
-        return n.event_type === 'audio_detection';
-      } else if (detectionSubFilter.value === 'Chat') {
-        return n.event_type === 'chat_detection';
+export default {
+  name: 'AgentNotificationsComponent',
+  setup() {
+    // State
+    const notifications = ref([])
+    const selectedNotification = ref(null)
+    const mainFilter = ref('All')
+    const detectionSubFilter = ref('Visual')
+    const loading = ref(true)
+    const error = ref(null)
+    const isMenuOpen = ref(false)
+    const isDeleteModalOpen = ref(false)
+    const isAgentDropdownOpen = ref(false)
+    const isFormModalOpen = ref(false)
+    const isEditMode = ref(false)
+    const notificationForm = ref({
+      event_type: 'general',
+      room_url: '',
+      details: {
+        streamer_name: '',
+        platform: '',
+        message: ''
       }
-      return false;
-    });
-  }
-  
-  filteredNotifications.value = filtered;
-};
+    })
+    const agents = ref([])
+    const user = ref(null)
+    const socket = ref(null)
+    const socketInitialized = ref(false)
+    const soundEnabled = ref(localStorage.getItem('notificationSound') !== 'false')
+    const isDarkMode = ref(localStorage.getItem('darkMode') === 'true')
+    const isMobile = ref(window.innerWidth < 768)
+    const showRawJson = ref(false)
+    const imageModalSrc = ref(null)
+    const newNotificationIds = ref([])
+    const toasts = ref([])
+    let toastCounter = 0
+    let reconnectAttempts = 0
+    const maxReconnectAttempts = 3
+    const reconnectDelayMs = 2000 // Initial delay 2s
+    let lastReconnectTime = 0
+    const minReconnectInterval = 5000 // Minimum 5s between attempts
 
-const handleMainFilterChange = (filter) => {
-  mainFilter.value = filter;
-  applyFilters();
-  
-  // Deselect notification when changing filters
-  if (selectedNotification.value) {
-    selectedNotification.value = null;
-  }
-};
-
-const getNotificationColor = (notification) => {
-  if (notification.event_type === 'object_detection') {
-    return '#e74c3c'; // Red
-  } else if (notification.event_type === 'audio_detection') {
-    return '#3498db'; // Blue
-  } else if (notification.event_type === 'chat_detection') {
-    return '#f39c12'; // Orange
-  } else if (notification.event_type === 'stream_created') {
-    return '#2ecc71'; // Green
-  }
-  return '#95a5a6'; // Gray for others
-};
-
-const getNotificationType = (notification) => {
-  if (notification.event_type === 'object_detection') {
-    return 'Visual';
-  } else if (notification.event_type === 'audio_detection') {
-    return 'Audio';
-  } else if (notification.event_type === 'chat_detection') {
-    return 'Chat';
-  } else if (notification.event_type === 'stream_created') {
-    return 'Stream';
-  }
-  return 'General';
-};
-
-const getNotificationMessage = (notification) => {
-  if (notification.event_type === 'object_detection') {
-    const detections = notification.details?.detections || [];
-    if (detections.length > 0) {
-      return `Detected: ${detections.map(d => d.class).join(', ')}`;
-    }
-    return 'Object detected';
-  } else if (notification.event_type === 'audio_detection') {
-    return notification.details?.transcript?.substring(0, 100) || 'Audio detected';
-  } else if (notification.event_type === 'chat_detection') {
-    return notification.details?.message?.substring(0, 100) || 'Chat message detected';
-  } else if (notification.event_type === 'stream_created') {
-    return `New stream: ${notification.details?.streamer_name || 'Unknown streamer'}`;
-  }
-  return notification.details?.message || 'Notification received';
-};
-
-const getNotificationDetailTitle = () => {
-  if (!selectedNotification.value) return '';
-  
-  if (selectedNotification.value.event_type === 'object_detection') {
-    return 'Visual Detection';
-  } else if (selectedNotification.value.event_type === 'audio_detection') {
-    return 'Audio Detection';
-  } else if (selectedNotification.value.event_type === 'chat_detection') {
-    return 'Chat Detection';
-  } else if (selectedNotification.value.event_type === 'stream_created') {
-    return 'New Stream Assignment';
-  }
-  return 'Notification Details';
-};
-
-const formatTimestamp = (timestamp, detailed = false) => {
-  if (!timestamp) return 'Unknown';
-  
-  try {
-    const date = parseISO(timestamp);
-    
-    if (detailed) {
-      return new Intl.DateTimeFormat('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      }).format(date);
-    }
-    
-    return formatDistanceToNow(date, { addSuffix: true });
-  } catch (err) {
-    console.error('Error formatting timestamp:', err);
-    return 'Invalid date';
-  }
-};
-
-const formatImage = (image) => {
-  if (!image) return '';
-  
-  // Check if it's already a valid URL
-  if (image.startsWith('http') || image.startsWith('data:')) {
-    return image;
-  }
-  
-  // Otherwise assume it's a base64 string
-  return `data:image/jpeg;base64,${image}`;
-};
-
-const formatConfidence = (confidence) => {
-  if (typeof confidence !== 'number') return 'N/A';
-  return `${Math.round(confidence * 100)}%`;
-};
-
-const getConfidenceColor = (confidence) => {
-  if (confidence > 0.8) return '#2ecc71'; // Green
-  if (confidence > 0.6) return '#f39c12'; // Orange
-  return '#e74c3c'; // Red
-};
-
-const formatSentiment = (score) => {
-  if (typeof score !== 'number') return 'Unknown';
-  
-  if (score < -0.5) return 'Very Negative';
-  if (score < -0.2) return 'Negative';
-  if (score < 0.2) return 'Neutral';
-  if (score < 0.5) return 'Positive';
-  return 'Very Positive';
-};
-
-const getSentimentClass = (score) => {
-  if (typeof score !== 'number') return 'neutral';
-  
-  if (score < -0.5) return 'very-negative';
-  if (score < -0.2) return 'negative';
-  if (score < 0.2) return 'neutral';
-  if (score < 0.5) return 'positive';
-  return 'very-positive';
-};
-
-const truncateUrl = (url) => {
-  if (!url) return '';
-  return url.length > 40 ? url.substring(0, 37) + '...' : url;
-};
-
-const handleNotificationClick = (notification) => {
-  selectedNotification.value = notification;
-  
-  // On mobile, scroll to details
-  if (isMobile.value) {
-    nextTick(() => {
-      const detailsPanel = document.querySelector('.details-panel');
-      if (detailsPanel) {
-        detailsPanel.scrollIntoView({ behavior: 'smooth' });
+    // Computed
+    const filteredNotifications = computed(() => {
+      let filtered = [...notifications.value]
+      if (mainFilter.value === 'Unread') {
+        filtered = filtered.filter(n => !n.read)
+      } else if (mainFilter.value === 'Detections') {
+        filtered = filtered.filter(n => {
+          if (detectionSubFilter.value === 'Visual') return n.event_type === 'object_detection'
+          if (detectionSubFilter.value === 'Audio') return n.event_type === 'audio_detection'
+          if (detectionSubFilter.value === 'Chat') return n.event_type === 'chat_detection'
+          return false
+        })
       }
-    });
-  }
-  
-  // Animate the selection
-  setTimeout(() => {
-    const selectedCard = document.querySelector('.notification-card.selected');
-    if (selectedCard) {
-      anime({
-        targets: selectedCard,
-        scale: [1, 1.02, 1],
-        duration: 300,
-        easing: 'easeOutQuad'
-      });
-    }
-  }, 10);
-};
+      return filtered
+    })
 
-const markAsRead = async (id) => {
-  try {
-    await axios.put(`/api/notifications/${id}/read`);
-    
-    // Update local state
-    const notification = notifications.value.find(n => n.id === id);
-    if (notification) {
-      notification.read = true;
-      applyFilters();
-    }
-    
-    showToast('Notification marked as read', 'success');
-  } catch (err) {
-    console.error('Error marking notification as read:', err);
-    showToast('Failed to mark notification as read', 'error');
-  }
-};
+    const unreadCount = computed(() => notifications.value.filter(n => !n.read).length)
 
-const markAllAsRead = async () => {
-  try {
-    await axios.put('/api/notifications/read-all');
-    
-    // Update local state
-    notifications.value.forEach(notification => {
-      notification.read = true;
-    });
-    applyFilters();
-    
-    showToast('All notifications marked as read', 'success');
-    isMenuOpen.value = false;
-  } catch (err) {
-    console.error('Error marking all notifications as read:', err);
-    showToast('Failed to mark all notifications as read', 'error');
-  }
-};
+    // Socket setup and handlers
+    const setupSocketConnection = () => {
+      // Rate limiting check
+      const now = Date.now()
+      if (now - lastReconnectTime < minReconnectInterval) {
+        console.log('Rate limited: Too many connection attempts')
+        return
+      }
+      lastReconnectTime = now
 
-const deleteNotification = async (id) => {
-  try {
-    await axios.delete(`/api/notifications/${id}`);
-    
-    // Update local state
-    notifications.value = notifications.value.filter(n => n.id !== id);
-    applyFilters();
-    
-    // Reset selected notification if it's the one being deleted
-    if (selectedNotification.value && selectedNotification.value.id === id) {
-      selectedNotification.value = null;
-    }
-    
-    isDeleteModalOpen.value = false;
-    showToast('Notification deleted', 'success');
-  } catch (err) {
-    console.error('Error deleting notification:', err);
-    showToast('Failed to delete notification', 'error');
-    isDeleteModalOpen.value = false;
-  }
-};
+      // Max attempts check
+      if (reconnectAttempts >= maxReconnectAttempts) {
+        console.log('Max reconnection attempts reached')
+        showToast('Unable to connect to notification server', 'error')
+        return
+      }
 
-const deleteAllNotifications = async () => {
-  try {
-    await axios.delete('/api/notifications');
-    
-    // Update local state
-    notifications.value = [];
-    filteredNotifications.value = [];
-    selectedNotification.value = null;
-    
-    isDeleteModalOpen.value = false;
-    isMenuOpen.value = false;
-    showToast('All notifications deleted', 'success');
-  } catch (err) {
-    console.error('Error deleting all notifications:', err);
-    showToast('Failed to delete notifications', 'error');
-    isDeleteModalOpen.value = false;
-  }
-};
-
-const viewStreamDetails = (notification) => {
-  // Find the stream in ongoingStreams that matches the notification
-  const stream = props.ongoingStreams.find(s => {
-    return s.room_url === notification.room_url ||
-           s.streamer_name === notification.details?.streamer_name;
-  });
-  
-  if (stream) {
-    emit('view-stream', stream);
-    showToast('Opening stream details', 'info');
-  } else {
-    showToast('Stream not found in your assignments', 'error');
-  }
-};
-
-const openImageModal = (image) => {
-  imageModalSrc.value = formatImage(image);
-};
-
-const toggleDarkMode = () => {
-  isDarkMode.value = !isDarkMode.value;
-  localStorage.setItem('darkMode', isDarkMode.value);
-};
-
-const toggleSound = () => {
-  soundEnabled.value = !soundEnabled.value;
-  localStorage.setItem('notificationSound', soundEnabled.value);
-  showToast(`Sound ${soundEnabled.value ? 'enabled' : 'disabled'}`, 'info');
-  isMenuOpen.value = false;
-};
-
-const showToast = (message, type = 'info') => {
-  const id = toastCounter++;
-  toasts.value.push({ id, message, type });
-  
-  // Auto remove after 3 seconds
-  setTimeout(() => {
-    toasts.value = toasts.value.filter(toast => toast.id !== id);
-  }, 3000);
-};
-
-const setupSocketConnection = () => {
-  // Connect to socket server with namespace
-  socket.value = io('https://monitor-backend.jetcamstudio.com:5000/notifications', {
+      try {
+        socket.value = io('https://monitor-backend.jetcamstudio.com:5000/notifications', {
           path: '/ws',
           transports: ['websocket', 'polling'],
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000,
+          reconnection: false, // We'll handle reconnection manually
           withCredentials: true,
           autoConnect: true
-        });
-  
-  // Socket event handlers
-  socket.value.on('connect', () => {
-    console.log('Connected to notification server');
-    showToast('Connected to notification server', 'success');
-  });
-  
-  socket.value.on('connect_error', (error) => {
-    console.error('Socket connection error:', error);
-  });
-  
-  socket.value.on('disconnect', () => {
-    console.log('Disconnected from notification server');
-  });
-  
-  // Handle new notifications
-  socket.value.on('notification', (data) => {
-    console.log('New notification received:', data);
-    
-    // Add to local state if not already present
-    if (!notifications.value.some(n => n.id === data.id)) {
-      notifications.value.unshift(data);
-      newNotificationIds.value.push(data.id);
-      applyFilters();
-      
-      // Remove from newNotificationIds after animation completes
+        })
+
+        socket.value.on('connect', () => {
+          socketInitialized.value = true
+          reconnectAttempts = 0 // Reset attempts on successful connection
+          console.log('Socket connected')
+          showToast('Connected to notification server', 'success')
+        })
+
+        socket.value.on('connect_error', (err) => {
+          console.error('Connection error:', err)
+          reconnectAttempts++
+          if (reconnectAttempts < maxReconnectAttempts) {
+            const delay = reconnectDelayMs * Math.pow(2, reconnectAttempts - 1) // Exponential backoff
+            setTimeout(setupSocketConnection, delay)
+          } else {
+            showToast('Failed to connect to notification server', 'error')
+          }
+        })
+
+        socket.value.on('disconnect', () => {
+          console.log('Socket disconnected')
+          socketInitialized.value = false
+          // Only attempt reconnect if we haven't reached max attempts
+          if (reconnectAttempts < maxReconnectAttempts) {
+            const delay = reconnectDelayMs * Math.pow(2, reconnectAttempts)
+            setTimeout(setupSocketConnection, delay)
+          }
+        })
+
+        socket.value.on('notification', handleNewNotification)
+        socket.value.on('notification_update', handleNotificationUpdate)
+      } catch (err) {
+        console.error('Socket initialization failed:', err)
+        reconnectAttempts++
+        if (reconnectAttempts < maxReconnectAttempts) {
+          const delay = reconnectDelayMs * Math.pow(2, reconnectAttempts - 1)
+          setTimeout(setupSocketConnection, delay)
+        }
+      }
+    }
+
+    // Modified safeSocketEmit to check connection state
+    const safeSocketEmit = (event, data) => {
+      if (!socket.value || !socket.value.connected) {
+        console.warn('Socket not connected, event dropped:', event)
+        return false
+      }
+      try {
+        socket.value.emit(event, data)
+        return true
+      } catch (err) {
+        console.error('Socket emit error:', err)
+        return false
+      }
+    }
+
+    const handleNewNotification = (data) => {
+      if (!notifications.value.some(n => n.id === data.id)) {
+        notifications.value.unshift(data)
+        newNotificationIds.value.push(data.id)
+        setTimeout(() => {
+          newNotificationIds.value = newNotificationIds.value.filter(id => id !== data.id)
+        }, 5000)
+        if (soundEnabled.value) playNotificationSound()
+        showToast('New notification received', 'info')
+      }
+    }
+
+    const handleNotificationUpdate = ({ id, type }) => {
+      if (type === 'read') {
+        const n = notifications.value.find(x => x.id === id)
+        if (n) n.read = true
+      } else if (type === 'deleted') {
+        notifications.value = notifications.value.filter(x => x.id !== id)
+        if (selectedNotification.value?.id === id) selectedNotification.value = null
+      }
+    }
+
+    // Core methods
+    const fetchNotifications = async () => {
+      loading.value = true
+      error.value = null
+      try {
+        const res = await axios.get('/api/notifications')
+        notifications.value = res.data
+      } catch (err) {
+        console.error('Error fetching notifications:', err)
+        error.value = 'Failed to load notifications. Please try again.'
+      } finally {
+        loading.value = false
+      }
+    }
+
+    const fetchAgents = async () => {
+      try {
+        const res = await axios.get('/api/agents')
+        agents.value = res.data
+      } catch {
+        showToast('Failed to load agents', 'error')
+      }
+    }
+
+    const fetchCurrentUser = async () => {
+      try {
+        const res = await axios.get('/api/session')
+        user.value = res.data
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const handleMainFilterChange = (filter) => {
+      mainFilter.value = filter
+      if (selectedNotification.value) selectedNotification.value = null
+    }
+
+    const getNotificationColor = (n) => {
+      if (n.event_type === 'object_detection') return '#e74c3c'
+      if (n.event_type === 'audio_detection') return '#3498db'
+      if (n.event_type === 'chat_detection') return '#f39c12'
+      return '#2ecc71'
+    }
+
+    const getNotificationType = (n) => {
+      if (n.event_type === 'object_detection') return 'Visual'
+      if (n.event_type === 'audio_detection') return 'Audio'
+      if (n.event_type === 'chat_detection') return 'Chat'
+      return 'General'
+    }
+
+    const getNotificationMessage = (n) => {
+      if (n.event_type === 'object_detection') {
+        const det = n.details?.detections || []
+        return det.length ? `Detected: ${det.map(d => d.class).join(', ')}` : 'Object detected'
+      }
+      if (n.event_type === 'audio_detection') {
+        return n.details?.transcript?.substring(0,100) || 'Audio detected'
+      }
+      if (n.event_type === 'chat_detection') {
+        return n.details?.message?.substring(0,100) || 'Chat message detected'
+      }
+      return n.details?.message || 'Notification received'
+    }
+
+    const getNotificationDetailTitle = () => {
+      const n = selectedNotification.value
+      if (!n) return ''
+      if (n.event_type === 'object_detection') return 'Visual Detection'
+      if (n.event_type === 'audio_detection') return 'Audio Detection'
+      if (n.event_type === 'chat_detection') return 'Chat Detection'
+      return 'Notification Details'
+    }
+
+    const formatTimestamp = (ts, detailed = false) => {
+      if (!ts) return 'Unknown'
+      try {
+        const date = parseISO(ts)
+        if (detailed) {
+          return new Intl.DateTimeFormat('en-US', {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          }).format(date)
+        }
+        return formatDistanceToNow(date, { addSuffix: true })
+      } catch {
+        return 'Invalid date'
+      }
+    }
+
+    const formatConfidence = (c) => typeof c === 'number' ? `${Math.round(c * 100)}%` : 'N/A'
+    const truncateUrl = (u) => u?.length > 40 ? u.slice(0,37) + '...' : u || ''
+
+    const handleNotificationClick = (n) => {
+      selectedNotification.value = n
+      if (isMobile.value) {
+        nextTick(() => {
+          const el = document.querySelector('.details-panel')
+          if (el) el.scrollIntoView({ behavior: 'smooth' })
+        })
+      }
+    }
+
+    const markAsRead = async (id) => {
+      try {
+        await axios.put(`/api/notifications/${id}/read`)
+        const n = notifications.value.find(x => x.id === id)
+        if (n) n.read = true
+        showToast('Notification marked as read', 'success')
+      } catch {
+        showToast('Failed to mark as read', 'error')
+      }
+    }
+
+    const markAllAsRead = async () => {
+      try {
+        await axios.put('/api/notifications/read-all')
+        notifications.value.forEach(x => x.read = true)
+        showToast('All notifications marked as read', 'success')
+      } catch {
+        showToast('Failed to mark all as read', 'error')
+      }
+    }
+
+    const deleteNotification = async (id) => {
+      try {
+        await axios.delete(`/api/notifications/${id}`)
+        notifications.value = notifications.value.filter(x => x.id !== id)
+        if (selectedNotification.value?.id === id) selectedNotification.value = null
+        isDeleteModalOpen.value = false
+        showToast('Notification deleted', 'success')
+      } catch {
+        isDeleteModalOpen.value = false
+        showToast('Failed to delete notification', 'error')
+      }
+    }
+
+    const deleteAllNotifications = async () => {
+      try {
+        await axios.delete('/api/notifications')
+        notifications.value = []
+        selectedNotification.value = null
+        isDeleteModalOpen.value = false
+        showToast('All notifications deleted', 'success')
+      } catch {
+        isDeleteModalOpen.value = false
+        showToast('Failed to delete all notifications', 'error')
+      }
+    }
+
+    const prepareCreateForm = () => {
+      isEditMode.value = false
+      notificationForm.value = {
+        event_type: 'general',
+        room_url: '',
+        details: { streamer_name: '', platform: '', message: '' }
+      }
+      isFormModalOpen.value = true
+      isMenuOpen.value = false
+    }
+
+    const prepareEditForm = () => {
+      if (!selectedNotification.value) return
+      isEditMode.value = true
+      notificationForm.value = {
+        event_type: selectedNotification.value.event_type,
+        room_url: selectedNotification.value.room_url,
+        details: { ...selectedNotification.value.details }
+      }
+      isFormModalOpen.value = true
+    }
+
+    const submitNotificationForm = async () => {
+      try {
+        if (isEditMode.value) {
+          await axios.put(`/api/notifications/${selectedNotification.value.id}`, notificationForm.value)
+          const idx = notifications.value.findIndex(x => x.id === selectedNotification.value.id)
+          if (idx !== -1) {
+            notifications.value[idx] = { ...notifications.value[idx], ...notificationForm.value }
+            selectedNotification.value = notifications.value[idx]
+          }
+          showToast('Notification updated', 'success')
+        } else {
+          const res = await axios.post('/api/notifications', notificationForm.value)
+          notifications.value.unshift(res.data.notification)
+          showToast('Notification created', 'success')
+        }
+        isFormModalOpen.value = false
+      } catch {
+        showToast('Failed to save notification', 'error')
+      }
+    }
+
+    const forwardNotification = async (agentId) => {
+      if (!selectedNotification.value) return
+      try {
+        await axios.post(`/api/notifications/${selectedNotification.value.id}/assign`, { agent_id: agentId })
+        const agent = agents.value.find(a => a.id === agentId)
+        selectedNotification.value.assigned_agent = agent?.username
+        const n = notifications.value.find(x => x.id === selectedNotification.value.id)
+        if (n) n.assigned_agent = agent?.username
+        isAgentDropdownOpen.value = false
+        showToast(`Forwarded to ${agent?.username || 'agent'}`, 'success')
+      } catch {
+        isAgentDropdownOpen.value = false
+        showToast('Failed to forward notification', 'error')
+      }
+    }
+
+    const toggleSound = () => {
+      soundEnabled.value = !soundEnabled.value
+      localStorage.setItem('notificationSound', soundEnabled.value)
+      showToast(`Sound ${soundEnabled.value ? 'enabled' : 'disabled'}`, 'info')
+      isMenuOpen.value = false
+    }
+
+    const openImageModal = (src) => {
+      imageModalSrc.value = src
+    }
+
+    const playNotificationSound = () => {
+      const audio = new Audio('/notification.mp3')
+      audio.play().catch(() => {})
+    }
+
+    const showToast = (msg, type = 'info') => {
+      const id = toastCounter++
+      toasts.value.push({ id, message: msg, type })
       setTimeout(() => {
-        newNotificationIds.value = newNotificationIds.value.filter(id => id !== data.id);
-      }, 5000);
-      
-      // Play sound if enabled
-      if (soundEnabled.value) {
-        playNotificationSound();
-      }
-      
-      showToast('New notification received', 'info');
+        toasts.value = toasts.value.filter(t => t.id !== id)
+      }, 3000)
     }
-  });
-  
-  // Handle notification updates (read status, etc.)
-  socket.value.on('notification_update', (data) => {
-    console.log('Notification update received:', data);
-    
-    const { id, type } = data;
-    
-    // Update local state
-    if (type === 'read') {
-      const notification = notifications.value.find(n => n.id === id);
-      if (notification) {
-        notification.read = true;
-        applyFilters();
-      }
-    } else if (type === 'deleted') {
-      notifications.value = notifications.value.filter(n => n.id !== id);
-      applyFilters();
-      
-      // Reset selected notification if it's the one being deleted
-      if (selectedNotification.value && selectedNotification.value.id === id) {
-        selectedNotification.value = null;
-      }
+
+    const handleResize = () => {
+      isMobile.value = window.innerWidth < 768
     }
-  });
-};
 
-const playNotificationSound = () => {
-  const audio = new Audio('/notification.mp3');
-  audio.play().catch(err => console.error('Error playing notification sound:', err));
-};
+    // Lifecycle
+    onMounted(() => {
+      fetchNotifications()
+      fetchAgents()
+      fetchCurrentUser()
+      setupSocketConnection()
+      window.addEventListener('resize', handleResize)
+      window.addEventListener('online', setupSocketConnection)
+      // Set dark mode based on system preference
+      isDarkMode.value = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+    })
 
-const handleResize = () => {
-  isMobile.value = window.innerWidth < 768;
-};
+    onBeforeUnmount(() => {
+      if (socket.value) {
+        socket.value.off('notification', handleNewNotification)
+        socket.value.off('notification_update', handleNotificationUpdate)
+        socket.value.disconnect()
+      }
+      window.removeEventListener('resize', handleResize)
+    })
 
-// Watch for filter changes
-watch([mainFilter, detectionSubFilter], () => {
-  applyFilters();
-});
+    onBeforeUnmount(() => {
+      if (socket.value) {
+        socket.value.off('notification', handleNewNotification)
+        socket.value.off('notification_update', handleNotificationUpdate)
+        socket.value.disconnect()
+      }
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('online', setupSocketConnection)
+    })
 
-// Lifecycle hooks
-onMounted(() => {
-  fetchNotifications();
-  setupSocketConnection();
-  
-  window.addEventListener('resize', handleResize);
-  
-  // Animation for initial load
-  nextTick(() => {
-    anime({
-      targets: '.notification-card',
-      translateY: [20, 0],
-      opacity: [0, 1],
-      delay: anime.stagger(50),
-      easing: 'easeOutQuad'
-    });
-  });
-});
-
-onUnmounted(() => {
-  if (socket.value) {
-    socket.value.disconnect();
+    return {
+      notifications,
+      selectedNotification,
+      mainFilter,
+      detectionSubFilter,
+      loading,
+      error,
+      filteredNotifications,
+      unreadCount,
+      isMenuOpen,
+      isDeleteModalOpen,
+      isAgentDropdownOpen,
+      isFormModalOpen,
+      isEditMode,
+      notificationForm,
+      agents,
+      user,
+      soundEnabled,
+      isDarkMode,
+      isMobile,
+      showRawJson,
+      imageModalSrc,
+      newNotificationIds,
+      toasts,
+      fetchNotifications,
+      handleMainFilterChange,
+      getNotificationColor,
+      getNotificationType,
+      getNotificationMessage,
+      getNotificationDetailTitle,
+      formatTimestamp,
+      formatConfidence,
+      truncateUrl,
+      handleNotificationClick,
+      markAsRead,
+      markAllAsRead,
+      deleteNotification,
+      deleteAllNotifications,
+      prepareCreateForm,
+      prepareEditForm,
+      submitNotificationForm,
+      forwardNotification,
+      toggleSound,
+      openImageModal,
+      showToast,
+      safeSocketEmit
+    }
   }
-  
-  window.removeEventListener('resize', handleResize);
-});
+}
 </script>
+
 
 <style scoped>
 .notifications-page {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: #f8f9fa;
-  color: #333;
+  background-color: var(--background-color);
+  color: var(--text-color);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* Dark Mode */
 .dark-mode {
   background-color: #121212;
-  color: #e4e4e4;
+  color: #f0f0f0;
 }
 
 .dark-mode .top-bar,
@@ -944,7 +996,7 @@ onUnmounted(() => {
 .dark-mode .error-state,
 .dark-mode .state-container {
   background-color: #2a2a2a;
-  color: #ccc;
+  color: #ddd;
 }
 
 .dark-mode .detection-item,
@@ -953,7 +1005,7 @@ onUnmounted(() => {
 }
 
 .dark-mode a {
-  color: #4dabf7;
+  color: #6ab0f3;
 }
 
 .dark-mode .modal-overlay {
@@ -966,8 +1018,8 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 20px;
-  background-color: #fff;
-  border-bottom: 1px solid #e1e4e8;
+  background-color: var(--input-bg);
+  border-bottom: 1px solid var(--input-border);
   z-index: 10;
   position: relative;
 }
@@ -978,25 +1030,26 @@ onUnmounted(() => {
 }
 
 .tab-btn {
-  padding: 6px 12px;
+  padding: 8px 16px;
   border: none;
   background: none;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
-  color: #555;
+  color: var(--text-color);
   transition: all 0.2s ease;
   position: relative;
 }
 
 .tab-btn:hover {
-  background-color: #f0f0f0;
+  background-color: rgba(var(--primary-rgb), 0.1);
+  color: var(--primary-color);
 }
 
 .tab-btn.active {
-  background-color: #ebf5fe;
-  color: #0366d6;
+  background-color: rgba(var(--primary-rgb), 0.1);
+  color: var(--primary-color);
 }
 
 .dark-mode .tab-btn:hover {
@@ -1030,8 +1083,8 @@ onUnmounted(() => {
 }
 
 .icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   border: none;
   background-color: transparent;
@@ -1040,10 +1093,12 @@ onUnmounted(() => {
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
+  color: var(--text-color);
 }
 
 .icon-btn:hover {
-  background-color: #f0f0f0;
+  background-color: rgba(var(--primary-rgb), 0.1);
+  color: var(--primary-color);
 }
 
 .dark-mode .icon-btn:hover {
@@ -1188,22 +1243,24 @@ onUnmounted(() => {
   padding: 12px;
   border-radius: 8px;
   margin-bottom: 8px;
-  background-color: #fff;
-  border: 1px solid #e1e4e8;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
+  animation: fadeIn 0.3s ease;
 }
 
 .notification-card:hover {
-  background-color: #f6f8fa;
+  background-color: var(--hover-bg);
   transform: translateY(-1px);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  animation: pulse 0.5s ease-in-out;
 }
 
 .notification-card.selected {
-  background-color: #f0f6ff;
-  border-color: #79b8ff;
+  background-color: rgba(var(--primary-rgb), 0.1);
+  border-color: var(--primary-color);
 }
 
 .notification-card.unread {
@@ -1212,7 +1269,7 @@ onUnmounted(() => {
 }
 
 .notification-card.read {
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .dark-mode .notification-card.selected {
@@ -1239,19 +1296,20 @@ onUnmounted(() => {
 }
 
 .notification-type {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: #0366d6;
 }
 
 .notification-time {
-  font-size: 12px;
+  font-size: 13px;
   color: #888;
 }
 
 .notification-message {
-  font-size: 14px;
+  font-size: 15px;
   margin-bottom: 4px;
+  line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1260,7 +1318,7 @@ onUnmounted(() => {
 .notification-meta {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 13px;
   color: #888;
 }
 
@@ -1357,6 +1415,7 @@ onUnmounted(() => {
   text-align: center;
   height: 100%;
   color: #888;
+  font-size: 15px;
 }
 
 .empty-icon {
@@ -1442,15 +1501,16 @@ onUnmounted(() => {
 .detail-actions button {
   padding: 6px 12px;
   background: none;
-  border: 1px solid #e1e4e8;
-  border-radius: 4px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 0.9rem;
   transition: all 0.2s ease;
+  color: var(--text-color);
 }
 
 .detail-actions button:hover {
-  background-color: #f6f8fa;
+  background-color: var(--hover-bg);
 }
 
 .detail-actions .delete-btn {
@@ -1462,12 +1522,12 @@ onUnmounted(() => {
   background-color: #f8d7da;
 }
 
-.detail-actions .view-stream-btn {
+.detail-actions .forward-btn {
   color: #0366d6;
   border-color: #0366d6;
 }
 
-.detail-actions .view-stream-btn:hover {
+.detail-actions .forward-btn:hover {
   background-color: #f0f7ff;
 }
 
@@ -1489,12 +1549,12 @@ onUnmounted(() => {
   background-color: #4c1d24;
 }
 
-.dark-mode .detail-actions .view-stream-btn {
+.dark-mode .detail-actions .forward-btn {
   color: #4dabf7;
   border-color: #4dabf7;
 }
 
-.dark-mode .detail-actions .view-stream-btn:hover {
+.dark-mode .detail-actions .forward-btn:hover {
   background-color: #1a365d;
 }
 
@@ -1513,37 +1573,23 @@ onUnmounted(() => {
   width: 100px;
   font-weight: 500;
   color: #666;
+  font-size: 15px;
 }
 
 .dark-mode .detail-field label {
-  color: #aaa;
+  color: #bbb;
 }
 
 .url-link {
   color: #0366d6;
   text-decoration: none;
+  font-size: 15px;
 }
 
 .url-link:hover {
   text-decoration: underline;
 }
 
-.assigned-badge {
-  display: inline-block;
-  padding: 2px 6px;
-  background-color: #d4edda;
-  color: #28a745;
-  border-radius: 4px;
-  font-size: 12px;
-  margin-left: 8px;
-}
-
-.dark-mode .assigned-badge {
-  background-color: #1e4620;
-  color: #4ade80;
-}
-
-/* Type-specific content */
 .type-details {
   margin-top: 24px;
   padding-top: 16px;
@@ -1554,198 +1600,136 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 600;
   margin-top: 0;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .type-details h4 {
   font-size: 14px;
   font-weight: 500;
-  margin-top: 16px;
+  margin-top: 12px;
   margin-bottom: 8px;
   color: #666;
 }
 
 .dark-mode .type-details h4 {
-  color: #aaa;
-}
-
-/* Detection type content */
-.detection-images {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.image-container {
-  flex: 1;
-  min-width: 200px;
-  max-width: 100%;
-}
-
-.detection-image {
-  width: 100%;
-  border-radius: 6px;
-  cursor: zoom-in;
-  transition: transform 0.2s ease;
-}
-
-.detection-image:hover {
-  transform: scale(1.02);
+  color: #bbb;
 }
 
 .detections-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 8px;
-  margin-top: 8px;
+  margin-bottom: 16px;
 }
 
 .detection-item {
   padding: 8px;
   border-radius: 4px;
   background-color: #f6f8fa;
-  font-size: 13px;
+  font-size: 14px;
   display: flex;
   flex-direction: column;
-  transition: all 0.2s ease;
-}
-
-.detection-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-}
-
-.detection-item.high-confidence {
-  border-left: 3px solid #2ecc71;
 }
 
 .detection-class {
   font-weight: 500;
 }
 
-.confidence-badge {
-  display: inline-block;
-  padding: 2px 6px;
-  border-radius: 12px;
-  color: white;
-  font-size: 12px;
+.detection-confidence {
+  color: #2ecc71;
+  font-size: 13px;
   margin-top: 4px;
-  align-self: flex-start;
 }
 
-/* Audio type content */
-.transcript-text {
+.detection-image {
+  margin-top: 12px;
+  max-width: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.detection-image img {
+  max-width: 100%;
+  height: auto;
+  cursor: zoom-in;
+  transition: transform 0.2s ease;
+}
+
+.detection-image img:hover {
+  transform: scale(1.02);
+}
+
+.audio-transcript p,
+.chat-message p {
   background-color: #f6f8fa;
   padding: 12px;
   border-radius: 4px;
-  font-size: 14px;
-  line-height: 1.5;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
-.dark-mode .transcript-text {
+.dark-mode .audio-transcript p,
+.dark-mode .chat-message p {
   background-color: #2a2a2a;
 }
 
-.keyword-tag {
-  display: inline-block;
-  padding: 4px 8px;
-  background-color: #e1e4e8;
-  border-radius: 12px;
-  font-size: 12px;
-  margin-right: 6px;
-  margin-bottom: 6px;
-}
-
-.keywords-list {
+.keywords {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.sentiment-indicator {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.sentiment-indicator.very-negative {
-  background-color: #fee2e2;
-  color: #ef4444;
-}
-
-.sentiment-indicator.negative {
-  background-color: #fecaca;
-  color: #dc2626;
-}
-
-.sentiment-indicator.neutral {
-  background-color: #e5e7eb;
-  color: #6b7280;
-}
-
-.sentiment-indicator.positive {
-  background-color: #d1fae5;
-  color: #10b981;
-}
-
-.sentiment-indicator.very-positive {
-  background-color: #a7f3d0;
-  color: #059669;
-}
-
-.dark-mode .sentiment-indicator.very-negative {
-  background-color: #7f1d1d;
-  color: #fca5a5;
-}
-
-.dark-mode .sentiment-indicator.negative {
-  background-color: #991b1b;
-  color: #fca5a5;
-}
-
-.dark-mode .sentiment-indicator.neutral {
-  background-color: #4b5563;
-  color: #e5e7eb;
-}
-
-.dark-mode .sentiment-indicator.positive {
-  background-color: #065f46;
-  color: #a7f3d0;
-}
-
-.dark-mode .sentiment-indicator.very-positive {
-  background-color: #064e3b;
-  color: #a7f3d0;
-}
-
-/* Chat type content */
-.chat-message {
-  background-color: #f6f8fa;
-  padding: 12px;
-  border-radius: 4px;
   margin-top: 8px;
 }
 
-.message-sender {
-  font-weight: 500;
+.keyword-tag {
+  background-color: #e1e4e8;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 13px;
+  display: inline-block;
+}
+
+.raw-json {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e1e4e8;
+}
+
+.raw-json h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.json-toggle {
+  display: inline-block;
+  padding: 4px 8px;
+  background-color: #f6f8fa;
+  border: 1px solid #e1e4e8;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
   margin-bottom: 8px;
-  color: #555;
 }
 
-.message-text {
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.dark-mode .chat-message {
+.dark-mode .json-toggle {
   background-color: #2a2a2a;
+  border-color: #444;
 }
 
-.dark-mode .message-sender {
-  color: #aaa;
+.raw-json pre {
+  background-color: #f6f8fa;
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  max-height: 300px;
+}
+
+.dark-mode .raw-json pre {
+  background-color: #2a2a2a;
 }
 
 /* Modals */
@@ -1820,9 +1804,9 @@ onUnmounted(() => {
 }
 
 .confirm-btn {
-  background-color: #0366d6;
+  background-color: var(--primary-color);
   color: white;
-  border-color: #0366d6;
+  border-color: var(--primary-color);
 }
 
 .delete-modal .confirm-btn {
@@ -1833,6 +1817,7 @@ onUnmounted(() => {
 .warning {
   color: #dc3545;
   font-weight: 500;
+  font-size: 14px;
 }
 
 .dark-mode .modal-container {
@@ -1849,6 +1834,89 @@ onUnmounted(() => {
 
 .dark-mode .delete-modal .confirm-btn {
   background-color: #a02f3e;
+}
+
+/* Form styling */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e1e4e8;
+  border-radius: 4px;
+  font-size: 15px;
+}
+
+.dark-mode .form-group input,
+.dark-mode .form-group select,
+.dark-mode .form-group textarea {
+  background-color: #2a2a2a;
+  color: #f0f0f0;
+  border-color: #444;
+}
+
+/* Agent list in forward modal */
+.agent-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.agent-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border-radius: 4px;
+}
+
+.agent-item:hover {
+  background-color: #f6f8fa;
+}
+
+.dark-mode .agent-item:hover {
+  background-color: #333;
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 10px;
+  background-color: #ccc;
+}
+
+.status-indicator.online {
+  background-color: #2ecc71;
+}
+
+.status-indicator.offline {
+  background-color: #e74c3c;
+}
+
+.agent-info {
+  flex: 1;
+}
+
+.agent-name {
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.agent-email {
+  font-size: 13px;
+  color: #888;
 }
 
 /* Image modal */
@@ -1896,7 +1964,7 @@ onUnmounted(() => {
   padding: 12px 16px;
   border-radius: 4px;
   color: white;
-  font-size: 14px;
+  font-size: 15px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   min-width: 250px;
 }
@@ -1984,16 +2052,12 @@ onUnmounted(() => {
   }
   
   .notification-message {
-    font-size: 13px;
+    font-size: 14px;
   }
   
   .notification-meta,
   .notification-time {
-    font-size: 11px;
-  }
-  
-  .detection-images {
-    flex-direction: column;
+    font-size: 12px;
   }
 }
 </style>

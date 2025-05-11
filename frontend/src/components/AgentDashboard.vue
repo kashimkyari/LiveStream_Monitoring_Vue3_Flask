@@ -10,40 +10,11 @@
     />
     
     <div class="main-content" :class="{ 'sidebar-minimized': sidebarMinimized }" ref="mainContent">
-      <div class="dashboard-header" ref="dashboardHeader">
-        <h1 class="page-title" ref="pageTitle">{{ pageTitle }}</h1>
-        <div class="status-display" ref="statusDisplay">
-          <div class="status-badge" :class="{ online: isOnline }" ref="statusBadge">
-            <span class="status-dot"></span>
-            {{ isOnline ? 'Online' : 'Offline' }}
-          </div>
-          <span class="last-refresh" ref="lastRefreshTime">Last updated: {{ formattedLastRefresh }}</span>
-          <button 
-            @click="refreshDashboard" 
-            class="refresh-button" 
-            title="Refresh Dashboard"
-            ref="refreshButton"
-          >
-            <font-awesome-icon :icon="['fas', 'sync']" :class="{ 'rotate': isRefreshing }" />
-          </button>
-        </div>
-      </div>
+      
 
       <div class="dashboard-content" ref="dashboardContent">
         <!-- Dashboard Tab (Overview) -->
-        <transition name="fade-slide" mode="out-in">
-          <AgentDashboardOverview 
-            v-if="currentTab === 'dashboard'" 
-            ref="dashboardGrid"
-            :stats="stats"
-            :recentAlerts="recentAlerts"
-            :activeStreams="activeStreams"
-            :chatKeywords="chatKeywords"
-            :flaggedObjects="flaggedObjects"
-            :telegramRecipients="telegramRecipients"
-            @navigate="navigateToTab"
-          />
-        </transition>
+   
         
         <!-- Streams Tab -->
         <transition name="fade-slide" mode="out-in">
@@ -86,43 +57,22 @@
             @refresh-messages="handleMessagesRefresh"
           />
         </transition>
+
+        <transition name="fade-slide" mode="out-in">
+          <AgentSettingsPage 
+            v-if="currentTab === 'settings'"
+            :currentUser="user" 
+            @update-user="fetchCurrentUser"
+          />
+        </transition>
+     
+     
       </div>
       
       
       
       <!-- Quick navigation menu -->
-      <transition name="fade-scale">
-        <div class="quick-nav-menu" v-if="showQuickNav" ref="quickNavMenu">
-          <div class="quick-nav-header">
-            <h3>Quick Navigation</h3>
-            <button class="close-btn" @click="toggleQuickNav">
-              <font-awesome-icon :icon="['fas', 'times']" />
-            </button>
-          </div>
-          <div class="quick-nav-items">
-            <div 
-              v-for="(tab, index) in navTabs" 
-              :key="tab.id"
-              class="quick-nav-item"
-              :class="{ 'active': currentTab === tab.id }"
-              @click="quickNavTo(tab.id)"
-              :data-index="index"
-              ref="navItems"
-            >
-              <font-awesome-icon :icon="tab.icon" />
-              <span>{{ tab.label }}</span>
-              <div class="badge" v-if="getBadgeCount(tab.id) > 0">{{ getBadgeCount(tab.id) }}</div>
-            </div>
-          </div>
-        </div>
-      </transition>
-      
-      <!-- Action feedback tooltip -->
-      <transition name="fade">
-        <div class="action-tooltip" v-if="showTooltip" ref="tooltip" :style="tooltipStyle">
-          {{ tooltipText }}
-        </div>
-      </transition>
+    
     </div>
     
     <!-- Theme toggle button removed - now using App.vue's theme toggle -->
@@ -134,7 +84,6 @@ import { ref, computed, onMounted, nextTick, onBeforeUnmount, watch, provide, in
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import AgentSidebar from './AgentSidebar.vue'
-import AgentDashboardOverview from './AgentDashboardOverview.vue'
 import AgentStreamsComponent from './AgentStreamsComponent.vue'
 import AgentTasksComponent from './AgentTasksComponent.vue'
 import AgentNotificationsComponent from './AgentNotificationsComponent.vue'
@@ -171,6 +120,7 @@ import {
   faSun,
   faMoon
 } from '@fortawesome/free-solid-svg-icons'
+import AgentSettingsPage from './AgentSettingsPage.vue'
 
 library.add(
   faSync,
@@ -208,11 +158,11 @@ export default {
   components: {
     FontAwesomeIcon,
     AgentSidebar,
-    AgentDashboardOverview,
     AgentStreamsComponent,
     AgentTasksComponent,
     AgentNotificationsComponent,
-    AgentMessageComponent
+    AgentMessageComponent, 
+    AgentSettingsPage
   },
   props: {
     isOnline: {
@@ -231,7 +181,7 @@ export default {
     const user = ref(null)
     const lastRefresh = ref(new Date())
     const isRefreshing = ref(false)
-    const currentTab = ref('dashboard')
+    const currentTab = ref('streams')
     const isMobile = ref(window.innerWidth <= 768)
     const refreshInterval = ref(null)
     const showQuickNav = ref(false)
@@ -245,11 +195,11 @@ export default {
     
     // Navigation tabs
     const navTabs = [
-      { id: 'dashboard', label: 'Dashboard', icon: ['fas', 'tachometer-alt'] },
       { id: 'streams', label: 'Streams', icon: ['fas', 'video'] },
       { id: 'tasks', label: 'Tasks', icon: ['fas', 'clipboard-list'] },
       { id: 'notifications', label: 'Notifications', icon: ['fas', 'bell'] },
-      { id: 'messages', label: 'Messages', icon: ['fas', 'comments'] }
+      { id: 'messages', label: 'Messages', icon: ['fas', 'comments'] },
+      { id: 'settings', label: 'Settings', icon: ['fas', 'cog'] }
     ]
     
     // Animation refs
@@ -289,9 +239,6 @@ export default {
     
     const recentAlerts = ref([])
     const activeStreams = ref([])
-    const chatKeywords = ref([])
-    const flaggedObjects = ref([])
-    const telegramRecipients = ref([])
     const tasks = ref([])
     const allAlerts = ref([])
     
@@ -301,8 +248,6 @@ export default {
     // Page title based on current tab
     const pageTitle = computed(() => {
       switch (currentTab.value) {
-        case 'dashboard':
-          return 'Dashboard'
         case 'streams':
           return 'Assigned Streams'
         case 'tasks':
@@ -312,7 +257,7 @@ export default {
         case 'messages':
           return 'Messages'
         default:
-          return 'Dashboard'
+          return 'streams'
       }
     })
     
@@ -470,10 +415,8 @@ export default {
         }
         
         // Run tab-specific animations
-        if (tab === 'dashboard') {
+        if (tab === 'streams') {
           animateDashboardEntrance()
-        } else if (tab === 'streams') {
-          animateTabEntrance()
         } else if (tab === 'tasks') {
           animateTabEntrance()
         } else if (tab === 'notifications') {
@@ -783,8 +726,8 @@ export default {
     // Fetch current user information
     const fetchCurrentUser = async () => {
       try {
-        const response = await axios.get('/api/me')
-        user.value = response.data
+        const response = await axios.get('/api/session')
+        user.value = response.data.user
       } catch (error) {
         console.error('Error fetching user data:', error)
       }
@@ -1044,9 +987,6 @@ export default {
       
       try {
         await Promise.all([
-          fetchKeywords(),
-          fetchObjects(),
-          fetchTelegramRecipients(),
           fetchActiveStreams(),
           fetchRecentLogs(),
           fetchTasks(),
@@ -1066,17 +1006,7 @@ export default {
       }
     }
     
-    // Fetch keywords from API
-    const fetchKeywords = async () => {
-      try {
-        const response = await axios.get('/api/keywords')
-        chatKeywords.value = response.data || []
-      } catch (error) {
-        console.error('Error fetching keywords:', error)
-        errors.value.keywords = 'Failed to fetch keywords'
-        chatKeywords.value = []
-      }
-    }
+ 
 
     // Handle messages refresh with animation
     const handleMessagesRefresh = () => {
@@ -1125,30 +1055,7 @@ export default {
       }
     }
 
-    // Fetch objects from API
-    const fetchObjects = async () => {
-      try {
-        const response = await axios.get('/api/objects')
-        flaggedObjects.value = response.data || []
-      } catch (error) {
-        console.error('Error fetching objects:', error)
-        errors.value.objects = 'Failed to fetch objects'
-        flaggedObjects.value = []
-      }
-    }
-
-    // Fetch telegram recipients from API
-    const fetchTelegramRecipients = async () => {
-      try {
-        const response = await axios.get('/api/telegram_recipients')
-        telegramRecipients.value = response.data || []
-      } catch (error) {
-        console.error('Error fetching telegram recipients:', error)
-        errors.value.telegram = 'Failed to fetch recipients'
-        telegramRecipients.value = []
-      }
-    }
-
+    
     // Fetch tasks with animation feedback
     const fetchTasks = async () => {
       try {
@@ -1599,9 +1506,6 @@ export default {
       recentAlerts,
       activeStreams,
       validatedStreams,
-      chatKeywords,
-      flaggedObjects,
-      telegramRecipients,
       tasks,
       allAlerts,
       isLoadingStreams,
@@ -1709,11 +1613,9 @@ export default {
 
 .agent-container {
   top: 5;
-  min-height: 100vh;
   background-color: var(--bg-color);
   color: var(--text-color);
   overflow-x: hidden; /* Prevent horizontal scrollbar during animations */
-  padding-left: 55px;
   height: auto;
   width: auto;
 }
@@ -1730,28 +1632,8 @@ export default {
 
 
 /* Dashboard header */
-.dashboard-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  background-color: var(--header-bg, #ffffff);
-  z-index: 20;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
 
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--heading-color, #111827);
-  margin: 0;
-}
 
-.status-display {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
 
 .status-badge {
   display: flex;
@@ -1818,7 +1700,6 @@ export default {
 .dashboard-content {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
   position: relative;
 }
 

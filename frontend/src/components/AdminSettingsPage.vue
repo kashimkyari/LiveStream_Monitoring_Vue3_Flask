@@ -284,7 +284,7 @@
               localStorage.removeItem(USER_ROLE_KEY)
               delete axios.defaults.headers.common['Authorization']
   
-              toast.info("You have been logged out", {
+              toast.warning("You have been logged out", {
                 timeout: 2000,
                 position: "top-center",
                 icon: true

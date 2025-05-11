@@ -36,139 +36,15 @@
       </div>
     </nav>
     
-    <div class="sidebar-footer" ref="footerRef">
-      <div class="status-indicator">
-        <div class="status-dot" :class="{ online: isOnline }" :title="isOnline ? 'Online' : 'Offline'"></div>
-      </div>
-      <button @click="toggleSettings" class="settings-toggle" ref="settingsToggleRef" title="Settings">
-        <font-awesome-icon :icon="['fas', 'cog']" />
-      </button>
-    </div>
+  
   </div>
 
-  <!-- Settings Popup -->
-  <div class="settings-popup" v-if="showSettings" ref="settingsPopupRef">
-    <div class="settings-menu">
-      <div class="settings-section-title">Detection</div>
-      <button 
-        class="settings-item flag-item" 
-        @click="openAddKeywordModal"
-        ref="keywordButtonRef"
-      >
-        <span>Add Keyword</span>
-        <font-awesome-icon :icon="['fas', 'plus']" class="right-icon" />
-      </button>
-      <button 
-        class="settings-item flag-item" 
-        @click="openAddObjectModal"
-        ref="objectButtonRef"
-      >
-        <span>Add Object Detection</span>
-        <font-awesome-icon :icon="['fas', 'plus']" class="right-icon" />
-      </button>
-      <button 
-        class="settings-item flag-item" 
-        @click="openAddTelegramModal"
-        ref="telegramButtonRef"
-      >
-        <span>Add Telegram Recipient</span>
-        <font-awesome-icon :icon="['fas', 'plus']" class="right-icon" />
-      </button>
-     
-      <button class="settings-item logout" @click="logout">
-        <span>Log out</span>
-      </button>
-    </div>
-  </div>
+ 
 
   <!-- Mobile Bottom Navigation -->
-  <div class="mobile-nav" v-if="isMobile" ref="mobileNavRef" :data-theme="isDarkTheme ? 'dark' : 'light'">
-    <!-- Regular navigation buttons first -->
-    <button 
-      v-for="(tab, index) in agentTabs" 
-      :key="tab.id"
-      :class="{ active: activeTab === tab.id }"
-      @click="changeTab(tab.id, $event)"
-      class="mobile-nav-button"
-      :ref="el => { if (el) mobileNavButtons[index] = el }"
-      :title="tab.label"
-    >
-      <span class="nav-icon">
-        <font-awesome-icon :icon="tab.icon" />
-      </span>
-      <span v-if="tab.id === 'messages' && messageUnreadCount > 0" class="mobile-notification-badge">
-        {{ messageUnreadCount }}
-      </span>
-    </button>
-    
-    <!-- Hamburger menu button (positioned last - position 5) -->
-    <button 
-      class="mobile-nav-button hamburger-button"
-      @click="toggleHamburgerMenu"
-      ref="hamburgerButtonRef"
-      title="Menu"
-    >
-      <span class="nav-icon">
-        <font-awesome-icon :icon="['fas', 'bars']" />
-      </span>
-    </button>
-  </div>
+ 
   
-  <!-- Hamburger Menu Popup -->
-  <div class="hamburger-popup" v-if="showHamburgerMenu && isMobile" ref="hamburgerPopupRef" :data-theme="isDarkTheme ? 'dark' : 'light'">
-    <div class="settings-menu">
-      <div class="settings-section-title">Quick Actions</div>
-      <button 
-        class="settings-item" 
-        @click="refreshDashboard"
-        ref="refreshButtonRef"
-      >
-        <span>Refresh Dashboard</span>
-        <font-awesome-icon :icon="['fas', 'sync']" class="right-icon" />
-      </button>
-      
-      <div class="settings-section-title">Navigation</div>
-      <button 
-        v-for="tab in agentTabs" 
-        :key="`menu-${tab.id}`"
-        class="settings-item"
-        :class="{ 'active-menu-item': activeTab === tab.id }"
-        @click="changeTabFromMenu(tab.id)"
-      >
-        <font-awesome-icon :icon="tab.icon" class="left-icon" />
-        <span>{{ tab.label }}</span>
-        <font-awesome-icon v-if="activeTab === tab.id" :icon="['fas', 'check']" class="right-icon" />
-      </button>
-      
-      <div class="settings-section-title">Alert Settings</div>
-      <button 
-        class="settings-item flag-item" 
-        @click="openHamburgerKeywordModal"
-      >
-        <span>Add Keyword</span>
-        <font-awesome-icon :icon="['fas', 'plus']" class="right-icon" />
-      </button>
-      <button 
-        class="settings-item flag-item" 
-        @click="openHamburgerObjectModal"
-      >
-        <span>Add Object Detection</span>
-        <font-awesome-icon :icon="['fas', 'plus']" class="right-icon" />
-      </button>
-      <button 
-        class="settings-item flag-item" 
-        @click="openHamburgerTelegramModal"
-      >
-        <span>Add Telegram Recipient</span>
-        <font-awesome-icon :icon="['fas', 'plus']" class="right-icon" />
-      </button>
-      
-      <button class="settings-item logout" @click="logout">
-        <span>Log out</span>
-        <font-awesome-icon :icon="['fas', 'sign-out-alt']" class="right-icon" />
-      </button>
-    </div>
-  </div>
+
   
   <!-- Toast Notification -->
   <div class="toast-notification" v-if="showToast" :class="toastType" ref="toastRef" :data-theme="isDarkTheme ? 'dark' : 'light'">
@@ -176,26 +52,10 @@
     <span class="toast-message">{{ toastMessage }}</span>
   </div>
   
-  <!-- Logout Overlay -->
-  <div class="logout-overlay" v-if="showLogoutOverlay" ref="logoutOverlayRef" :data-theme="isDarkTheme ? 'dark' : 'light'">
-    <div class="logout-spinner" ref="logoutSpinnerRef">
-      <svg class="spinner-circle" viewBox="0 0 50 50" ref="spinnerCircleRef">
-        <circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="4"></circle>
-      </svg>
-      <span class="logout-text">Logging out...</span>
-    </div>
-  </div>
+
   
   <!-- Modal Components -->
-  <SettingsModals
-    ref="modalsRef"
-    @notification="showToastNotification"
-    @update:keywords="fetchKeywords"
-    @update:objects="fetchObjects"
-    @update:telegramRecipients="fetchTelegramRecipients"
-    :isMobile="isMobile"
-    :isDarkTheme="isDarkTheme"
-  />
+ 
 </template>
 
 <script>
@@ -326,11 +186,7 @@ export default {
 
     // Agent tabs
     const agentTabs = computed(() => [
-      {
-        id: 'dashboard',
-        label: 'Dashboard',
-        icon: ['fas', 'tachometer-alt']
-      },
+      
       {
         id: 'streams',
         label: 'Streams',
@@ -350,6 +206,11 @@ export default {
         id: 'messages',
         label: 'Messages',
         icon: ['fas', 'comments']
+      },
+      {
+        id: 'settings',
+        label: 'Settings',
+        icon: ['fas', 'cog']
       }
     ])
 
