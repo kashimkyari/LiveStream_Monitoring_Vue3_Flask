@@ -264,7 +264,7 @@
       // Local session storage keys
       const SESSION_TOKEN_KEY = 'session_token'
       const SESSION_EXPIRY_KEY = 'session_expiry'
-      const USER_ROLE_KEY = 'admin'
+      const USER_ROLE_KEY = 'userRole'
   
       // Logout handler
       const handleLogout = () => {

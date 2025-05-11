@@ -1,7 +1,7 @@
 <template>
   <section class="dashboard-tab">
     <div class="dashboard-header">
-      <h2>Stream Dashboard</h2>
+      <h2>Dashboard</h2>
     </div>
 
     <!-- Stats section -->
@@ -21,11 +21,8 @@
         <font-awesome-icon icon="search" class="search-icon" />
         <input v-model="searchQuery" placeholder="Search streams..." class="search-input" />
       </div>
-      <div class="view-controls">
-        <button @click="toggleViewMode" class="view-toggle-btn">
-          <font-awesome-icon :icon="viewMode === 'grid' ? 'list' : 'th-large'" />
-          {{ viewMode === 'grid' ? 'List View' : 'Grid View' }}
-        </button>
+      <div class="view-controls" style="display: flex; gap: 1rem;">
+        
         <button @click="refreshStreams" class="view-toggle-btn refresh-btn">
           <font-awesome-icon icon="sync-alt" />
           Refresh All
@@ -294,6 +291,9 @@ export default {
 
 .stream-container.list {
   grid-template-columns: 1fr;
+  width: 100%;
+  height: 20%;
+  display: flex;  
 }
 
 @media (max-width: 768px) {

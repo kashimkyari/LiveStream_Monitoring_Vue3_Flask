@@ -1,6 +1,5 @@
 import { createApp } from 'vue';
 import App from './App.vue';
-import { io } from 'socket.io-client';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import { mobileDetector } from './services/mobileDetector';
 import './assets/styles/common.css';
@@ -102,7 +101,7 @@ app.use(Toast, {
   transition: 'Vue-Toastification__bounce',
   maxToasts: 3,
   newestOnTop: true,
-  position: 'top',
+  position: 'top-center',
   timeout: 5000,
   closeOnClick: true,
   pauseOnFocusLoss: true,
@@ -116,26 +115,12 @@ app.use(Toast, {
   rtl: false
 });
 
-app.config.globalProperties.$socket = io('https://monitor-backend.jetcamstudio.com:5000', {
-  path: '/ws',
-  withCredentials: true,
-  transports: ['websocket'],
-});
-
-// Listen for stream update events to synchronize detection status
-app.config.globalProperties.$socket.on('stream_update', (data) => {
-  console.log('Stream status updated:', data);
-  // Here you would update the store or component state to reflect the detection status
-  // For example, if using Pinia or Vuex, dispatch an action to update the stream status
-});
 
 inject(); // Call inject() outside of app.use to initialize analytics
 
 app.use(createPinia());
 
-// Import and use the router configuration
-import router from './router/index.js';
-app.use(router);
+
 
 // Initialize mobile detector
 mobileDetector.initialize(768);
