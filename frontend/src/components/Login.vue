@@ -291,9 +291,9 @@ export default {
           const role = response.data.role;
           localStorage.setItem('userRole', role);
           if (role === 'admin') {
-            this.$router.push('/admin/dashboard');
+            window.location.href = '/admin/dashboard';
           } else {
-            this.$router.push('/agent/dashboard');
+            window.location.href = '/agent/dashboard';
           }
           this.animateSuccessfulLogin();
           this.toast.success("Login successful!", {

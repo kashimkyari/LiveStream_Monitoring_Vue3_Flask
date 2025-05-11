@@ -154,7 +154,6 @@
 
 <script>
 import { ref, computed, inject, onMounted, nextTick, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import AuthService from '../services/AuthService';
 import { useToast } from 'vue-toastification';
 import anime from 'animejs/lib/anime.es.js';
@@ -162,8 +161,7 @@ import anime from 'animejs/lib/anime.es.js';
 export default {
   name: 'MobileLogin',
   emits: ['login-success', 'forgot-password'],
-  setup(props, { emit }) {
-    const router = useRouter();
+  setup(_props, { emit }) {
     const username = ref('');
     const password = ref('');
     const rememberMe = ref(false);
@@ -376,7 +374,7 @@ export default {
         });
       }
       setTimeout(() => {
-        router?.push('/dashboard') || (window.location.href = '/dashboard');
+        window.location.href = '/dashboard';
       }, 800);
     };
 
