@@ -483,6 +483,7 @@ export default {
 </script>
 
 <style>
+
 /* Define CSS variables to control sidebar width and mobile height */
 /* Add this to your <style> section */
 :root {

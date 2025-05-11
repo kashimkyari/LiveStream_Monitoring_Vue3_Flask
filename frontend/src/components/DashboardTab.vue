@@ -211,7 +211,7 @@ export default {
 <style scoped>
 .dashboard-tab {
   width: 100%;
-  padding: 1rem;
+  padding-left: 1rem;
 }
 
 .dashboard-header h2 {

@@ -141,7 +141,7 @@ export default {
     const canToggleDetection = ref(true)
     const checkStatusInterval = ref(null)
     // Viewer count for Stripchat streams
-    const viewers = ref(0)
+    const viewers = ref(1)
     const viewersRefreshInterval = ref(null)
     // Get the global store or event bus if available
     const eventBus = inject('eventBus', null)
@@ -157,7 +157,7 @@ export default {
     
     // Computed property to determine if compact view should be used
     const isCompactView = computed(() => {
-      return props.totalStreams > 8
+      return props.totalStreams > 5
     })
 
     // Watch for changes in stream status
@@ -265,7 +265,7 @@ export default {
       if (!username) return
       
       try {
-        const response = await axios.get(`/api/stripchat-viewers/${username}`)
+        const response = await axios.get(`https://stripchat.com/api/stripchat-viewers/${username}`)
         
         // Extract guest count from response
         if (response.data && response.data.guests !== undefined) {
@@ -419,12 +419,12 @@ export default {
 
     // Function to toggle detection
     const toggleDetection = async () => {
-      if (!canToggleDetection.value) return
+      if (!canToggleDetection.value || !props.stream?.id) return
       
       canToggleDetection.value = false
       try {
         const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`)
-        const isActive = statusResponse.data.active
+        const isActive = statusResponse.data?.active ?? false
         
         if (isActive) {
           // Detection is already running, so stop it
@@ -433,18 +433,19 @@ export default {
             stop: true
           })
           isDetecting.value = false
-          showToast(`Detection stopped for ${props.stream.streamer_username}`, 'info')
+          showToast(`Detection stopped for ${props.stream?.streamer_username || 'Unknown Streamer'}`, 'info')
         } else {
           // Detection is not running, so start it
-          await axios.post('/api/trigger-detection', {
+          const startResponse = await axios.post('/api/trigger-detection', {
             stream_id: props.stream.id
           })
-          isDetecting.value = true
-          showToast(`Detection started for ${props.stream.streamer_username}`, 'success')
+          isDetecting.value = startResponse.data?.active ?? true
+          showToast(`Detection started for ${props.stream?.streamer_username || 'Unknown Streamer'}`, 'success')
         }
       } catch (error) {
         console.error('Error toggling detection:', error)
-        showToast(`Error toggling detection for ${props.stream.streamer_username}: ${error.message}`, 'error')
+        showToast(`Error toggling detection for ${props.stream?.streamer_username || 'Unknown Streamer'}: ${error.response?.data?.message || error.message}`, 'error')
+        isDetecting.value = false // Ensure state is reset on error
       } finally {
         canToggleDetection.value = true
       }
@@ -831,12 +832,12 @@ export default {
 }
 
 .detection-toggle:hover:not(:disabled) {
-  background-color: rgba(40, 167, 69, 1); /* Darker green on hover for idle state */
+  background-color: rgb(103, 124, 108); /* Darker green on hover for idle state */
   transform: translateY(-2px);
 }
 
 .detection-toggle.active {
-  background-color: rgba(255, 193, 7, 0.85); /* Yellow for running state */
+  background-color: rgba(9, 218, 37, 0.85); /* Yellow for running state */
 }
 
 .detection-toggle.active:hover:not(:disabled) {

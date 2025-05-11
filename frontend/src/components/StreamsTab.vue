@@ -1,7 +1,7 @@
 <template>
   <section class="streams-tab">
     <div class="tab-header">
-      <h2>Stream Management</h2>
+      <h2>Manage Streams </h2>
       <div class="controls">
         <div class="search-box">
           <font-awesome-icon icon="search" class="search-icon" />
@@ -669,12 +669,13 @@ export default {
 
 <style scoped>
 .streams-tab {
-  width: 100%;
+  width: 90%;
   margin: 0 auto;
   box-sizing: border-box;
   animation: fadeIn 0.4s ease;
   position: relative;
   padding-top: 1.5rem;
+  padding-left: 1rem;
 }
 
 .tab-header {
@@ -797,7 +798,7 @@ export default {
 
 
 table {
-  width: 100%;
+  width: 95%;
   border-collapse: separate;
   border-spacing: 0;
   color: var(--text-color);
@@ -1171,39 +1172,7 @@ tbody td {
   }
 }
 
-/* Media Queries for Responsive Design */
-@media (max-width: 992px) {
-  .streams-table-wrapper {
-    height: auto;
-    max-height: none;
-  }
-}
 
-@media (max-width: 768px) {
-  .controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .search-box {
-    max-width: none;
-  }
-  
-  .create-button {
-    width: 100%;
-    justify-content: center;
-  }
-  
-  /* Hide table on mobile */
-  .streams-table-wrapper {
-    display: none;
-  }
-  
-  /* Show card view on mobile */
-  .mobile-cards {
-    display: flex;
-  }
-}
 
 /* Dark Mode Adjustments */
 @media (prefers-color-scheme: dark) {
