@@ -81,7 +81,6 @@
 
 <script>
 import { ref, computed, onMounted, nextTick, onBeforeUnmount, watch, provide, inject } from 'vue'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import AgentSidebar from './AgentSidebar.vue'
 import AgentStreamsComponent from './AgentStreamsComponent.vue'
@@ -156,7 +155,6 @@ library.add(
 export default {
   name: 'AgentDashboard',
   components: {
-    FontAwesomeIcon,
     AgentSidebar,
     AgentStreamsComponent,
     AgentTasksComponent,

@@ -27,3 +27,5 @@ pnpm-debug.log*
 
 
 
+.vercel
+.del-dep-vercel.sh

@@ -58,7 +58,6 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import anime from 'animejs/lib/anime.es.js'
 import axios from 'axios'
-import SettingsModals from './SettingsModals.vue'
 import { 
   faTachometerAlt, 
   faVideo, 
@@ -76,7 +75,6 @@ import {
   faTrash,
   faSpinner
 } from '@fortawesome/free-solid-svg-icons'
-import AdminSettingsPage from './AdminSettingsPage.vue'
 
 library.add(
   faTachometerAlt, 
@@ -100,8 +98,6 @@ export default {
   name: 'AdminSidebar',
   components: {
     FontAwesomeIcon,
-    SettingsModals,
-    AdminSettingsPage
   },
   props: {
     activeTab: String,

@@ -135,7 +135,6 @@ import StreamDetailsModal from './StreamDetailsModal.vue'
 import CreateStreamModal from './CreateStreamModal.vue'
 import CreateAgentModal from './CreateAgentModal.vue'
 import ConfirmationModal from './ConfirmationModal.vue'
-import SettingsModals from './SettingsModals.vue'
 import AdminNotificationsPage from './AdminNotificationsPage.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import axios from 'axios'
@@ -153,7 +152,6 @@ export default {
     CreateStreamModal,
     CreateAgentModal,
     ConfirmationModal,
-    SettingsModals,
     FontAwesomeIcon,
     AdminNotificationsPage,
     AdminSettingsPage
@@ -640,20 +638,13 @@ export default {
 }
 
 @media (min-width: 769px) and (max-width: 1023px) {
-  .main-content {
-    
-  }
+  /* Removed empty ruleset for .main-content */
 
   .error-state {
     max-width: 600px;
   }
 }
 
-@media (min-width: 1024px) {
-  .main-content {
-    
-  }
-}
 
 
 </style>

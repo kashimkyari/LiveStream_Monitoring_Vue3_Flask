@@ -29,3 +29,4 @@ backend/.env.production
 backend/.env.development.local
 backend/monitoring.log
 backend/app.log
+.vercel
