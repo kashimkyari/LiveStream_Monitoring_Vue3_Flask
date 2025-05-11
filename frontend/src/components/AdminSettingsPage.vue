@@ -67,7 +67,12 @@
   
       <!-- Logout Button -->
       <button class="logout-button" @click="handleLogout" ref="logoutButton">
-        <font-awesome-icon icon="sign-out-alt" class="icon" /> Logout
+        <span v-if="!isLoggingOut">
+          <font-awesome-icon icon="sign-out-alt" class="icon" /> Logout
+        </span>
+        <span v-else>
+          <font-awesome-icon icon="spinner" class="icon" spin /> Logging out...
+        </span>
       </button>
   
       <!-- Modals -->
@@ -199,12 +204,12 @@
   import { ref, computed, nextTick, onMounted } from 'vue'
   import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
   import { library } from '@fortawesome/fontawesome-svg-core'
-  import { faTimes, faArrowLeft, faTrash, faSignOutAlt } from '@fortawesome/free-solid-svg-icons'
+  import { faTimes, faArrowLeft, faTrash, faSignOutAlt, faSpinner } from '@fortawesome/free-solid-svg-icons'
   import { useToast } from 'vue-toastification'
   import axios from 'axios'
   import anime from 'animejs/lib/anime.es.js'
   
-  library.add(faTimes, faArrowLeft, faTrash, faSignOutAlt)
+  library.add(faTimes, faArrowLeft, faTrash, faSignOutAlt, faSpinner)
   
   export default {
     name: 'AdminSettingsPage',
@@ -267,41 +272,36 @@
       const USER_ROLE_KEY = 'userRole'
   
       // Logout handler
-      const handleLogout = () => {
-        // Animate logout button
-        anime({
-          targets: logoutButton.value,
-          translateY: [0, '20px'],
-          opacity: [1, 0],
-          duration: 400,
-          easing: 'easeOutExpo',
-          complete: async () => {
-            try {
-              await axios.post('/api/logout')
-              // Clear session data
-              localStorage.removeItem(SESSION_TOKEN_KEY)
-              localStorage.removeItem(SESSION_EXPIRY_KEY)
-              localStorage.removeItem(USER_ROLE_KEY)
-              delete axios.defaults.headers.common['Authorization']
+      const isLoggingOut = ref(false)
+      const handleLogout = async () => {
+        if (isLoggingOut.value) return
+        isLoggingOut.value = true
+        
+        try {
+          await axios.post('/api/logout')
+          // Clear session data
+          localStorage.removeItem(SESSION_TOKEN_KEY)
+          localStorage.removeItem(SESSION_EXPIRY_KEY)
+          localStorage.removeItem(USER_ROLE_KEY)
+          delete axios.defaults.headers.common['Authorization']
   
-              toast.warning("You have been logged out", {
-                timeout: 2000,
-                position: "top-center",
-                icon: true
-              })
+          toast.success("Successfully logged out", {
+            timeout: 4000,
+            position: "top-center",
+            icon: true
+          })
   
-              // Reset to home page
-              setTimeout(() => {
-                window.location = '/'
-              }, 2000)
-            } catch (error) {
-              toast.error('Error during logout', {
-                position: "top-center"
-              })
-              console.error('Logout error:', error)
-            }
-          }
-        })
+          // Reset to home page
+          setTimeout(() => {
+            window.location = '/'
+          }, 2000)
+        } catch (error) {
+          isLoggingOut.value = false
+          toast.error('Error during logout', {
+            position: "top-center"
+          })
+          console.error('Logout error:', error)
+        }
       }
   
       // Fetch data
@@ -660,6 +660,7 @@
         deleteTelegramRecipient,
   
         // Logout
+        isLoggingOut,
         handleLogout
       }
     }
@@ -945,7 +946,7 @@
     border-radius: 6px;
     cursor: pointer;
     font-weight: 500;
-    color: var(--text-color);
+    color: var (--text-color);
     transition: all 0.3s ease;
   }
   

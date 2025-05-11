@@ -4,11 +4,7 @@
     v-if="!isMobile" 
     ref="sidebarRef"
   >
-    <div class="sidebar-header" ref="headerRef">
-      <div class="logo">
-        <img src="../assets/logo.png" alt="Agency Logo" />
-      </div>
-    </div>
+ 
     
     <nav class="sidebar-nav">
       <div 

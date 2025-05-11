@@ -950,7 +950,6 @@ export default {
   flex-direction: column;
   height: 100vh;
   background-color: var(--background-color);
-  color: var(--text-color);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 

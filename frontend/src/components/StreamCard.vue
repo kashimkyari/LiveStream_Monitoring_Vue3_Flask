@@ -419,12 +419,12 @@ export default {
 
     // Function to toggle detection
     const toggleDetection = async () => {
-      if (!canToggleDetection.value || !props.stream?.id) return
+      if (!canToggleDetection.value) return
       
       canToggleDetection.value = false
       try {
         const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`)
-        const isActive = statusResponse.data?.active ?? false
+        const isActive = statusResponse.data.active
         
         if (isActive) {
           // Detection is already running, so stop it
@@ -433,19 +433,18 @@ export default {
             stop: true
           })
           isDetecting.value = false
-          showToast(`Detection stopped for ${props.stream?.streamer_username || 'Unknown Streamer'}`, 'info')
+          showToast(`Detection stopped for ${props.stream.streamer_username}`, 'info')
         } else {
           // Detection is not running, so start it
-          const startResponse = await axios.post('/api/trigger-detection', {
+          await axios.post('/api/trigger-detection', {
             stream_id: props.stream.id
           })
-          isDetecting.value = startResponse.data?.active ?? true
-          showToast(`Detection started for ${props.stream?.streamer_username || 'Unknown Streamer'}`, 'success')
+          isDetecting.value = true
+          showToast(`Detection started for ${props.stream.streamer_username}`, 'success')
         }
       } catch (error) {
         console.error('Error toggling detection:', error)
-        showToast(`Error toggling detection for ${props.stream?.streamer_username || 'Unknown Streamer'}: ${error.response?.data?.message || error.message}`, 'error')
-        isDetecting.value = false // Ensure state is reset on error
+        showToast(`Error toggling detection for ${props.stream.streamer_username}: ${error.message}`, 'error')
       } finally {
         canToggleDetection.value = true
       }

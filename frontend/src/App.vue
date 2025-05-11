@@ -131,7 +131,7 @@ library.add(...faIcons, ...fabIcons)
 
 // State & refs
 const toast = useToast()
-const isDarkTheme = ref(false)
+const isDarkTheme = ref(true)
 const isLoggedIn = ref(false)
 const isCheckingAuth = ref(true)
 const userRole = ref(null)

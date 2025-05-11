@@ -41,9 +41,11 @@
         
         <!-- Notifications Tab -->
         <transition name="fade-slide" mode="out-in">
-          <NotificationComponent
+          <AgentNotificationsComponent
             v-if="currentTab === 'notifications'"
-            
+            :alerts="allAlerts"
+            @refresh-notifications="fetchAllLogs"
+            @mark-read="handleMarkNotificationRead"
           />
         </transition>
         
@@ -83,7 +85,7 @@ import { library } from '@fortawesome/fontawesome-svg-core'
 import AgentSidebar from './AgentSidebar.vue'
 import AgentStreamsComponent from './AgentStreamsComponent.vue'
 import AgentTasksComponent from './AgentTasksComponent.vue'
-import NotificationComponent from './NotificationComponent.vue'
+import AgentNotificationsComponent from './AgentNotificationsComponent.vue'
 import AgentMessageComponent from './AgentMessageComponent.vue'
 import anime from 'animejs/lib/anime.es.js'
 import axios from 'axios'
@@ -156,7 +158,7 @@ export default {
     AgentSidebar,
     AgentStreamsComponent,
     AgentTasksComponent,
-    NotificationComponent,
+    AgentNotificationsComponent,
     AgentMessageComponent, 
     AgentSettingsPage
   },

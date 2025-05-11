@@ -1567,9 +1567,6 @@ export default {
 <style scoped>
 /* Comprehensive modern styling for messaging component */
 .messaging-container {
-  --bg-primary: hsl(240, 5%, 11%);
-  --bg-secondary: hsl(240, 6%, 15%);
-  --bg-tertiary: hsl(240, 5%, 19%);
   --text-primary: hsl(0, 0%, 95%);
   --text-secondary: hsl(0, 0%, 70%);
   --accent: hsl(217, 100%, 70%);
@@ -1581,9 +1578,9 @@ export default {
   --radius-md: 8px;
   --radius-sm: 4px;
   --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  background: var(--bg-primary);
+  --bg-secondary-rgb: 30, 32, 35; /* Convert your background color to RGB format */
   color: var(--text-primary);
-  height: 100vh;
+  height: 90vh;
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 1px;
@@ -2208,10 +2205,19 @@ export default {
 /* Info Panel */
 .info-panel {
   width: 320px;
-  background: var(--bg-secondary);
-  border-left: 1px solid var(--border);
+  background: rgba(var(--bg-secondary-rgb), 0.8); /* Change background to use rgba */
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); /* For Safari support */
+  border-left: 1px solid rgba(255, 255, 255, 0.1); /* Make border more subtle */
   display: flex;
   flex-direction: column;
+  position: absolute; /* Add fixed positioning */
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 50;
+  box-shadow: var(--shadow);
+  overflow-y: auto;
 }
 
 .info-header {
@@ -2434,14 +2440,12 @@ export default {
     bottom: 0;
     width: 280px;
     z-index: 100;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
   }
   
-  .messages-container {
-    padding: 16px;
-  }
-  
-  .message {
-    max-width: 85%;
+  .info-panel.mobile-info-panel.active {
+    transform: translateX(0);
   }
 }
 </style>

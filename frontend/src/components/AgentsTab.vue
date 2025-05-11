@@ -437,11 +437,11 @@ export default {
 <style scoped>
 .agents-tab {
   width: 100%;
-  margin: 0 auto;
   box-sizing: border-box;
   animation: fadeIn 0.4s ease;
   position: relative;
   padding-top: 1.5rem;
+  flex-wrap: wrap;
 }
 
 .tab-header {
@@ -1039,9 +1039,9 @@ tbody td {
 
 .streams-tooltip {
   position: absolute;
-  top: 50%;
-  left: 100%;
-  transform: translate(10px, -50%);
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
   background-color: var(--input-bg);
   border: 1px solid var(--input-border);
   border-radius: 8px;
@@ -1052,6 +1052,20 @@ tbody td {
   max-width: 300px;
   font-size: 0.85rem;
   color: var(--text-color);
+}
+
+/* Add a tooltip arrow */
+.streams-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 12px;
+  height: 12px;
+  background-color: var(--input-bg);
+  border-left: 1px solid var(--input-border);
+  border-top: 1px solid var(--input-border);
 }
 
 .tooltip-header {

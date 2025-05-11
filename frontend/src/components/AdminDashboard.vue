@@ -482,7 +482,7 @@ export default {
 }
 </script>
 
-<style>
+<style scoped>
 
 /* Define CSS variables to control sidebar width and mobile height */
 /* Add this to your <style> section */
@@ -524,7 +524,8 @@ export default {
   min-height: 100vh;
   background-color: var(--bg-color);
   color: var(--text-color);
-  overflow-x: hidden; /* Prevent horizontal scrollbar during animations */
+  overflow-x: hidden; /* Prevent horizontal scrollbar during animations */  
+  margin-left: 60px;
 }
 
 
@@ -532,11 +533,11 @@ export default {
 .main-content {
   /* Default state is expanded */
   flex: 1;
-  padding: 1rem;
+  padding: 2rem;
   transition: margin-left 0.3s ease;
   height: 90%;
   will-change: margin-left, transform;
-  margin-left: 55px;
+  /* margin-left: 60px; */
 }
 
 .loading-state {
