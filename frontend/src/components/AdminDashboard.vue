@@ -70,6 +70,12 @@
           :user="user"
         />
 
+        <AdminSettingsPage
+          v-show="activeTab === 'settings'"
+          :user="user"
+        />
+        
+
       </template>
     </main>
 
@@ -105,14 +111,7 @@
       @close="confirmationModal.show = false"
       @confirm="confirmAction"
     />
-    <SettingsModals 
-      :darkMode="isDarkTheme"
-      @notification="handleNotification" 
-      @update:keywords="fetchKeywords"
-      @update:objects="fetchObjects"
-      @update:telegramRecipients="fetchTelegramRecipients"
-      @modal-closed="handleModalClosed"
-    />
+    
   </div>
 </template>
 
@@ -140,6 +139,7 @@ import SettingsModals from './SettingsModals.vue'
 import AdminNotificationsPage from './AdminNotificationsPage.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import axios from 'axios'
+import AdminSettingsPage from './AdminSettingsPage.vue'
 
 export default {
   name: 'AdminDashboard',
@@ -155,7 +155,8 @@ export default {
     ConfirmationModal,
     SettingsModals,
     FontAwesomeIcon,
-    AdminNotificationsPage
+    AdminNotificationsPage,
+    AdminSettingsPage
   },
   methods: {
     async loadStreams() {

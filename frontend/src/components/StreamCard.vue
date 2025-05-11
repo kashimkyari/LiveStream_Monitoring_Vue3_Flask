@@ -15,23 +15,8 @@
     ref="streamCard"
   >
     <div class="video-container">
-      <!-- Add lazy loading to video element -->
-      <video 
-        ref="videoPlayer" 
-        class="video-player" 
-        loading="lazy"
-        :playsinline="true"
-        preload="none"
-      ></video>
-      <!-- Lazy load DetectionBadge component -->
-      <Suspense v-if="detectionCount > 0">
-        <template #default>
-          <DetectionBadge :count="detectionCount" />
-        </template>
-        <template #fallback>
-          <div class="detection-badge-placeholder"></div>
-        </template>
-      </Suspense>
+      <video ref="videoPlayer" class="video-player"></video>
+      <DetectionBadge v-if="detectionCount > 0" :count="detectionCount" />
       
       <!-- Viewer count overlay for Stripchat streams only -->
       <div v-if="isStripchatStream" class="viewer-count-overlay">
@@ -53,18 +38,14 @@
         <span>OFFLINE</span>
       </div>
       
-      <!-- Detection toggle button -->
+      <!-- Detection toggle button (single instance) -->
       <div class="detection-controls">
-        <button
-          class="detection-toggle"
-          :class="{ 
-            'active': isDetecting, 
-            'loading': !canToggleDetection,
-            'online': isOnline 
-          }"
+        <button 
+          class="detection-toggle" 
+          :class="{ 'active': isDetecting, 'loading': !canToggleDetection }"
           @click.stop="toggleDetection"
           :title="isDetecting ? 'Stop detection' : 'Start detection'"
-          :disabled="!canToggleDetection"
+          :disabled="!isOnline"
         >
           <span class="detection-icon">
             <font-awesome-icon v-if="!canToggleDetection" icon="spinner" spin />
@@ -117,14 +98,11 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onBeforeUnmount, watch, inject, defineAsyncComponent } from 'vue'
 import Hls from 'hls.js'
+import anime from 'animejs/lib/anime.es.js'
+import DetectionBadge from './DetectionBadge.vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, inject } from 'vue'
 import axios from 'axios'
-
-// Lazy load anime.js
-const anime = () => import('animejs/lib/anime.es.js').then(m => m.default)
-// Lazy load DetectionBadge component
-const DetectionBadge = defineAsyncComponent(() => import('./DetectionBadge.vue'))
 
 export default {
   name: 'StreamCard',
@@ -143,7 +121,7 @@ export default {
       default: 1
     }
   },
-  emits: ['click', 'assign', 'bookmark', 'mute-change', 'fullscreen', 'detection-toggled', 'status-change'],
+  emits: ['click', 'assign', 'bookmark', 'mute-change', 'fullscreen', 'detection-toggled'],
   setup(props, { emit }) {
     const streamCard = ref(null)
     const videoPlayer = ref(null)
@@ -173,8 +151,6 @@ export default {
     let streamStatusCheckInterval = ref(null)
     // Add new variables for video playback status
     const isPlaying = ref(false)
-    const videoLoaded = ref(false)
-    const animationsEnabled = ref(false)
     
     const agentCache = ref({})
     const allAgentsFetched = ref(false)
@@ -185,18 +161,10 @@ export default {
     })
 
     // Watch for changes in stream status
-    watch(() => props.stream.status, (newStatus, oldStatus) => {
-      if (newStatus !== oldStatus) {
-        isOnline.value = newStatus === 'online';
-        streamStatus.value = newStatus || 'unknown';
-        emit('status-change', {
-          streamId: props.stream.id,
-          oldStatus,
-          newStatus,
-          stream: props.stream
-        });
-      }
-    }, { immediate: true });
+    watch(() => props.stream.status, (newStatus) => {
+      isOnline.value = newStatus === 'online';
+      streamStatus.value = newStatus || 'unknown';
+    });
 
     // Computed property to get the stream URL (m3u8)
     const streamUrl = computed(() => {
@@ -317,19 +285,7 @@ export default {
       }
     }
 
-    // Error handling for HLS errors
-    const handleHlsError = (event, data) => {
-      console.error('HLS Error:', event, data)
-      if (data.fatal) {
-        destroyHls()
-        isOnline.value = false
-        streamStatus.value = 'offline'
-        isLoading.value = false
-      }
-    }
-
-    // Optimize video initialization
-    const initializeVideo = async () => {
+    const initializeVideo = () => {
       // Get the correct m3u8 URL directly from the stream object
       let m3u8Url = streamUrl.value
       
@@ -341,11 +297,6 @@ export default {
         return
       }
       
-      // Only initialize if video element exists and is visible
-      if (!videoPlayer.value || !isVisible(videoPlayer.value)) {
-        return
-      }
-      
       // Initialize HLS.js if supported
       if (Hls.isSupported() && videoPlayer.value) {
         destroyHls() // Clean up any existing instance
@@ -353,11 +304,7 @@ export default {
         hls = new Hls({
           startLevel: 0,
           capLevelToPlayerSize: true,
-          maxBufferLength: 30,
-          // Add optimization options
-          enableWorker: true,
-          lowLatencyMode: false,
-          backBufferLength: 30
+          maxBufferLength: 30
         })
         
         hls.loadSource(m3u8Url)
@@ -365,34 +312,59 @@ export default {
         
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           videoPlayer.value.muted = isMuted.value
-          if (isVisible(videoPlayer.value)) {
-            videoPlayer.value.play().catch(e => {
-              console.warn('Autoplay prevented:', e)
-            })
-          }
+          videoPlayer.value.play().catch(e => {
+            console.warn('Autoplay prevented:', e)
+          })
           isOnline.value = true
           streamStatus.value = 'online'
           isLoading.value = false
-          videoLoaded.value = true
+          // Update backend status to online
+          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
+            .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
+            .catch(error => console.error('Failed to update stream status:', error))
         })
         
-        // Add error handling and cleanup
-        hls.on(Hls.Events.ERROR, handleHlsError)
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.error('HLS network error:', data)
+                isOnline.value = false
+                streamStatus.value = 'offline'
+                isLoading.value = false
+                hls.stopLoad()
+                hls.detachMedia()
+                // Report to backend that stream is offline
+                reportStreamOffline(props.stream.id)
+                break
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.error('HLS media error:', data)
+                hls.recoverMediaError()
+                break
+              default:
+                console.error('Unrecoverable HLS error:', data)
+                hls.destroy()
+                isOnline.value = false
+                streamStatus.value = 'offline'
+                isLoading.value = false
+                // Report to backend that stream is offline
+                reportStreamOffline(props.stream.id)
+                break
+            }
+          }
+        })
       } 
       // Fallback for browsers with native HLS support
       else if (videoPlayer.value && videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) {
         videoPlayer.value.src = m3u8Url
         videoPlayer.value.addEventListener('loadedmetadata', () => {
           videoPlayer.value.muted = isMuted.value
-          if (isVisible(videoPlayer.value)) {
-            videoPlayer.value.play().catch(e => {
-              console.warn('Autoplay prevented:', e)
-            })
-          }
+          videoPlayer.value.play().catch(e => {
+            console.warn('Autoplay prevented:', e)
+          })
           isOnline.value = true
           streamStatus.value = 'online'
           isLoading.value = false
-          videoLoaded.value = true
           // Update backend status to online
           axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
             .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
@@ -408,18 +380,6 @@ export default {
             .catch(error => console.error('Failed to update stream status:', error))
         })
       }
-    }
-
-    // Add visibility check utility
-    const isVisible = (element) => {
-      if (!element) return false
-      const rect = element.getBoundingClientRect()
-      return (
-        rect.top >= 0 &&
-        rect.left >= 0 &&
-        rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-        rect.right <= (window.innerWidth || document.documentElement.clientWidth)
-      )
     }
 
     const destroyHls = () => {
@@ -520,16 +480,33 @@ export default {
       }
     }
 
-    // Optimize animation handling - remove unused animeModule
-    const addHoverAnimation = async () => {
-      if (!animationsEnabled.value) {
-        await anime()
-        animationsEnabled.value = true
+    const addHoverAnimation = () => {
+      if (streamCard.value) {
+        anime({
+          targets: streamCard.value,
+          scale: 1.03,
+          boxShadow: '0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22)',
+          duration: 300,
+          easing: 'easeOutQuad'
+        })
       }
-      
-      if (streamCard.value && animationsEnabled.value) {
-        streamCard.value.style.transform = 'scale(1.03)'
-        streamCard.value.style.transition = 'transform 0.3s ease'
+
+      if (streamOverlay.value) {
+        anime({
+          targets: streamOverlay.value,
+          opacity: [0, 1],
+          duration: 250,
+          easing: 'easeOutQuad'
+        })
+
+        anime({
+          targets: streamOverlay.value.querySelector('.view-details-btn'),
+          translateY: [20, 0],
+          scale: [0.9, 1],
+          opacity: [0, 1],
+          duration: 350,
+          easing: 'easeOutQuad'
+        })
       }
     }
 
@@ -677,37 +654,7 @@ export default {
 
     // Listen for global events
     onMounted(() => {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach(entry => {
-            if (entry.isIntersecting && !videoLoaded.value) {
-              initializeVideo()
-              observer.unobserve(entry.target)
-            }
-          })
-        },
-        { threshold: 0.1 }
-      )
-
-      if (videoPlayer.value) {
-        observer.observe(videoPlayer.value)
-      }
-
-      // Lazy load animations
-      if ('requestIdleCallback' in window) {
-        window.requestIdleCallback(() => {
-          import('animejs/lib/anime.es.js').then(() => {
-            animationsEnabled.value = true
-          })
-        })
-      } else {
-        setTimeout(() => {
-          import('animejs/lib/anime.es.js').then(() => {
-            animationsEnabled.value = true
-          })
-        }, 1000)
-      }
-
+      initializeVideo()
       addEntranceAnimation()
       
       // Check stream status initially
@@ -739,34 +686,24 @@ export default {
       handleVideoPlayback()
     })
 
-    // Optimize cleanup
     onBeforeUnmount(() => {
-      destroyHls()
-      cleanupIntervals()
-      cleanupEventListeners()
-    })
-
-    const cleanupIntervals = () => {
-      [checkStatusInterval.value, 
-       streamStatusCheckInterval.value, 
-       viewersRefreshInterval.value].forEach(interval => {
-        if (interval) {
-          clearInterval(interval)
-        }
-      })
-    }
-
-    const cleanupEventListeners = () => {
+      if (hls) {
+        hls.destroy()
+        hls = null
+      }
+      if (checkStatusInterval.value) {
+        clearInterval(checkStatusInterval.value)
+      }
+      if (streamStatusCheckInterval.value) {
+        clearInterval(streamStatusCheckInterval.value)
+      }
+      if (viewersRefreshInterval.value) {
+        clearInterval(viewersRefreshInterval.value)
+      }
       if (eventBus) {
         eventBus.$off('muteAllStreams')
       }
-      if (videoPlayer.value) {
-        videoPlayer.value.onplay = null
-        videoPlayer.value.onpause = null
-        videoPlayer.value.onended = null
-        videoPlayer.value.onerror = null
-      }
-    }
+    })
 
     // Watch for platform changes and set up viewer count refresh accordingly
     watch(() => props.stream.platform, (newPlatform) => {
@@ -784,18 +721,12 @@ export default {
     // Add method to report stream offline
     const reportStreamOffline = async (streamId) => {
       try {
-        await axios.post(`/api/streams/${streamId}/status`, { status: 'offline' });
-        streamStatus.value = 'offline';
-        isOnline.value = false;
-        emit('status-change', {
-          streamId,
-          oldStatus: 'online',
-          newStatus: 'offline',
-          stream: props.stream
-        });
-        console.log(`Reported stream ${streamId} as offline`);
+        await axios.post(`/api/streams/${streamId}/status`, { status: 'offline' })
+        streamStatus.value = 'offline'
+        isOnline.value = false
+        console.log(`Reported stream ${streamId} as offline`)
       } catch (error) {
-        console.error('Failed to report stream offline:', error);
+        console.error('Failed to report stream offline:', error)
       }
     }
 
@@ -839,9 +770,7 @@ export default {
       checkStreamStatus,
       hasAssignedAgents,
       assignedAgentNames,
-      handleCardClick,
-      isLoading,
-      videoLoaded
+      handleCardClick
     }
   }
 }
@@ -891,51 +820,38 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
-  border-radius: 20px;
-  border: none;
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  background-color: rgba(108, 117, 125, 0.9);
+  background-color: rgba(40, 167, 69, 0.85); /* Green for idle state */
   color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.detection-toggle.online {
-  background-color: rgba(40, 167, 69, 0.9);
+.detection-toggle:hover:not(:disabled) {
+  background-color: rgba(40, 167, 69, 1); /* Darker green on hover for idle state */
+  transform: translateY(-2px);
 }
 
 .detection-toggle.active {
-  background-color: rgba(255, 193, 7, 0.9);
+  background-color: rgba(255, 193, 7, 0.85); /* Yellow for running state */
 }
 
 .detection-toggle.active:hover:not(:disabled) {
-  background-color: rgba(220, 53, 69, 0.9);
+  background-color: rgba(220, 53, 69, 0.85); /* Red on hover for stop state */
+  transform: translateY(-2px);
+}
+
+.detection-toggle.loading {
+  background-color: rgba(255, 193, 7, 0.85); /* Yellow for loading state */
+  pointer-events: none;
 }
 
 .detection-toggle:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  background-color: rgba(108, 117, 125, 0.9);
-}
-
-.detection-toggle:hover:not(:disabled) {
-  transform: translateY(-2px);
-}
-
-.detection-toggle .detection-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-}
-
-.detection-toggle.loading {
-  background-color: rgba(108, 117, 125, 0.9);
 }
 
 /* Monitor stat for active detection */
@@ -1488,51 +1404,4 @@ export default {
     right: 2.5rem;
   }
 }
-
-/* Add loading state styles */
-.detection-badge-placeholder {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-/* Optimize CSS animations */
-@media (prefers-reduced-motion: reduce) {
-  .stream-card {
-    transition: none;
-  }
-  
-  .detection-toggle {
-    transition: none;
-  }
-  
-  .view-details-btn {
-    transition: none;
-  }
-}
-
-/* Add loading skeleton styles */
-.stream-card.loading {
-  position: relative;
-  overflow: hidden;
-}
-
-.stream-card.loading::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-  animation: loading 1.5s infinite;
-}
-
-@keyframes loading {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-/* ...rest of existing styles... */
 </style>
