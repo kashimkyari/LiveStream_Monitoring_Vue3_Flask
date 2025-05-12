@@ -27,6 +27,7 @@ from models import (
 from extensions import db
 from utils.notifications import emit_notification, emit_stream_update
 from notifications import send_notifications, send_text_message
+from routes.assignment_routes import get_assignments  # Import the endpoint logic
 
 # Configure logging
 logging.basicConfig(
@@ -126,15 +127,39 @@ def get_stream_info(stream_url):
     return 'unknown', 'unknown'
 
 def get_stream_assignment(stream_url):
-    """Get assignment info for a stream"""
+    """Get assignment info for a stream using the /api/assignments endpoint logic"""
     with current_app.app_context():
+        # Find the stream by room_url or m3u8 URL
         stream = Stream.query.filter_by(room_url=stream_url).first()
         if not stream:
+            # Check if the URL is an m3u8 URL for Chaturbate or Stripchat
+            cb_stream = ChaturbateStream.query.filter_by(chaturbate_m3u8_url=stream_url).first()
+            if cb_stream:
+                stream = Stream.query.get(cb_stream.id)
+            else:
+                sc_stream = StripchatStream.query.filter_by(stripchat_m3u8_url=stream_url).first()
+                if sc_stream:
+                    stream = Stream.query.get(sc_stream.id)
+        
+        if not stream:
+            logger.warning(f"No stream found for URL: {stream_url}")
             return None, None
-        assignment = Assignment.query.filter_by(stream_id=stream.id).first()
-        if assignment:
-            return assignment.id, assignment.agent_id
-    return None, None
+        
+        # Use the get_assignments logic to fetch assignments for this stream
+        query = Assignment.query.options(
+            joinedload(Assignment.agent),
+            joinedload(Assignment.stream)
+        ).filter_by(stream_id=stream.id)
+        
+        assignments = query.all()
+        
+        if not assignments:
+            logger.info(f"No assignments found for stream: {stream_url}")
+            return None, None
+        
+        # Select the first assignment (or implement a strategy for multiple assignments)
+        assignment = assignments[0]
+        return assignment.id, assignment.agent_id
 
 # =============== AUDIO AND VIDEO PROCESSING ===============
 def process_combined_detection(app, stream_url, cancel_event):

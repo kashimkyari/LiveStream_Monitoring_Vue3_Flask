@@ -274,7 +274,7 @@ class DetectionLog(db.Model):
     event_type = db.Column(db.String(50), nullable=False)
     details = db.Column(db.JSON, nullable=True)
     detection_image = db.Column(db.LargeBinary, nullable=True)  # JPEG image bytes
-    assigned_agent = db.Column(db.Integer, nullable=True)  # Changed to Integer to store agent_id
+    assigned_agent = db.Column(db.Integer, nullable=True)  # Changed to non-nullable
     assignment_id = db.Column(db.Integer, db.ForeignKey('assignments.id'), nullable=True)
     timestamp = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     sender_username = db.Column(db.String(100), nullable=True)
