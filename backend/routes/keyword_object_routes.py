@@ -29,8 +29,8 @@ def create_keyword():
     db.session.commit()
     
     # Function needs to be imported or defined elsewhere
-    from detection import refresh_keywords
-    refresh_keywords()
+    from monitoring import refresh_flagged_keywords
+    refresh_flagged_keywords()
     
     return jsonify({"message": "Keyword added", "keyword": kw.serialize()}), 201
 
@@ -48,8 +48,8 @@ def update_keyword(keyword_id):
     db.session.commit()
     
     # Function needs to be imported or defined elsewhere
-    from detection import refresh_keywords
-    refresh_keywords()
+    from monitoring import refresh_flagged_keywords
+    refresh_flagged_keywords()
     
     return jsonify({"message": "Keyword updated", "keyword": kw.serialize()})
 
@@ -63,8 +63,8 @@ def delete_keyword(keyword_id):
     db.session.commit()
     
     # Function needs to be imported or defined elsewhere
-    from detection import refresh_keywords
-    refresh_keywords()
+    from monitoring import refresh_flagged_keywords
+    refresh_flagged_keywords()
     
     return jsonify({"message": "Keyword deleted"})
 
