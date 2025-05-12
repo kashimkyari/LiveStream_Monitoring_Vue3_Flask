@@ -175,7 +175,7 @@ def extract_audio_from_stream_ffmpeg(stream_url, output_file=None, duration=10):
             '-acodec', 'pcm_s16le',
             output_file
         ]
-        
+        logger.debug(f"Executing FFmpeg command: {' '.join(cmd)}")  # Log the command
         process = subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
@@ -184,9 +184,11 @@ def extract_audio_from_stream_ffmpeg(stream_url, output_file=None, duration=10):
         )
         
         if process.returncode != 0:
-            logger.error(f"FFmpeg failed: {process.stderr.decode('utf-8')}")
+            error_msg = process.stderr.decode('utf-8')
+            logger.error(f"FFmpeg failed with return code {process.returncode}: {error_msg}")
             return None
             
+        logger.debug(f"FFmpeg audio extraction successful: {output_file}")
         return output_file
     
     except subprocess.TimeoutExpired:
@@ -586,7 +588,7 @@ def process_chat_messages(messages, stream_url):
             if sentiment_key in last_chat_alerts.get(stream_url, {}):
                 last_alert = last_chat_alerts[stream_url][sentiment_key]
                 if (now - last_alert).total_seconds() < CHAT_ALERT_COOLDOWN:
-                    continue
+                        continue
                     
             last_chat_alerts.setdefault(stream_url, {})[sentiment_key] = now
             detected.append({
@@ -790,97 +792,54 @@ def handle_chat_detection(stream_url, message, keywords, sender, platform, strea
         return False
 
 # =============== MAIN MONITORING CONTROL ===============
-def process_combined_detection(stream_url, cancel_event, poll_interval=60):
+def process_combined_detection(app, stream_url, cancel_event, poll_interval=60):
     """Main monitoring loop combining all detection types"""
-    logger.info(f"Starting monitoring for {stream_url}")
-    
-    # Start real-time audio processing
-    audio_cancel = threading.Event()
-    audio_thread = threading.Thread(
-        target=process_audio_realtime,
-        args=(stream_url, audio_cancel),
-        daemon=True
-    )
-    audio_thread.start()
-    
-    while not cancel_event.is_set():
-        try:
-            # Video processing
-            frame = extract_video_frame(stream_url)
-            if frame:
-                detections = process_video_frame(frame, stream_url)
-                if detections:
-                    log_video_detection(detections, frame, stream_url)
-            
-            # Chat processing
-            messages = fetch_chat_messages(stream_url)
-            if messages:
-                detections = process_chat_messages(messages, stream_url)
-                if detections:
-                    log_chat_detection(detections, stream_url)
-            
-            # Sleep for polling interval
-            for _ in range(poll_interval):
-                if cancel_event.is_set():
-                    break
-                time.sleep(1)
-                
-        except Exception as e:
-            logger.error(f"Monitoring error: {e}")
-            time.sleep(10)
-    
-    # Cleanup
-    audio_cancel.set()
-    if stream_url in stream_processors:
-        _, chunker_cancel = stream_processors[stream_url]
-        chunker_cancel.set()
+    with app.app_context():  # Wrap the entire function body
+        logger.info(f"Starting monitoring for {stream_url}")
         
-    logger.info(f"Stopped monitoring {stream_url}")
-
-def start_notification_monitor():
-    """
-    Start the notification monitoring system
-    
-    This function initializes the background processes needed for monitoring notifications
-    """
-    logger.info("Starting notification monitoring system")
-    
-    try:
-        # Set up any global notification monitoring services
-        # This could include:
-        # - Connecting to message queues
-        # - Setting up webhook listeners
-        # - Initializing background tasks
-        
-        # Just as a placeholder for now, we'll create a basic background thread
-        notification_thread = threading.Thread(
-            target=notification_monitor_loop,
+        # Start real-time audio processing
+        audio_cancel = threading.Event()
+        audio_thread = threading.Thread(
+            target=process_audio_realtime,
+            args=(stream_url, audio_cancel),
             daemon=True
         )
-        notification_thread.start()
+        audio_thread.start()
         
-        logger.info("Notification monitoring system started successfully")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to start notification monitoring system: {e}")
-        return False
-
-def notification_monitor_loop():
-    """Background loop for the notification monitor"""
-    logger.info("Notification monitor loop started")
-    
-    while True:
-        try:
-            # Periodic check for pending notifications
-            # This would typically check a queue, database, or external service
+        while not cancel_event.is_set():
+            try:
+                # Video processing
+                frame = extract_video_frame(stream_url)
+                if frame:
+                    detections = process_video_frame(frame, stream_url)
+                    if detections:
+                        log_video_detection(detections, frame, stream_url)
+                
+                # Chat processing
+                messages = fetch_chat_messages(stream_url)
+                if messages:
+                    detections = process_chat_messages(messages, stream_url)
+                    if detections:
+                        log_chat_detection(detections, stream_url)
+                
+                # Sleep for polling interval
+                for _ in range(poll_interval):
+                    if cancel_event.is_set():
+                        break
+                    time.sleep(1)
+                    
+            except Exception as e:
+                logger.error(f"Monitoring error for {stream_url}: {e}")
+                time.sleep(10)
+        
+        # Cleanup
+        audio_cancel.set()
+        if stream_url in stream_processors:
+            _, chunker_cancel = stream_processors[stream_url]
+            chunker_cancel.set()
             
-            # Sleep to avoid high CPU usage
-            time.sleep(60)  # Check every minute
-        except Exception as e:
-            logger.error(f"Error in notification monitor loop: {e}")
-            time.sleep(60)  # Wait a bit after errors
+        logger.info(f"Stopped monitoring {stream_url}")
 
-# monitoring.py
 def start_monitoring(stream):
     """Start monitoring a stream for detections"""
     if not stream:
@@ -907,9 +866,11 @@ def start_monitoring(stream):
     
     logger.info(f"Starting monitoring for {stream_url}")
     cancel_event = threading.Event()
+    # Pass the app instance to the thread
     thread = threading.Thread(
         target=process_combined_detection,
-        args=(stream_url, cancel_event)
+        args=(current_app._get_current_object(), stream_url, cancel_event),
+        kwargs={'poll_interval': 60}
     )
     thread.daemon = True
     thread.start()
@@ -954,7 +915,6 @@ def stop_monitoring(stream):
         'status': 'stopped',
         'type': stream.type
     })
-
 
 # =============== EXPORTS ===============
 __all__ = [
