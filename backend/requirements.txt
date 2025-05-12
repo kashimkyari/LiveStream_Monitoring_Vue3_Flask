@@ -36,3 +36,4 @@ vaderSentiment
 free-proxy
 jsonify
 simple-websocket
+librosa
