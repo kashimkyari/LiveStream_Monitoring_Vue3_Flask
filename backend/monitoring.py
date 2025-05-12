@@ -880,18 +880,32 @@ def notification_monitor_loop():
             logger.error(f"Error in notification monitor loop: {e}")
             time.sleep(60)  # Wait a bit after errors
 
-def start_monitoring(stream_url):
+# monitoring.py
+
+def start_monitoring(stream):
     """Start monitoring a stream for detections"""
+    if not stream:
+        logger.error("Stream not provided")
+        return False
     with current_app.app_context():
-        stream = Stream.query.filter_by(room_url=stream_url).first()
-        if not stream:
-            logger.error(f"Stream not found: {stream_url}")
-            return False
         if stream.is_monitored:
-            logger.info(f"Stream already monitored: {stream_url}")
+            logger.info(f"Stream already monitored: {stream.room_url}")
             return True
         stream.is_monitored = True
         db.session.commit()
+    
+    # Determine the streaming URL (prefer m3u8_url)
+    if stream.platform.lower() == 'chaturbate' and stream.chaturbate_m3u8_url:
+        stream_url = stream.chaturbate_m3u8_url
+    elif stream.platform.lower() == 'stripchat' and stream.stripchat_m3u8_url:
+        stream_url = stream.stripchat_m3u8_url
+    else:
+        stream_url = stream.room_url  # Fallback to room_url
+    
+    if not stream_url:
+        logger.error(f"No valid URL for stream: {stream.id}")
+        return False
+    
     logger.info(f"Starting monitoring for {stream_url}")
     cancel_event = threading.Event()
     thread = threading.Thread(
@@ -909,27 +923,40 @@ def start_monitoring(stream_url):
     })
     return True
 
-def stop_monitoring(stream_url, cancel_event=None, thread=None):
+def stop_monitoring(stream):
     """Stop monitoring a stream"""
+    if not stream:
+        logger.error("Stream not provided")
+        return
+    # Determine the streaming URL (consistent with start_monitoring)
+    if stream.platform.lower() == 'chaturbate' and stream.chaturbate_m3u8_url:
+        stream_url = stream.chaturbate_m3u8_url
+    elif stream.platform.lower() == 'stripchat' and stream.stripchat_m3u8_url:
+        stream_url = stream.stripchat_m3u8_url
+    else:
+        stream_url = stream.room_url
+    
     with current_app.app_context():
-        stream = Stream.query.filter_by(room_url=stream_url).first()
-        if stream:
-            stream.is_monitored = False
-            db.session.commit()
-        if stream_url in stream_processors:
-            cancel_event, thread = stream_processors.get(stream_url, (None, None))
-    if cancel_event:
-        cancel_event.set()
-        if thread:
-            thread.join(timeout=2.0)
+        stream.is_monitored = False
+        db.session.commit()
+    
+    if stream_url in stream_processors:
+        cancel_event, thread = stream_processors.get(stream_url, (None, None))
+        if cancel_event:
+            cancel_event.set()
+            if thread:
+                thread.join(timeout=2.0)
         del stream_processors[stream_url]
+    
     logger.info(f"Stopped monitoring {stream_url}")
     emit_stream_update({
-        'id': stream.id if stream else 0,
+        'id': stream.id,
         'url': stream_url,
         'status': 'stopped',
-        'type': stream.type if stream else 'unknown'
+        'type': stream.type
     })
+
+
 
 # =============== EXPORTS ===============
 __all__ = [
