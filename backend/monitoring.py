@@ -18,7 +18,6 @@ import av
 import re
 import librosa
 from urllib.parse import urlparse
-
 from flask import current_app
 from models import (
     ChatKeyword, FlaggedObject, DetectionLog, Stream, User, Assignment,
@@ -28,7 +27,7 @@ from extensions import db
 from utils.notifications import emit_notification, emit_stream_update
 from notifications import send_notifications, send_text_message
 from routes.assignment_routes import get_assignments  # Import the endpoint logic
-
+from sqlalchemy.orm import joinedload
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
