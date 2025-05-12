@@ -881,7 +881,6 @@ def notification_monitor_loop():
             time.sleep(60)  # Wait a bit after errors
 
 # monitoring.py
-
 def start_monitoring(stream):
     """Start monitoring a stream for detections"""
     if not stream:
@@ -895,9 +894,9 @@ def start_monitoring(stream):
         db.session.commit()
     
     # Determine the streaming URL (prefer m3u8_url)
-    if stream.platform.lower() == 'chaturbate' and stream.chaturbate_m3u8_url:
+    if stream.type.lower() == 'chaturbate' and hasattr(stream, 'chaturbate_m3u8_url'):
         stream_url = stream.chaturbate_m3u8_url
-    elif stream.platform.lower() == 'stripchat' and stream.stripchat_m3u8_url:
+    elif stream.type.lower() == 'stripchat' and hasattr(stream, 'stripchat_m3u8_url'):
         stream_url = stream.stripchat_m3u8_url
     else:
         stream_url = stream.room_url  # Fallback to room_url
@@ -929,9 +928,9 @@ def stop_monitoring(stream):
         logger.error("Stream not provided")
         return
     # Determine the streaming URL (consistent with start_monitoring)
-    if stream.platform.lower() == 'chaturbate' and stream.chaturbate_m3u8_url:
+    if stream.type.lower() == 'chaturbate' and hasattr(stream, 'chaturbate_m3u8_url'):
         stream_url = stream.chaturbate_m3u8_url
-    elif stream.platform.lower() == 'stripchat' and stream.stripchat_m3u8_url:
+    elif stream.type.lower() == 'stripchat' and hasattr(stream, 'stripchat_m3u8_url'):
         stream_url = stream.stripchat_m3u8_url
     else:
         stream_url = stream.room_url
@@ -955,7 +954,6 @@ def stop_monitoring(stream):
         'status': 'stopped',
         'type': stream.type
     })
-
 
 
 # =============== EXPORTS ===============
