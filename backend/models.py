@@ -1,7 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from extensions import db
 
-
 # Updated User model in models.py
 class User(db.Model):
     """
@@ -49,6 +48,7 @@ class Stream(db.Model):
     streamer_username = db.Column(db.String(100), index=True)
     type = db.Column(db.String(50), index=True)  # Discriminator column
     status = db.Column(db.String(20), default='online', nullable=False, index=True)  # Added status field
+    is_monitored = db.Column(db.Boolean, default=False, nullable=False)  # Added to track monitoring status
 
     # Relationship with Assignments; assignments are loaded using 'selectin' for performance.
     assignments = db.relationship('Assignment', back_populates='stream', lazy='selectin', cascade="all, delete")
@@ -68,6 +68,7 @@ class Stream(db.Model):
             "streamer_username": self.streamer_username,
             "platform": self.type.capitalize() if self.type else None,
             "status": self.status,
+            "is_monitored": self.is_monitored,
         }
         if include_relationships and hasattr(self, 'assignments'):
             data["assignments"] = [assignment.serialize(include_relationships=False) for assignment in self.assignments]
@@ -262,7 +263,6 @@ class TelegramRecipient(db.Model):
         }
 
 
-# models.py
 class DetectionLog(db.Model):
     """
     DetectionLog model stores detection events, including the annotated image.
