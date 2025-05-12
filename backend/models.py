@@ -262,6 +262,7 @@ class TelegramRecipient(db.Model):
         }
 
 
+# models.py
 class DetectionLog(db.Model):
     """
     DetectionLog model stores detection events, including the annotated image.
@@ -273,7 +274,7 @@ class DetectionLog(db.Model):
     event_type = db.Column(db.String(50), nullable=False)
     details = db.Column(db.JSON, nullable=True)
     detection_image = db.Column(db.LargeBinary, nullable=True)  # JPEG image bytes
-    assigned_agent = db.Column(db.String(100), nullable=True)  # New field for assigned agent username (for redundancy)
+    assigned_agent = db.Column(db.Integer, nullable=True)  # Changed to Integer to store agent_id
     assignment_id = db.Column(db.Integer, db.ForeignKey('assignments.id'), nullable=True)
     timestamp = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     sender_username = db.Column(db.String(100), nullable=True)
@@ -284,9 +285,9 @@ class DetectionLog(db.Model):
 
     def serialize(self):
         assigned = self.assigned_agent
-        # If the assignment relationship exists, override with agent's username
+        # If the assignment relationship exists, override with agent's id
         if self.assignment and self.assignment.agent:
-            assigned = self.assignment.agent.username
+            assigned = self.assignment.agent.id
         return {
             "id": self.id,
             "room_url": self.room_url,
@@ -296,11 +297,6 @@ class DetectionLog(db.Model):
             "timestamp": self.timestamp.isoformat(),
             "read": self.read,
         }
-
-
-# models.py
-# Add to models.py
-# Add to models.py
 
 class MessageAttachment(db.Model):
     """

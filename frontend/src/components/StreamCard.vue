@@ -38,20 +38,25 @@
         <span>OFFLINE</span>
       </div>
       
-      <!-- Detection toggle button (single instance) -->
+      <!-- Detection toggle button -->
       <div class="detection-controls">
         <button 
           class="detection-toggle" 
-          :class="{ 'active': isDetecting, 'loading': !canToggleDetection }"
+          :class="{ 
+            'active': isDetecting, 
+            'loading': isDetectionLoading,
+            'error': detectionError
+          }"
           @click.stop="toggleDetection"
-          :title="isDetecting ? 'Stop detection' : 'Start detection'"
-          :disabled="!isOnline"
+          :title="getDetectionButtonTooltip"
+          :disabled="!isOnline || isDetectionLoading"
         >
           <span class="detection-icon">
-            <font-awesome-icon v-if="!canToggleDetection" icon="spinner" spin />
+            <font-awesome-icon v-if="isDetectionLoading" icon="spinner" spin />
+            <font-awesome-icon v-else-if="detectionError" icon="exclamation-circle" />
             <font-awesome-icon v-else :icon="isDetecting ? 'stop-circle' : 'play-circle'" />
           </span>
-          <span class="detection-label">{{ isDetecting ? 'Detecting' : 'Start' }}</span>
+          <span class="detection-label">{{ getDetectionButtonText }}</span>
         </button>
       </div>
     </div>
@@ -77,12 +82,10 @@
           <font-awesome-icon icon="bell" />
           <span>{{ detectionCount }} {{ detectionCount === 1 ? 'alert' : 'alerts' }}</span>
         </div>
-        <!-- Add viewer count stat item for Stripchat streams -->
         <div v-if="isStripchatStream" class="stat-item viewer-stat">
           <font-awesome-icon icon="eye" />
           <span>{{ viewers }} viewers</span>
         </div>
-        <!-- Add detection status display -->
         <div v-if="isDetecting" class="stat-item monitor-stat">
           <font-awesome-icon icon="eye" />
           <span>Monitoring</span>
@@ -90,9 +93,7 @@
       </div>
     </div>
     <div class="quick-actions">
-      <button class="action-btn assign-btn" @click.stop="$emit('assign')" v-if="!hasAssignedAgents">
-        <font-awesome-icon icon="user-plus" />
-      </button>
+     
     </div>
   </div>
 </template>
@@ -132,147 +133,133 @@ export default {
     const isMuted = ref(true)
     const isBookmarked = ref(false)
     const isFullscreen = ref(false)
-    // Stream status based on stream.status from StreamsTab.vue
     const isOnline = ref(props.stream.status === 'online')
     const isLoading = ref(true)
     const streamStatus = ref(props.stream.status || 'unknown')
+    
     // Detection state variables
     const isDetecting = ref(false)
-    const canToggleDetection = ref(true)
-    const checkStatusInterval = ref(null)
-    // Viewer count for Stripchat streams
+    const isDetectionLoading = ref(false)
+    const detectionError = ref(null)
+    const detectionStatusInterval = ref(null)
+    
     const viewers = ref(1)
     const viewersRefreshInterval = ref(null)
-    // Get the global store or event bus if available
     const eventBus = inject('eventBus', null)
-    // Get the theme from parent component
     const isDarkTheme = inject('theme', ref(true))
-    // Add interval for checking stream status if offline
     let streamStatusCheckInterval = ref(null)
-    // Add new variables for video playback status
     const isPlaying = ref(false)
     
     const agentCache = ref({})
     const allAgentsFetched = ref(false)
     
-    // Computed property to determine if compact view should be used
     const isCompactView = computed(() => {
       return props.totalStreams > 5
     })
 
-    // Watch for changes in stream status
     watch(() => props.stream.status, (newStatus) => {
-      isOnline.value = newStatus === 'online';
-      streamStatus.value = newStatus || 'unknown';
-    });
+      isOnline.value = newStatus === 'online'
+      streamStatus.value = newStatus || 'unknown'
+    })
 
-    // Computed property to get the stream URL (m3u8)
     const streamUrl = computed(() => {
       if (!props.stream) return null
-      
-      // Get the m3u8 URL based on platform
       if (props.stream.platform?.toLowerCase() === 'chaturbate' && props.stream.chaturbate_m3u8_url) {
         return props.stream.chaturbate_m3u8_url
       } else if (props.stream.platform?.toLowerCase() === 'stripchat' && props.stream.stripchat_m3u8_url) {
         return props.stream.stripchat_m3u8_url
       }
-      
-      // Fallback to room URL
       return props.stream.room_url
     })
 
-    // Computed property to check if stream is from Stripchat
     const isStripchatStream = computed(() => {
       return props.stream?.platform?.toLowerCase() === 'stripchat'
     })
 
-    // Computed property to check if stream has assigned agents
     const hasAssignedAgents = computed(() => {
-      return props.stream.assignments && props.stream.assignments.length > 0;
-    });
+      return props.stream.assignments && props.stream.assignments.length > 0
+    })
 
-    // Computed property to get assigned agent names from cached or pre-fetched data
     const assignedAgentNames = computed(() => {
-      if (!hasAssignedAgents.value) return '';
+      if (!hasAssignedAgents.value) return ''
       const names = props.stream.assignments.map(assignment => {
         if (assignment.agent && assignment.agent.username) {
-          return assignment.agent.username;
+          return assignment.agent.username
         } else {
-          const agentId = assignment.agent_id;
-          return agentCache.value[agentId] || `Agent ${agentId}`;
+          const agentId = assignment.agent_id
+          return agentCache.value[agentId] || `Agent ${agentId}`
         }
-      });
-      return names.join(', ');
-    });
+      })
+      return names.join(', ')
+    })
 
-    // Method to fetch all agents and populate cache
+    const getDetectionButtonText = computed(() => {
+      if (isDetectionLoading.value) return 'Loading...'
+      if (detectionError.value) return 'Error'
+      return isDetecting.value ? 'Stop' : 'Monitor'
+    })
+
+    const getDetectionButtonTooltip = computed(() => {
+      if (isDetectionLoading.value) return 'Processing detection request...'
+      if (detectionError.value) return 'Detection error occurred. Please try again.'
+      return isDetecting.value ? 'Stop detection' : 'Start detection'
+    })
+
     const fetchAllAgents = async () => {
-      if (allAgentsFetched.value) return;
+      if (allAgentsFetched.value) return
       try {
-        const response = await axios.get('/api/agents');
-        const agents = response.data || [];
+        const response = await axios.get('/api/agents')
+        const agents = response.data || []
         agents.forEach(agent => {
-          agentCache.value[agent.id] = agent.username || `Agent ${agent.id}`;
-        });
-        allAgentsFetched.value = true;
+          agentCache.value[agent.id] = agent.username || `Agent ${agent.id}`
+        })
+        allAgentsFetched.value = true
       } catch (error) {
-        console.error('Error fetching all agents:', error);
-        // Fallback to individual fetches if needed
-        fetchAgentUsernames();
+        console.error('Error fetching all agents:', error)
+        fetchAgentUsernames()
       }
-    };
+    }
 
-    // Method to fetch agent usernames individually as fallback
     const fetchAgentUsernames = async () => {
-      if (!hasAssignedAgents.value) return;
+      if (!hasAssignedAgents.value) return
       for (const assignment of props.stream.assignments) {
         if (assignment.agent && assignment.agent.username) {
-          agentCache.value[assignment.agent_id] = assignment.agent.username;
+          agentCache.value[assignment.agent_id] = assignment.agent.username
         } else {
-          const agentId = assignment.agent_id;
+          const agentId = assignment.agent_id
           if (!agentCache.value[agentId]) {
             try {
-              const response = await axios.get(`/api/agents/${agentId}`);
-              agentCache.value[agentId] = response.data.username || `Agent ${agentId}`;
+              const response = await axios.get(`/api/agents/${agentId}`)
+              agentCache.value[agentId] = response.data.username || `Agent ${agentId}`
             } catch (error) {
-              console.error(`Error fetching username for agent ${agentId}:`, error);
-              agentCache.value[agentId] = `Agent ${agentId}`;
+              console.error(`Error fetching username for agent ${agentId}:`, error)
+              agentCache.value[agentId] = `Agent ${agentId}`
             }
           }
         }
       }
-    };
+    }
 
-    // Watch for changes in assignments and fetch usernames
     watch(() => props.stream.assignments, () => {
       if (!allAgentsFetched.value) {
-        fetchAllAgents();
+        fetchAllAgents()
       }
-    }, { deep: true });
+    }, { deep: true })
 
-    // Get username from stream data
     const getStreamerUsername = () => {
       if (!props.stream || !props.stream.streamer_username) return null
       return props.stream.streamer_username
     }
 
-    // Fetch viewer count for Stripchat streams
     const fetchViewerCount = async () => {
-      // Only proceed if this is a Stripchat stream
       if (!isStripchatStream.value) return
-      
       const username = getStreamerUsername()
       if (!username) return
-      
       try {
         const response = await axios.get(`https://stripchat.com/api/stripchat-viewers/${username}`)
-        
-        // Extract guest count from response
+        console.log('No of viewers:',response.data.guests)
         if (response.data && response.data.guests !== undefined) {
-          // Update viewers with just the guests count for Stripchat
           viewers.value = response.data.guests
-          
-          // Add animation for viewer count update
           anime({
             targets: '.viewer-count',
             scale: [1, 1.1, 1],
@@ -286,9 +273,7 @@ export default {
     }
 
     const initializeVideo = () => {
-      // Get the correct m3u8 URL directly from the stream object
       let m3u8Url = streamUrl.value
-      
       if (!m3u8Url) {
         console.error('No HLS URL available for this stream')
         isOnline.value = false
@@ -297,19 +282,15 @@ export default {
         return
       }
       
-      // Initialize HLS.js if supported
       if (Hls.isSupported() && videoPlayer.value) {
-        destroyHls() // Clean up any existing instance
-        
+        destroyHls()
         hls = new Hls({
           startLevel: 0,
           capLevelToPlayerSize: true,
           maxBufferLength: 30
         })
-        
         hls.loadSource(m3u8Url)
         hls.attachMedia(videoPlayer.value)
-        
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           videoPlayer.value.muted = isMuted.value
           videoPlayer.value.play().catch(e => {
@@ -318,12 +299,10 @@ export default {
           isOnline.value = true
           streamStatus.value = 'online'
           isLoading.value = false
-          // Update backend status to online
           axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
             .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
             .catch(error => console.error('Failed to update stream status:', error))
         })
-        
         hls.on(Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
             switch (data.type) {
@@ -334,7 +313,6 @@ export default {
                 isLoading.value = false
                 hls.stopLoad()
                 hls.detachMedia()
-                // Report to backend that stream is offline
                 reportStreamOffline(props.stream.id)
                 break
               case Hls.ErrorTypes.MEDIA_ERROR:
@@ -347,15 +325,12 @@ export default {
                 isOnline.value = false
                 streamStatus.value = 'offline'
                 isLoading.value = false
-                // Report to backend that stream is offline
                 reportStreamOffline(props.stream.id)
                 break
             }
           }
         })
-      } 
-      // Fallback for browsers with native HLS support
-      else if (videoPlayer.value && videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) {
+      } else if (videoPlayer.value && videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) {
         videoPlayer.value.src = m3u8Url
         videoPlayer.value.addEventListener('loadedmetadata', () => {
           videoPlayer.value.muted = isMuted.value
@@ -365,7 +340,6 @@ export default {
           isOnline.value = true
           streamStatus.value = 'online'
           isLoading.value = false
-          // Update backend status to online
           axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
             .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
             .catch(error => console.error('Failed to update stream status:', error))
@@ -374,7 +348,6 @@ export default {
           isOnline.value = false
           streamStatus.value = 'offline'
           isLoading.value = false
-          // Update backend status to offline
           axios.post(`/api/streams/${props.stream.id}/status`, { status: 'offline' })
             .then(() => console.log(`Updated stream ${props.stream.id} status to offline`))
             .catch(error => console.error('Failed to update stream status:', error))
@@ -389,70 +362,57 @@ export default {
       }
     }
 
-    // Function to show toast notification (placeholder for actual toast system)
     const showToast = (message, type = 'success') => {
-      // This is a placeholder. Replace with your actual toast notification system if available.
       console.log(`[Toast ${type}]: ${message}`)
       alert(`[${type.toUpperCase()}]: ${message}`)
     }
 
-    // Function to check stream and detection status
-    const checkStreamStatus = async () => {
+    const checkDetectionStatus = async () => {
       try {
         const response = await axios.get(`/api/detection-status/${props.stream.id}`)
         isDetecting.value = response.data.active
         streamStatus.value = response.data.status || 'unknown'
-        // Update online status based on stream status from API
         isOnline.value = streamStatus.value === 'online'
         isLoading.value = false
-        // If stream is playing and status is not 'online', update it
+        detectionError.value = null
         if (isPlaying.value && streamStatus.value !== 'online') {
           await axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
           streamStatus.value = 'online'
           isOnline.value = true
         }
       } catch (error) {
-        console.error('Error checking stream status:', error)
+        console.error('Error checking detection status:', error)
+        detectionError.value = error.message
         isLoading.value = false
       }
     }
 
-    // Function to toggle detection
     const toggleDetection = async () => {
-      if (!canToggleDetection.value) return
-      
-      canToggleDetection.value = false
+      if (isDetectionLoading.value) return
+
+      isDetectionLoading.value = true
+      detectionError.value = null
       try {
-        const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`)
-        const isActive = statusResponse.data.active
+        await axios.post('/api/trigger-detection', {
+          stream_id: props.stream.id,
+          stop: isDetecting.value
+        })
         
-        if (isActive) {
-          // Detection is already running, so stop it
-          await axios.post('/api/trigger-detection', {
-            stream_id: props.stream.id,
-            stop: true
-          })
-          isDetecting.value = false
-          showToast(`Detection stopped for ${props.stream.streamer_username}`, 'info')
-        } else {
-          // Detection is not running, so start it
-          await axios.post('/api/trigger-detection', {
-            stream_id: props.stream.id
-          })
-          isDetecting.value = true
-          showToast(`Detection started for ${props.stream.streamer_username}`, 'success')
-        }
+        isDetecting.value = !isDetecting.value
+        showToast(
+          isDetecting.value 
+            ? `Detection started for ${props.stream.streamer_username}` 
+            : `Detection stopped for ${props.stream.streamer_username}`,
+          'success'
+        )
+        emit('detection-toggled', { streamId: props.stream.id, isDetecting: isDetecting.value })
       } catch (error) {
         console.error('Error toggling detection:', error)
-        showToast(`Error toggling detection for ${props.stream.streamer_username}: ${error.message}`, 'error')
+        detectionError.value = error.message
+        showToast(`Error toggling detection: ${error.message}`, 'error')
       } finally {
-        canToggleDetection.value = true
+        isDetectionLoading.value = false
       }
-    }
-    
-    const getDetectionButtonText = () => {
-      if (!canToggleDetection.value) return 'Loading...'
-      return isDetecting.value ? 'Stop' : 'Monitor'
     }
 
     const addEntranceAnimation = () => {
@@ -464,10 +424,9 @@ export default {
           scale: [0.85, 1],
           easing: 'spring(1, 80, 10, 0)',
           duration: 800,
-          delay: 100 + (props.index * 120) // Staggered effect
+          delay: 100 + (props.index * 120)
         })
       }
-
       if (streamStats.value) {
         anime({
           targets: streamStats.value.querySelectorAll('.stat-item'),
@@ -490,7 +449,6 @@ export default {
           easing: 'easeOutQuad'
         })
       }
-
       if (streamOverlay.value) {
         anime({
           targets: streamOverlay.value,
@@ -498,7 +456,6 @@ export default {
           duration: 250,
           easing: 'easeOutQuad'
         })
-
         anime({
           targets: streamOverlay.value.querySelector('.view-details-btn'),
           translateY: [20, 0],
@@ -520,7 +477,6 @@ export default {
           easing: 'easeOutQuad'
         })
       }
-
       if (streamOverlay.value) {
         anime({
           targets: streamOverlay.value,
@@ -532,14 +488,11 @@ export default {
     }
 
     const getStreamTime = () => {
-      // Calculate how long the stream has been active based on creation_time
       if (!props.stream.creation_time) return 'New'
-      
       const createdAt = new Date(props.stream.creation_time)
       const now = new Date()
       const diffMs = now - createdAt
       const diffMins = Math.floor(diffMs / 60000)
-      
       if (diffMins < 60) return `${diffMins}m`
       const hours = Math.floor(diffMins / 60)
       const mins = diffMins % 60
@@ -551,8 +504,6 @@ export default {
         isMuted.value = !isMuted.value
         videoPlayer.value.muted = isMuted.value
         emit('mute-change', isMuted.value)
-        
-        // Provide haptic feedback through animation
         anime({
           targets: '.mute-btn',
           scale: [1, 1.2, 1],
@@ -565,8 +516,6 @@ export default {
     const toggleBookmark = () => {
       isBookmarked.value = !isBookmarked.value
       emit('bookmark', { stream: props.stream, bookmarked: isBookmarked.value })
-      
-      // Animate bookmark button
       anime({
         targets: '.bookmark-btn',
         scale: [1, 1.2, 1],
@@ -581,10 +530,8 @@ export default {
       isFullscreen.value = !isFullscreen.value
     }
 
-    // Watch for changes in totalStreams to adjust the layout
     watch(() => props.totalStreams, (newCount) => {
       if (newCount > 8 && !isCompactView.value) {
-        // Animate transition to compact view
         anime({
           targets: streamCard.value,
           scale: [1, 0.95, 1],
@@ -592,7 +539,6 @@ export default {
           easing: 'easeOutQuad'
         })
       } else if (newCount <= 8 && isCompactView.value) {
-        // Animate transition to standard view
         anime({
           targets: streamCard.value,
           scale: [0.95, 1.05, 1],
@@ -602,18 +548,13 @@ export default {
       }
     })
 
-    // Set up viewer count refresh for Stripchat streams
     const setupViewerCountRefresh = () => {
       if (isStripchatStream.value) {
-        // Initial fetch
         fetchViewerCount()
-        
-        // Set up interval for periodic refresh (every 30 seconds)
         viewersRefreshInterval.value = setInterval(fetchViewerCount, 30000)
       }
     }
 
-    // Clean up viewer count refresh interval
     const cleanupViewerCountRefresh = () => {
       if (viewersRefreshInterval.value) {
         clearInterval(viewersRefreshInterval.value)
@@ -621,7 +562,6 @@ export default {
       }
     }
 
-    // Function to handle video playback status
     const handleVideoPlayback = () => {
       const videoElement = videoPlayer.value
       if (videoElement) {
@@ -629,7 +569,6 @@ export default {
           isPlaying.value = true
           isOnline.value = true
           streamStatus.value = 'online'
-          // Update backend status to online when playing
           axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
             .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
             .catch(error => console.error('Failed to update stream status:', error))
@@ -644,7 +583,6 @@ export default {
           isOnline.value = false
           streamStatus.value = 'offline'
           isLoading.value = false
-          // Update backend status to offline on error
           axios.post(`/api/streams/${props.stream.id}/status`, { status: 'offline' })
             .then(() => console.log(`Updated stream ${props.stream.id} status to offline`))
             .catch(error => console.error('Failed to update stream status:', error))
@@ -652,27 +590,14 @@ export default {
       }
     }
 
-    // Listen for global events
     onMounted(() => {
       initializeVideo()
       addEntranceAnimation()
-      
-      // Check stream status initially
-      checkStreamStatus()
-      
-      // Set up interval to check stream status
-      checkStatusInterval.value = setInterval(checkStreamStatus, 30000)
-      
-      // Set up interval to check stream status if offline
-      streamStatusCheckInterval.value = setInterval(checkStreamStatus, 120000) // Check every 2 minutes
-      
-      // Set up viewer count refresh for Stripchat
+      checkDetectionStatus()
+      detectionStatusInterval.value = setInterval(checkDetectionStatus, 15000) // Check every 15 seconds
+      streamStatusCheckInterval.value = setInterval(checkDetectionStatus, 120000)
       setupViewerCountRefresh()
-      
-      // Fetch all agents
       fetchAllAgents()
-      
-      // Listen for global mute all event if event bus exists
       if (eventBus) {
         eventBus.$on('muteAllStreams', (exceptId) => {
           if (props.stream.id !== exceptId) {
@@ -681,44 +606,31 @@ export default {
           }
         })
       }
-      
-      // Handle video playback status
       handleVideoPlayback()
     })
 
     onBeforeUnmount(() => {
-      if (hls) {
-        hls.destroy()
-        hls = null
-      }
-      if (checkStatusInterval.value) {
-        clearInterval(checkStatusInterval.value)
+      destroyHls()
+      if (detectionStatusInterval.value) {
+        clearInterval(detectionStatusInterval.value)
       }
       if (streamStatusCheckInterval.value) {
         clearInterval(streamStatusCheckInterval.value)
       }
-      if (viewersRefreshInterval.value) {
-        clearInterval(viewersRefreshInterval.value)
-      }
+      cleanupViewerCountRefresh()
       if (eventBus) {
         eventBus.$off('muteAllStreams')
       }
     })
 
-    // Watch for platform changes and set up viewer count refresh accordingly
     watch(() => props.stream.platform, (newPlatform) => {
-      // Clean up existing interval if any
       cleanupViewerCountRefresh()
-      
-      // Reset viewers count when platform changes
       viewers.value = 0
-      
       if (newPlatform?.toLowerCase() === 'stripchat') {
         setupViewerCountRefresh()
       }
     })
 
-    // Add method to report stream offline
     const reportStreamOffline = async (streamId) => {
       try {
         await axios.post(`/api/streams/${streamId}/status`, { status: 'offline' })
@@ -730,20 +642,17 @@ export default {
       }
     }
 
-    // Function to handle card click based on stream status
     const handleCardClick = () => {
       if (!isOnline.value) {
-        const userConfirmed = confirm('Stream is offline. Do you want to view details or refresh the stream?');
+        const userConfirmed = confirm('Stream is offline. Do you want to view details or refresh the stream?')
         if (userConfirmed) {
-          // Emit event to show details modal or trigger refresh
-          showToast('Opening stream details or refreshing...', 'info');
-          emit('click');
+          showToast('Opening stream details or refreshing...', 'info')
+          emit('click')
         }
       } else {
-        // Directly show details modal for online streams
-        emit('click');
+        emit('click')
       }
-    };
+    }
 
     return {
       streamCard,
@@ -755,6 +664,8 @@ export default {
       isCompactView,
       isDarkTheme,
       isDetecting,
+      isDetectionLoading,
+      detectionError,
       isOnline,
       viewers,
       isStripchatStream,
@@ -766,8 +677,9 @@ export default {
       toggleFullscreen,
       toggleDetection,
       getDetectionButtonText,
+      getDetectionButtonTooltip,
       reportStreamOffline,
-      checkStreamStatus,
+      checkDetectionStatus,
       hasAssignedAgents,
       assignedAgentNames,
       handleCardClick
@@ -777,7 +689,6 @@ export default {
 </script>
 
 <style scoped>
-/* Add viewer count overlay styles */
 .viewer-count-overlay {
   position: absolute;
   top: 10px;
@@ -808,7 +719,6 @@ export default {
   font-size: 0.75rem;
 }
 
-/* Detection controls */
 .detection-controls {
   position: absolute;
   top: 10px;
@@ -820,7 +730,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  background-color: rgba(40, 167, 69, 0.85); /* Green for idle state */
+  background-color: rgba(40, 167, 69, 0.85);
   color: white;
   border: none;
   border-radius: 20px;
@@ -831,22 +741,27 @@ export default {
 }
 
 .detection-toggle:hover:not(:disabled) {
-  background-color: rgb(103, 124, 108); /* Darker green on hover for idle state */
+  background-color: rgb(103, 124, 108);
   transform: translateY(-2px);
 }
 
 .detection-toggle.active {
-  background-color: rgba(9, 218, 37, 0.85); /* Yellow for running state */
+  background-color: rgba(220, 53, 69, 0.85);
 }
 
 .detection-toggle.active:hover:not(:disabled) {
-  background-color: rgba(220, 53, 69, 0.85); /* Red on hover for stop state */
+  background-color: rgba(200, 33, 49, 0.85);
   transform: translateY(-2px);
 }
 
 .detection-toggle.loading {
-  background-color: rgba(255, 193, 7, 0.85); /* Yellow for loading state */
+  background-color: rgba(255, 193, 7, 0.85);
   pointer-events: none;
+}
+
+.detection-toggle.error {
+  background-color: rgba(220, 53, 69, 0.85);
+  animation: shake 0.3s;
 }
 
 .detection-toggle:disabled {
@@ -854,13 +769,11 @@ export default {
   cursor: not-allowed;
 }
 
-/* Monitor stat for active detection */
 .monitor-stat {
   color: #28a745;
   font-weight: 500;
 }
 
-/* Compact view adjustments */
 .compact-view .detection-toggle {
   padding: 4px 8px;
   font-size: 0.7rem;
@@ -870,7 +783,6 @@ export default {
   display: none;
 }
 
-/* Add these to your existing styles for the rest of the component */
 .stream-card {
   background-color: var(--input-bg);
   border-radius: 16px;
@@ -886,8 +798,6 @@ export default {
   position: relative;
 }
 
-
-/* Compact view styling */
 .stream-card.compact-view {
   border-radius: 12px;
 }
@@ -1136,12 +1046,10 @@ export default {
   color: white;
 }
 
-/* Responsive styles */
 @media (max-width: 1400px) {
   .stream-card:not(.compact-view) {
     border-radius: 14px;
   }
-  
   .stream-card:not(.compact-view) .stream-title {
     font-size: 1.1rem;
   }
@@ -1151,11 +1059,9 @@ export default {
   .stream-card:not(.compact-view) {
     border-radius: 12px;
   }
-  
   .stream-card:not(.compact-view) .stream-title {
     font-size: 1rem;
   }
-  
   .stream-card:not(.compact-view) .stat-item {
     font-size: 0.8rem;
   }
@@ -1165,51 +1071,49 @@ export default {
   .stream-card {
     border-radius: 10px;
   }
-  
   .stream-title {
     font-size: 0.9rem;
   }
-  
   .stream-meta {
     margin-bottom: 12px;
   }
-  
   .stream-stats {
     padding-top: 12px;
   }
-  
-  
   .stat-item {
     font-size: 0.75rem;
   }
-  
   .control-btn,
   .action-btn {
     width: 28px;
     height: 28px;
   }
-  
   .platform-tag,
   .agent-badge {
     font-size: 0.7rem;
     padding: 2px 8px;
   }
-  
   .view-details-btn {
     padding: 8px 16px;
     font-size: 0.9rem;
   }
-  
   .view-details-btn .btn-text {
     display: none;
   }
 }
 
-/* Animation classes */
 @keyframes pulse {
   0% { transform: scale(1); }
   50% { transform: scale(1.05); }
   100% { transform: scale(1); }
+}
+
+@keyframes shake {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  50% { transform: translateX(2px); }
+  75% { transform: translateX(-2px); }
+  100% { transform: translateX(0); }
 }
 
 .pulse-animation {
@@ -1225,14 +1129,12 @@ export default {
   animation: fadeIn 0.3s forwards;
 }
 
-/* Disabled state for offline streams */
 .stream-card.disabled {
   opacity: 0.6;
-  pointer-events: auto; /* Allow clicks but visually indicate disabled state */
+  pointer-events: auto;
   cursor: not-allowed;
 }
 
-/* Offline watermark */
 .offline-watermark {
   position: absolute;
   top: 50%;
@@ -1252,7 +1154,6 @@ export default {
   color: black;
 }
 
-/* List view adjustments */
 .list-view .stream-card {
   flex-direction: row;
   height: auto;
@@ -1347,59 +1248,46 @@ export default {
   .stream-card {
     border-radius: 10px;
   }
-  
   .stream-title {
     font-size: 0.9rem;
   }
-  
   .stream-meta {
     margin-bottom: 12px;
   }
-  
   .stream-stats {
     padding-top: 12px;
   }
-  
-  
   .stat-item {
     font-size: 0.75rem;
   }
-  
   .control-btn,
   .action-btn {
     width: 28px;
     height: 28px;
   }
-  
   .platform-tag,
   .agent-badge {
     font-size: 0.7rem;
     padding: 2px 8px;
   }
-  
   .view-details-btn {
     padding: 8px 16px;
     font-size: 0.9rem;
   }
-  
   .view-details-btn .btn-text {
     display: none;
   }
-  
   .list-view .video-container {
     width: 70px;
     min-width: 70px;
     height: 40px;
   }
-  
   .list-view .stream-title {
     font-size: 0.85rem;
   }
-  
   .list-view .detection-controls {
     right: 0.25rem;
   }
-  
   .list-view .quick-actions {
     right: 2.5rem;
   }

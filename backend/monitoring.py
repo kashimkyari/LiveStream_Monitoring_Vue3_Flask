@@ -316,43 +316,42 @@ def process_audio_segment(audio_data, stream_url):
                 "keyword": detected_keywords,
                 "sentiment_score": compound_score
             }
-            log_audio_detection(detection, stream_url)
-            return detection
-        return None
+            return [detection]  # Return as list for consistency
+        return []
     except Exception as e:
         logger.error(f"Error processing audio for {stream_url}: {e}")
-        return None
+        return []
 
 def log_audio_detection(detection, stream_url):
     """Log audio detections to database"""
     platform, streamer = get_stream_info(stream_url)
-    assignment_id, agent = get_stream_assignment(stream_url)
-    
+    assignment_id, agent_id = get_stream_assignment(stream_url)
+
     details = {
         "keyword": detection.get("keyword"),
         "transcript": detection.get("transcript"),
         "timestamp": detection.get("timestamp"),
         "streamer_name": streamer,
         "platform": platform,
-        "assigned_agent": agent or "Unassigned"
+        "assigned_agent": agent_id  # Store agent_id as integer
     }
-    
+
     if "sentiment_score" in detection:
         details["sentiment_score"] = detection["sentiment_score"]
-    
+
     with current_app.app_context():
         log_entry = DetectionLog(
             room_url=stream_url,
             event_type="audio_detection",
             details=details,
             timestamp=datetime.now(),
-            assigned_agent=agent,
+            assigned_agent=agent_id,  # Store agent_id as integer
             assignment_id=assignment_id,
             read=False
         )
         db.session.add(log_entry)
         db.session.commit()
-        
+
         notification_data = {
             "id": log_entry.id,
             "event_type": log_entry.event_type,
@@ -362,7 +361,7 @@ def log_audio_detection(detection, stream_url):
             "room_url": log_entry.room_url,
             "streamer": streamer,
             "platform": platform,
-            "assigned_agent": agent or "Unassigned"
+            "assigned_agent": agent_id if agent_id is not None else "Unassigned"  # For display
         }
         emit_notification(notification_data)
 
@@ -451,7 +450,7 @@ def log_video_detection(detections, frame, stream_url):
         return
         
     platform, streamer = get_stream_info(stream_url)
-    assignment_id, agent = get_stream_assignment(stream_url)
+    assignment_id, agent_id = get_stream_assignment(stream_url)
     
     annotated = annotate_frame(frame, detections)
     success, buffer = cv2.imencode('.jpg', annotated)
@@ -467,7 +466,7 @@ def log_video_detection(detections, frame, stream_url):
         "streamer_name": streamer,
         "platform": platform,
         "annotated_image": image_b64,
-        "assigned_agent": agent or "Unassigned"
+        "assigned_agent": agent_id  # Store agent_id as integer
     }
     
     with current_app.app_context():
@@ -477,7 +476,7 @@ def log_video_detection(detections, frame, stream_url):
             details=details,
             detection_image=buffer.tobytes(),
             timestamp=datetime.now(),
-            assigned_agent=agent,
+            assigned_agent=agent_id,  # Store agent_id as integer
             assignment_id=assignment_id,
             read=False
         )
@@ -493,7 +492,7 @@ def log_video_detection(detections, frame, stream_url):
             "room_url": log_entry.room_url,
             "streamer": streamer,
             "platform": platform,
-            "assigned_agent": agent or "Unassigned"
+            "assigned_agent": agent_id if agent_id is not None else "Unassigned"  # For display
         }
         emit_notification(notification_data)
 
@@ -606,7 +605,7 @@ def log_chat_detection(detections, stream_url):
         return
         
     platform, streamer = get_stream_info(stream_url)
-    assignment_id, agent = get_stream_assignment(stream_url)
+    assignment_id, agent_id = get_stream_assignment(stream_url)
     
     grouped = {}
     for det in detections:
@@ -619,7 +618,7 @@ def log_chat_detection(detections, stream_url):
             "timestamp": datetime.now().isoformat(),
             "streamer_name": streamer,
             "platform": platform,
-            "assigned_agent": agent or "Unassigned"
+            "assigned_agent": agent_id  # Store agent_id as integer
         }
         
         event_type = "chat_sentiment_detection" if type_key == "sentiment" else "chat_detection"
@@ -630,7 +629,7 @@ def log_chat_detection(detections, stream_url):
                 event_type=event_type,
                 details=details,
                 timestamp=datetime.now(),
-                assigned_agent=agent,
+                assigned_agent=agent_id,  # Store agent_id as integer
                 assignment_id=assignment_id,
                 read=False
             )
@@ -646,11 +645,12 @@ def log_chat_detection(detections, stream_url):
                 "room_url": log_entry.room_url,
                 "streamer": streamer,
                 "platform": platform,
-                "assigned_agent": agent or "Unassigned"
+                "assigned_agent": agent_id if agent_id is not None else "Unassigned"  # For display
             }
-        emit_notification(notification_data)
+            emit_notification(notification_data)
 
 def handle_audio_detection(stream_url, transcript, keyword, sentiment_score, platform, streamer_name):
+    """Handle audio detection and log to database"""
     try:
         # Get assignment info
         assignment_id, agent_id = get_stream_assignment(stream_url)
@@ -666,10 +666,10 @@ def handle_audio_detection(stream_url, transcript, keyword, sentiment_score, pla
                 'sentiment_score': sentiment_score,
                 'platform': platform,
                 'streamer_name': streamer_name,
-                'assigned_agent': agent_id
+                'assigned_agent': agent_id  # Store agent_id as integer
             },
             read=False,
-            assigned_agent=agent_id,
+            assigned_agent=agent_id,  # Store agent_id as integer
             assignment_id=assignment_id
         )
         db.session.add(detection_log)
@@ -685,7 +685,7 @@ def handle_audio_detection(stream_url, transcript, keyword, sentiment_score, pla
             "room_url": stream_url,
             "streamer": streamer_name,
             "platform": platform,
-            "assigned_agent": agent_id or "Unassigned"
+            "assigned_agent": agent_id if agent_id is not None else "Unassigned"  # For display
         }
         
         # Emit real-time notification
@@ -697,6 +697,7 @@ def handle_audio_detection(stream_url, transcript, keyword, sentiment_score, pla
         return False
 
 def handle_visual_detection(stream_url, detections, annotated_image, platform, streamer_name):
+    """Handle visual detection and log to database"""
     try:
         # Get assignment info
         assignment_id, agent_id = get_stream_assignment(stream_url)
@@ -711,10 +712,10 @@ def handle_visual_detection(stream_url, detections, annotated_image, platform, s
                 'annotated_image': annotated_image,
                 'platform': platform,
                 'streamer_name': streamer_name,
-                'assigned_agent': agent_id
+                'assigned_agent': agent_id  # Store agent_id as integer
             },
             read=False,
-            assigned_agent=agent_id,
+            assigned_agent=agent_id,  # Store agent_id as integer
             assignment_id=assignment_id
         )
         db.session.add(detection_log)
@@ -730,7 +731,7 @@ def handle_visual_detection(stream_url, detections, annotated_image, platform, s
             "room_url": stream_url,
             "streamer": streamer_name,
             "platform": platform,
-            "assigned_agent": agent_id or "Unassigned"
+            "assigned_agent": agent_id if agent_id is not None else "Unassigned"  # For display
         }
         
         # Emit real-time notification
@@ -742,6 +743,7 @@ def handle_visual_detection(stream_url, detections, annotated_image, platform, s
         return False
 
 def handle_chat_detection(stream_url, message, keywords, sender, platform, streamer_name):
+    """Handle chat detection and log to database"""
     try:
         # Get assignment info
         assignment_id, agent_id = get_stream_assignment(stream_url)
@@ -757,10 +759,10 @@ def handle_chat_detection(stream_url, message, keywords, sender, platform, strea
                 'sender': sender,
                 'platform': platform,
                 'streamer_name': streamer_name,
-                'assigned_agent': agent_id
+                'assigned_agent': agent_id  # Store agent_id as integer
             },
             read=False,
-            assigned_agent=agent_id,
+            assigned_agent=agent_id,  # Store agent_id as integer
             assignment_id=assignment_id
         )
         db.session.add(detection_log)
@@ -776,7 +778,7 @@ def handle_chat_detection(stream_url, message, keywords, sender, platform, strea
             "room_url": stream_url,
             "streamer": streamer_name,
             "platform": platform,
-            "assigned_agent": agent_id or "Unassigned"
+            "assigned_agent": agent_id if agent_id is not None else "Unassigned"  # For display
         }
         
         # Emit real-time notification

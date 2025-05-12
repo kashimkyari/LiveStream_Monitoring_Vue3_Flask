@@ -1616,6 +1616,7 @@ export default {
   overflow-x: hidden; /* Prevent horizontal scrollbar during animations */
   height: auto;
   width: auto;
+  margin-left: 60px;
 }
 
 .main-content {

@@ -262,13 +262,14 @@ def mark_notification_read(notification_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# notification_routes.py
 @notification_bp.route("/api/notifications/read-all", methods=["PUT"])
 @login_required()
 def mark_all_notifications_read():
     try:
         user_id = session.get("user_id")
         user_role = session.get("user_role")
-        
+
         if user_role == "admin":
             # Admins can mark all notifications as read
             notifications = DetectionLog.query.all()
@@ -281,31 +282,28 @@ def mark_all_notifications_read():
             agent = User.query.get(user_id)
             if not agent:
                 return jsonify({"error": "Agent not found"}), 404
-                
+
             # Get streams assigned to this agent
             assigned_streams = [assignment.stream_id for assignment in agent.assignments]
-            
+
             # Get all notifications
             notifications = DetectionLog.query.all()
-            
+
             for notification in notifications:
                 # Mark as read if:
                 # 1. Notification is explicitly assigned to this agent
                 # 2. Notification is for a stream assigned to this agent
-                details = notification.details or {}
-                assigned_agent = details.get('assigned_agent')
-                
-                if assigned_agent and assigned_agent.lower() == agent.username.lower():
+                if notification.assigned_agent == user_id:
                     notification.read = True
                     emit_notification_update(notification.id, 'read')
                     continue
-                    
+
                 # Check if notification is for a stream assigned to this agent
                 stream = Stream.query.filter_by(room_url=notification.room_url).first()
                 if stream and stream.id in assigned_streams:
                     notification.read = True
                     emit_notification_update(notification.id, 'read')
-                    
+
         db.session.commit()
         return jsonify({"message": "All notifications marked as read"}), 200
     except Exception as e:
@@ -370,29 +368,31 @@ def get_forwarded_notifications():
         return jsonify({"error": str(e)}), 500
 
 # Admin-only endpoint to forward a notification to an agent
+# notification_routes.py
 @notification_bp.route("/api/notifications/<int:notification_id>/forward", methods=["POST"])
 @login_required(role="admin")
 def forward_notification(notification_id):
     data = request.get_json()
     agent_id = data.get("agent_id")
-    
+
     notification = DetectionLog.query.get(notification_id)
     agent = User.query.filter_by(id=agent_id, role="agent").first()
-    
+
     if not notification or not agent:
         return jsonify({"message": "Invalid notification or agent"}), 404
 
     # Update the notification details to include the assigned agent
     details = notification.details or {}
-    details['assigned_agent'] = agent.username
+    details['assigned_agent'] = agent.id  # Store agent_id as integer
     notification.details = details
-    
+    notification.assigned_agent = agent.id  # Set assigned_agent to agent_id
+
     # Save to database
     db.session.commit()
-    
+
     # Emit notification update
     emit_notification_update(notification_id, 'forwarded')
-    
+
     # Additionally, create a system message to notify the agent
     try:
         # Build detailed message content
@@ -403,7 +403,7 @@ def forward_notification(notification_id):
             "streamer": notification.details.get('streamer_name', 'Unknown'),
             "platform": notification.details.get('platform', 'Unknown')
         }
-    
+
         # Add type-specific details
         if notification.event_type == 'object_detection':
             message_details.update({
@@ -420,7 +420,7 @@ def forward_notification(notification_id):
                 "keyword": notification.details.get('keyword'),
                 "transcript": notification.details.get('transcript')
             })
-    
+
         # Create system message
         sys_msg = ChatMessage(
             sender_id=session['user_id'],
@@ -430,10 +430,10 @@ def forward_notification(notification_id):
             is_system=True,
             timestamp=datetime.utcnow()
         )
-        
+
         db.session.add(sys_msg)
         db.session.commit()
-        
+
         # Emit message notification to agent
         emit_message_update({
             "id": sys_msg.id,
@@ -448,8 +448,8 @@ def forward_notification(notification_id):
     except Exception as e:
         # Log the error but continue, as the notification has already been assigned
         print(f"Error creating system message: {str(e)}")
-    
+
     return jsonify({
         "message": "Notification forwarded to agent",
-        "agent": agent.username
+        "agent_id": agent.id
     }), 200
