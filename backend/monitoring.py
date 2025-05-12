@@ -26,8 +26,8 @@ from models import (
 from extensions import db
 from utils.notifications import emit_notification, emit_stream_update
 from notifications import send_notifications, send_text_message
-from routes.assignment_routes import get_assignments  # Import the endpoint logic
 from sqlalchemy.orm import joinedload
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -35,6 +35,8 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
+
+torch.backends.nnpack.enabled = False
 
 _app = None
 
@@ -58,6 +60,10 @@ last_chat_alerts = {}
 
 # Stream processing buffers
 stream_processors = {}
+
+# Agent cache for usernames
+agent_cache = {}
+all_agents_fetched = False
 
 # =============== MODEL LOADING ===============
 def load_whisper_model():
@@ -87,7 +93,7 @@ def load_yolo_model():
         if _yolo_model is None:
             try:
                 from ultralytics import YOLO
-                _yolo_model = YOLO("yolov9c.pt", verbose=False)
+                _yolo_model = YOLO("yolov8s.pt", verbose=False)
                 _yolo_model.verbose = False
                 logger.info("YOLO model loaded successfully")
             except Exception as e:
@@ -125,13 +131,46 @@ def get_stream_info(stream_url):
             return stream.type.lower(), stream.streamer_username
     return 'unknown', 'unknown'
 
+def fetch_all_agents():
+    """Fetch all agents and cache their usernames"""
+    global all_agents_fetched
+    with current_app.app_context():
+        if all_agents_fetched:
+            return
+        try:
+            agents = User.query.filter_by(role='agent').all()
+            for agent in agents:
+                agent_cache[agent.id] = agent.username or f"Agent {agent.id}"
+            all_agents_fetched = True
+            logger.info(f"Cached {len(agent_cache)} agent usernames")
+        except Exception as e:
+            logger.error(f"Error fetching all agents: {e}")
+
+def fetch_agent_username(agent_id):
+    """Fetch a single agent's username and cache it"""
+    with current_app.app_context():
+        if agent_id in agent_cache:
+            return agent_cache[agent_id]
+        try:
+            agent = User.query.get(agent_id)
+            if agent:
+                agent_cache[agent_id] = agent.username or f"Agent {agent_id}"
+                return agent_cache[agent_id]
+            else:
+                logger.warning(f"Agent {agent_id} not found")
+                agent_cache[agent_id] = f"Agent {agent_id}"
+                return agent_cache[agent_id]
+        except Exception as e:
+            logger.error(f"Error fetching username for agent {agent_id}: {e}")
+            agent_cache[agent_id] = f"Agent {agent_id}"
+            return agent_cache[agent_id]
+
 def get_stream_assignment(stream_url):
-    """Get assignment info for a stream using the /api/assignments endpoint logic"""
+    """Get assignment info for a stream, mimicking /api/assignments endpoint logic"""
     with current_app.app_context():
         # Find the stream by room_url or m3u8 URL
         stream = Stream.query.filter_by(room_url=stream_url).first()
         if not stream:
-            # Check if the URL is an m3u8 URL for Chaturbate or Stripchat
             cb_stream = ChaturbateStream.query.filter_by(chaturbate_m3u8_url=stream_url).first()
             if cb_stream:
                 stream = Stream.query.get(cb_stream.id)
@@ -144,7 +183,7 @@ def get_stream_assignment(stream_url):
             logger.warning(f"No stream found for URL: {stream_url}")
             return None, None
         
-        # Use the get_assignments logic to fetch assignments for this stream
+        # Query assignments for this stream
         query = Assignment.query.options(
             joinedload(Assignment.agent),
             joinedload(Assignment.stream)
@@ -156,9 +195,12 @@ def get_stream_assignment(stream_url):
             logger.info(f"No assignments found for stream: {stream_url}")
             return None, None
         
-        # Select the first assignment (or implement a strategy for multiple assignments)
+        # Select the first assignment (consistent with StreamCard.vue)
         assignment = assignments[0]
-        return assignment.id, assignment.agent_id
+        agent_id = assignment.agent_id
+        # Cache the agent username
+        fetch_agent_username(agent_id)
+        return assignment.id, agent_id
 
 # =============== AUDIO AND VIDEO PROCESSING ===============
 def process_combined_detection(app, stream_url, cancel_event):
@@ -320,7 +362,7 @@ def log_audio_detection(detection, stream_url):
             "room_url": log_entry.room_url,
             "streamer": streamer,
             "platform": platform,
-            "assigned_agent": agent_id if agent_id is not None else "Unassigned"
+            "assigned_agent": agent_cache.get(agent_id, "Unassigned") if agent_id else "Unassigned"
         }
         emit_notification(notification_data)
 
@@ -366,7 +408,7 @@ def log_video_detection(detections, frame, stream_url):
             "room_url": log_entry.room_url,
             "streamer": streamer,
             "platform": platform,
-            "assigned_agent": agent_id if agent_id is not None else "Unassigned"
+            "assigned_agent": agent_cache.get(agent_id, "Unassigned") if agent_id else "Unassigned"
         }
         emit_notification(notification_data)
 
@@ -502,7 +544,7 @@ def log_chat_detection(detections, stream_url):
                 "room_url": log_entry.room_url,
                 "streamer": streamer,
                 "platform": platform,
-                "assigned_agent": agent_id if agent_id is not None else "Unassigned"
+                "assigned_agent": agent_cache.get(agent_id, "Unassigned") if agent_id else "Unassigned"
             }
             emit_notification(notification_data)
 

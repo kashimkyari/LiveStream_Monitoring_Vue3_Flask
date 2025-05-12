@@ -157,6 +157,10 @@ export default {
       return props.totalStreams > 5
     })
 
+    const canToggleDetection = computed(() => {
+      return isOnline.value && !isDetectionLoading.value
+    })
+
     watch(() => props.stream.status, (newStatus) => {
       isOnline.value = newStatus === 'online'
       streamStatus.value = newStatus || 'unknown'
@@ -201,7 +205,7 @@ export default {
 
     const getDetectionButtonTooltip = computed(() => {
       if (isDetectionLoading.value) return 'Processing detection request...'
-      if (detectionError.value) return 'Detection error occurred. Please try again.'
+      if (detectionError.value) return `Detection error: ${detectionError.value}`
       return isDetecting.value ? 'Stop detection' : 'Start detection'
     })
 
@@ -257,7 +261,6 @@ export default {
       if (!username) return
       try {
         const response = await axios.get(`https://stripchat.com/api/front/v2/models/username/${username}`)
-        console.log('No of viewers:',response.data.guests)
         if (response.data && response.data.guests !== undefined) {
           viewers.value = response.data.guests
           anime({
@@ -362,16 +365,15 @@ export default {
       }
     }
 
- 
-
     const checkDetectionStatus = async () => {
       try {
         const response = await axios.get(`/api/detection-status/${props.stream.id}`)
-        isDetecting.value = response.data.active
+        isDetecting.value = response.data.isDetecting
+        isDetectionLoading.value = response.data.isDetectionLoading
+        detectionError.value = response.data.detectionError
         streamStatus.value = response.data.status || 'unknown'
         isOnline.value = streamStatus.value === 'online'
         isLoading.value = false
-        detectionError.value = null
         if (isPlaying.value && streamStatus.value !== 'online') {
           await axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
           streamStatus.value = 'online'
@@ -379,7 +381,8 @@ export default {
         }
       } catch (error) {
         console.error('Error checking detection status:', error)
-        detectionError.value = error.message
+        detectionError.value = error.response?.data?.error || error.message
+        isDetectionLoading.value = false
         isLoading.value = false
       }
     }
@@ -390,12 +393,15 @@ export default {
       isDetectionLoading.value = true
       detectionError.value = null
       try {
-        await axios.post('/api/trigger-detection', {
+        const response = await axios.post('/api/trigger-detection', {
           stream_id: props.stream.id,
           stop: isDetecting.value
         })
         
-        isDetecting.value = !isDetecting.value
+        isDetecting.value = response.data.isDetecting
+        isDetectionLoading.value = response.data.isDetectionLoading
+        detectionError.value = response.data.detectionError
+        
         toast.success(
           isDetecting.value 
             ? `Detection started for ${props.stream.streamer_username}` 
@@ -404,8 +410,8 @@ export default {
         emit('detection-toggled', { streamId: props.stream.id, isDetecting: isDetecting.value })
       } catch (error) {
         console.error('Error toggling detection:', error)
-        detectionError.value = error.message
-        toast.error(`Error toggling detection: ${error.message}`)
+        detectionError.value = error.response?.data?.error || error.message
+        toast.error(`Error toggling detection: ${detectionError.value}`)
       } finally {
         isDetectionLoading.value = false
       }
@@ -586,6 +592,16 @@ export default {
       }
     }
 
+    const handleStreamUpdate = (data) => {
+      if (data.id === props.stream.id) {
+        isDetecting.value = data.status === 'monitoring'
+        isDetectionLoading.value = false
+        detectionError.value = null
+        streamStatus.value = data.status || 'unknown'
+        isOnline.value = streamStatus.value === 'online' || streamStatus.value === 'monitoring'
+      }
+    }
+
     onMounted(() => {
       initializeVideo()
       addEntranceAnimation()
@@ -601,6 +617,7 @@ export default {
             if (videoPlayer.value) videoPlayer.value.muted = true
           }
         })
+        eventBus.$on('stream-update', handleStreamUpdate)
       }
       handleVideoPlayback()
     })
@@ -616,6 +633,7 @@ export default {
       cleanupViewerCountRefresh()
       if (eventBus) {
         eventBus.$off('muteAllStreams')
+        eventBus.$off('stream-update')
       }
     })
 
@@ -678,7 +696,8 @@ export default {
       checkDetectionStatus,
       hasAssignedAgents,
       assignedAgentNames,
-      handleCardClick
+      handleCardClick,
+      canToggleDetection
     }
   }
 }

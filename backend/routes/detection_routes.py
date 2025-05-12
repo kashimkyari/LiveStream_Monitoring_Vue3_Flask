@@ -64,8 +64,6 @@ def get_livestream():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# detection_routes.py
-
 @detection_bp.route("/api/trigger-detection", methods=["POST"])
 @login_required(role=["admin", "agent"])
 def trigger_detection():
@@ -83,27 +81,56 @@ def trigger_detection():
     if not stream:
         return jsonify({"error": "Stream not found"}), 404
 
+    stream_url = get_stream_url(stream)
+    
     if stop:
-        if stream.is_monitored:
-            stop_monitoring(stream)
-            current_app.logger.info(f"Detection stopped for stream: {stream.id}")
-            return jsonify({
-                "message": "Detection stopped successfully",
-                "stream_id": stream.id
-            }), 200
+        if stream.is_monitored or stream_url in stream_processors:
+            try:
+                stop_monitoring(stream)
+                current_app.logger.info(f"Detection stopped for stream: {stream.id}")
+                return jsonify({
+                    "message": "Detection stopped successfully",
+                    "stream_id": stream.id,
+                    "active": False,
+                    "status": stream.status or "unknown",
+                    "isDetecting": False,
+                    "isDetectionLoading": False,
+                    "detectionError": None
+                }), 200
+            except Exception as e:
+                current_app.logger.error(f"Error stopping detection for stream: {stream.id}: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to stop detection: {str(e)}",
+                    "stream_id": stream.id,
+                    "active": stream.is_monitored,
+                    "status": stream.status or "unknown",
+                    "isDetecting": stream.is_monitored,
+                    "isDetectionLoading": False,
+                    "detectionError": str(e)
+                }), 500
         else:
             current_app.logger.info(f"No active detection found for stream: {stream.id}")
             return jsonify({
                 "message": "No active detection found for this stream",
-                "stream_id": stream.id
+                "stream_id": stream.id,
+                "active": False,
+                "status": stream.status or "unknown",
+                "isDetecting": False,
+                "isDetectionLoading": False,
+                "detectionError": None
             }), 200
 
     # Check if detection is already running
-    if stream.is_monitored:
+    if stream.is_monitored or stream_url in stream_processors:
         current_app.logger.info(f"Detection already running for stream: {stream.id}")
         return jsonify({
             "message": "Detection already running for this stream",
-            "stream_id": stream.id
+            "stream_id": stream.id,
+            "active": True,
+            "status": stream.status or "unknown",
+            "isDetecting": True,
+            "isDetectionLoading": False,
+            "detectionError": None
         }), 409  # Conflict status code
 
     # Start detection
@@ -112,16 +139,36 @@ def trigger_detection():
         if start_monitoring(stream):
             return jsonify({
                 "message": "Detection started successfully",
-                "stream_id": stream.id
+                "stream_id": stream.id,
+                "active": True,
+                "status": stream.status or "unknown",
+                "isDetecting": True,
+                "isDetectionLoading": False,
+                "detectionError": None
             }), 200
         else:
             current_app.logger.error(f"Failed to start monitoring for stream: {stream.id}")
-            return jsonify({"error": "Failed to start monitoring"}), 500
+            return jsonify({
+                "error": "Failed to start monitoring",
+                "stream_id": stream.id,
+                "active": False,
+                "status": stream.status or "unknown",
+                "isDetecting": False,
+                "isDetectionLoading": False,
+                "detectionError": "Failed to start monitoring"
+            }), 500
     except Exception as e:
         current_app.logger.error(f"Error starting detection for stream: {stream.id}: {str(e)}")
-        return jsonify({"error": f"Error starting detection: {str(e)}"}), 500
+        return jsonify({
+            "error": f"Error starting detection: {str(e)}",
+            "stream_id": stream.id,
+            "active": False,
+            "status": stream.status or "unknown",
+            "isDetecting": False,
+            "isDetectionLoading": False,
+            "detectionError": str(e)
+        }), 500
 
-        
 @detection_bp.route("/api/detection-status/<int:stream_id>", methods=["GET"])
 @login_required()
 def detection_status(stream_id):
@@ -133,5 +180,8 @@ def detection_status(stream_id):
         "stream_id": stream_id,
         "stream_url": stream_url,
         "active": is_active,
-        "status": stream_status
+        "status": stream_status,
+        "isDetecting": is_active,
+        "isDetectionLoading": False,  # Assume no loading state unless triggered
+        "detectionError": None  # No error unless explicitly set
     })

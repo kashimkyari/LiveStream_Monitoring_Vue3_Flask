@@ -6,8 +6,81 @@ from utils import login_required
 from sqlalchemy import or_
 from datetime import datetime
 from utils.notifications import emit_notification, emit_notification_update, emit_message_update
+from sqlalchemy.orm import joinedload
 
 notification_bp = Blueprint('notification', __name__)
+
+# Agent cache for usernames
+agent_cache = {}
+all_agents_fetched = False
+
+def fetch_all_agents():
+    """Fetch all agents and cache their usernames"""
+    global all_agents_fetched
+    if all_agents_fetched:
+        return
+    try:
+        agents = User.query.filter_by(role='agent').all()
+        for agent in agents:
+            agent_cache[agent.id] = agent.username or f"Agent {agent.id}"
+        all_agents_fetched = True
+    except Exception as e:
+        print(f"Error fetching all agents: {e}")
+
+def fetch_agent_username(agent_id):
+    """Fetch a single agent's username and cache it"""
+    if agent_id in agent_cache:
+        return agent_cache[agent_id]
+    try:
+        agent = User.query.get(agent_id)
+        if agent:
+            agent_cache[agent_id] = agent.username or f"Agent {agent.id}"
+            return agent_cache[agent_id]
+        else:
+            agent_cache[agent_id] = f"Agent {agent_id}"
+            return agent_cache[agent_id]
+    except Exception as e:
+        print(f"Error fetching username for agent {agent_id}: {e}")
+        agent_cache[agent_id] = f"Agent {agent_id}"
+        return agent_cache[agent_id]
+
+def get_stream_assignment(stream_url):
+    """Get assignment info for a stream"""
+    try:
+        # Find the stream by room_url or m3u8 URL
+        stream = Stream.query.filter_by(room_url=stream_url).first()
+        if not stream:
+            from models import ChaturbateStream, StripchatStream
+            cb_stream = ChaturbateStream.query.filter_by(chaturbate_m3u8_url=stream_url).first()
+            if cb_stream:
+                stream = Stream.query.get(cb_stream.id)
+            else:
+                sc_stream = StripchatStream.query.filter_by(stripchat_m3u8_url=stream_url).first()
+                if sc_stream:
+                    stream = Stream.query.get(sc_stream.id)
+        
+        if not stream:
+            return None, None
+        
+        # Query assignments for this stream
+        query = Assignment.query.options(
+            joinedload(Assignment.agent),
+            joinedload(Assignment.stream)
+        ).filter_by(stream_id=stream.id)
+        
+        assignments = query.all()
+        
+        if not assignments:
+            return None, None
+        
+        # Select the first assignment
+        assignment = assignments[0]
+        agent_id = assignment.agent_id
+        fetch_agent_username(agent_id)
+        return assignment.id, agent_id
+    except Exception as e:
+        print(f"Error fetching assignment for stream {stream_url}: {e}")
+        return None, None
 
 @notification_bp.route("/api/logs", methods=["GET"])
 @login_required(role="admin")
@@ -31,7 +104,6 @@ def get_logs():
     except Exception as e:
         return jsonify({"message": "Error fetching dashboard data", "error": str(e)}), 500
 
-# Endpoint for all notifications - accessible to both admins and agents
 @notification_bp.route("/api/notifications", methods=["GET"])
 @login_required()
 def get_all_notifications():
@@ -51,17 +123,15 @@ def get_all_notifications():
             # Get streams assigned to this agent
             assigned_streams = [assignment.stream_id for assignment in agent.assignments]
             
-            # Filter notifications:
-            # 1. Include notifications where assigned_agent matches the current agent's username
-            # 2. Include notifications related to streams assigned to this agent
+            # Filter notifications
             relevant_notifications = []
             
             for notification in notifications:
                 # Check if notification is explicitly assigned to this agent
                 details = notification.details or {}
-                assigned_agent = details.get('assigned_agent')
+                assigned_agent_id = details.get('assigned_agent')
                 
-                if assigned_agent and assigned_agent.lower() == agent.username.lower():
+                if assigned_agent_id and int(assigned_agent_id) == user_id:
                     relevant_notifications.append(notification)
                     continue
                     
@@ -81,12 +151,11 @@ def get_all_notifications():
             "room_url": n.room_url,
             "streamer": n.details.get('streamer_name', 'Unknown'),
             "platform": n.details.get('platform', 'Unknown'),
-            "assigned_agent": n.details.get('assigned_agent', 'Unassigned')
+            "assigned_agent": agent_cache.get(n.assigned_agent, "Unassigned") if n.assigned_agent else "Unassigned"
         } for n in notifications]), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Create a new notification - Admin only
 @notification_bp.route("/api/notifications", methods=["POST"])
 @login_required(role="admin")
 def create_notification():
@@ -97,14 +166,22 @@ def create_notification():
         if not data.get('event_type') or not data.get('room_url'):
             return jsonify({"error": "Missing required fields: event_type, room_url"}), 400
             
+        # Get assignment for the stream
+        assignment_id, agent_id = get_stream_assignment(data.get('room_url'))
+        
         # Create new notification
         notification = DetectionLog(
             event_type=data.get('event_type'),
             room_url=data.get('room_url'),
             timestamp=datetime.utcnow(),
             details=data.get('details', {}),
-            read=data.get('read', False)
+            read=data.get('read', False),
+            assigned_agent=agent_id,
+            assignment_id=assignment_id
         )
+        
+        # Update details with assigned agent
+        notification.details['assigned_agent'] = agent_id
         
         db.session.add(notification)
         db.session.commit()
@@ -119,7 +196,7 @@ def create_notification():
             "room_url": notification.room_url,
             "streamer": notification.details.get('streamer_name', 'Unknown'),
             "platform": notification.details.get('platform', 'Unknown'),
-            "assigned_agent": notification.details.get('assigned_agent', 'Unassigned')
+            "assigned_agent": agent_cache.get(agent_id, "Unassigned") if agent_id else "Unassigned"
         }
         
         # Emit real-time notification
@@ -133,7 +210,6 @@ def create_notification():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-# Get a specific notification
 @notification_bp.route("/api/notifications/<int:notification_id>", methods=["GET"])
 @login_required()
 def get_notification(notification_id):
@@ -153,13 +229,13 @@ def get_notification(notification_id):
                 
             # Check if notification is explicitly assigned to this agent
             details = notification.details or {}
-            assigned_agent = details.get('assigned_agent')
+            assigned_agent_id = details.get('assigned_agent')
             
             # Check if notification is for a stream assigned to this agent
             stream = Stream.query.filter_by(room_url=notification.room_url).first()
             assigned_streams = [assignment.stream_id for assignment in agent.assignments]
             
-            if not ((assigned_agent and assigned_agent.lower() == agent.username.lower()) or 
+            if not ((assigned_agent_id and int(assigned_agent_id) == user_id) or 
                    (stream and stream.id in assigned_streams)):
                 return jsonify({"error": "Not authorized to view this notification"}), 403
         
@@ -172,12 +248,11 @@ def get_notification(notification_id):
             "room_url": notification.room_url,
             "streamer": notification.details.get('streamer_name', 'Unknown'),
             "platform": notification.details.get('platform', 'Unknown'),
-            "assigned_agent": notification.details.get('assigned_agent', 'Unassigned')
+            "assigned_agent": agent_cache.get(notification.assigned_agent, "Unassigned") if notification.assigned_agent else "Unassigned"
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Update a notification - Admin only
 @notification_bp.route("/api/notifications/<int:notification_id>", methods=["PUT"])
 @login_required(role="admin")
 def update_notification(notification_id):
@@ -197,6 +272,11 @@ def update_notification(notification_id):
             
         if 'room_url' in data:
             notification.room_url = data['room_url']
+            # Update assignment if room_url changes
+            assignment_id, agent_id = get_stream_assignment(data['room_url'])
+            notification.assigned_agent = agent_id
+            notification.assignment_id = assignment_id
+            notification.details['assigned_agent'] = agent_id
             
         if 'read' in data:
             notification.read = data['read']
@@ -214,7 +294,8 @@ def update_notification(notification_id):
                 "timestamp": notification.timestamp.isoformat(),
                 "details": notification.details,
                 "read": notification.read,
-                "room_url": notification.room_url
+                "room_url": notification.room_url,
+                "assigned_agent": agent_cache.get(notification.assigned_agent, "Unassigned") if notification.assigned_agent else "Unassigned"
             }
         }), 200
     except Exception as e:
@@ -240,9 +321,9 @@ def mark_notification_read(notification_id):
                 
             # Check if notification is explicitly assigned to this agent
             details = notification.details or {}
-            assigned_agent = details.get('assigned_agent')
+            assigned_agent_id = details.get('assigned_agent')
             
-            if assigned_agent and assigned_agent.lower() != agent.username.lower():
+            if assigned_agent_id and int(assigned_agent_id) != user_id:
                 # Not directly assigned to this agent, check if it's for a stream they're assigned to
                 stream = Stream.query.filter_by(room_url=notification.room_url).first()
                 if not stream:
@@ -262,7 +343,6 @@ def mark_notification_read(notification_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# notification_routes.py
 @notification_bp.route("/api/notifications/read-all", methods=["PUT"])
 @login_required()
 def mark_all_notifications_read():
@@ -275,7 +355,6 @@ def mark_all_notifications_read():
             notifications = DetectionLog.query.all()
             for notification in notifications:
                 notification.read = True
-                # Emit update for each notification
                 emit_notification_update(notification.id, 'read')
         else:
             # Agents can only mark notifications related to them as read
@@ -290,9 +369,7 @@ def mark_all_notifications_read():
             notifications = DetectionLog.query.all()
 
             for notification in notifications:
-                # Mark as read if:
-                # 1. Notification is explicitly assigned to this agent
-                # 2. Notification is for a stream assigned to this agent
+                # Mark as read if notification is explicitly assigned to this agent
                 if notification.assigned_agent == user_id:
                     notification.read = True
                     emit_notification_update(notification.id, 'read')
@@ -310,7 +387,7 @@ def mark_all_notifications_read():
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/<int:notification_id>", methods=["DELETE"])
-@login_required(role="admin")  # Only admins can delete notifications
+@login_required(role="admin")
 def delete_notification(notification_id):
     try:
         notification = DetectionLog.query.get(notification_id)
@@ -326,7 +403,6 @@ def delete_notification(notification_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Delete all notifications - Admin only
 @notification_bp.route("/api/notifications/delete-all", methods=["DELETE"])
 @login_required(role="admin")
 def delete_all_notifications():
@@ -347,19 +423,18 @@ def delete_all_notifications():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-# Admin-only endpoint to get notifications that have been forwarded to agents
 @notification_bp.route("/api/notifications/forwarded", methods=["GET"])
 @login_required(role="admin")
 def get_forwarded_notifications():
     try:
         forwarded = DetectionLog.query.filter(
-            DetectionLog.details['assigned_agent'].isnot(None)
+            DetectionLog.assigned_agent.isnot(None)
         ).order_by(DetectionLog.timestamp.desc()).limit(100).all()
         
         return jsonify([{
             'id': n.id,
             'timestamp': n.timestamp.isoformat(),
-            'assigned_agent': n.details.get('assigned_agent'),
+            'assigned_agent': agent_cache.get(n.assigned_agent, "Unassigned") if n.assigned_agent else "Unassigned",
             'platform': n.details.get('platform'),
             'streamer': n.details.get('streamer_name'),
             'status': 'acknowledged' if n.read else 'pending'
@@ -367,35 +442,39 @@ def get_forwarded_notifications():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Admin-only endpoint to forward a notification to an agent
-# notification_routes.py
 @notification_bp.route("/api/notifications/<int:notification_id>/forward", methods=["POST"])
 @login_required(role="admin")
 def forward_notification(notification_id):
-    data = request.get_json()
-    agent_id = data.get("agent_id")
-
-    notification = DetectionLog.query.get(notification_id)
-    agent = User.query.filter_by(id=agent_id, role="agent").first()
-
-    if not notification or not agent:
-        return jsonify({"message": "Invalid notification or agent"}), 404
-
-    # Update the notification details to include the assigned agent
-    details = notification.details or {}
-    details['assigned_agent'] = agent.id  # Store agent_id as integer
-    notification.details = details
-    notification.assigned_agent = agent.id  # Set assigned_agent to agent_id
-
-    # Save to database
-    db.session.commit()
-
-    # Emit notification update
-    emit_notification_update(notification_id, 'forwarded')
-
-    # Additionally, create a system message to notify the agent
     try:
-        # Build detailed message content
+        data = request.get_json()
+        agent_id = data.get("agent_id")
+
+        notification = DetectionLog.query.get(notification_id)
+        agent = User.query.filter_by(id=agent_id, role="agent").first()
+
+        if not notification or not agent:
+            return jsonify({"message": "Invalid notification or agent"}), 404
+
+        # Update the notification details to include the assigned agent
+        details = notification.details or {}
+        details['assigned_agent'] = agent.id
+        notification.details = details
+        notification.assigned_agent = agent.id
+
+        # Update assignment_id if the stream has an assignment
+        assignment_id, _ = get_stream_assignment(notification.room_url)
+        notification.assignment_id = assignment_id
+
+        # Cache the agent username
+        fetch_agent_username(agent_id)
+
+        # Save to database
+        db.session.commit()
+
+        # Emit notification update
+        emit_notification_update(notification_id, 'forwarded')
+
+        # Create a system message to notify the agent
         message_details = {
             "event_type": notification.event_type,
             "timestamp": notification.timestamp.isoformat(),
@@ -404,7 +483,6 @@ def forward_notification(notification_id):
             "platform": notification.details.get('platform', 'Unknown')
         }
 
-        # Add type-specific details
         if notification.event_type == 'object_detection':
             message_details.update({
                 "detections": notification.details.get('detections', []),
@@ -421,7 +499,6 @@ def forward_notification(notification_id):
                 "transcript": notification.details.get('transcript')
             })
 
-        # Create system message
         sys_msg = ChatMessage(
             sender_id=session['user_id'],
             receiver_id=agent.id,
@@ -445,11 +522,12 @@ def forward_notification(notification_id):
             "read": False,
             "details": message_details
         })
-    except Exception as e:
-        # Log the error but continue, as the notification has already been assigned
-        print(f"Error creating system message: {str(e)}")
 
-    return jsonify({
-        "message": "Notification forwarded to agent",
-        "agent_id": agent.id
-    }), 200
+        return jsonify({
+            "message": "Notification forwarded to agent",
+            "agent_id": agent.id,
+            "agent_username": agent_cache.get(agent_id, "Unassigned")
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
