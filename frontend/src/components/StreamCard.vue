@@ -129,7 +129,7 @@ export default {
     const streamOverlay = ref(null)
     const streamStats = ref(null)
     let hls = null
-    
+    const toast = inject('toast', null)
     const isMuted = ref(true)
     const isBookmarked = ref(false)
     const isFullscreen = ref(false)
@@ -256,7 +256,7 @@ export default {
       const username = getStreamerUsername()
       if (!username) return
       try {
-        const response = await axios.get(`https://stripchat.com/api/stripchat-viewers/${username}`)
+        const response = await axios.get(`https://stripchat.com/api/front/v2/models/username/${username}`)
         console.log('No of viewers:',response.data.guests)
         if (response.data && response.data.guests !== undefined) {
           viewers.value = response.data.guests
@@ -362,10 +362,7 @@ export default {
       }
     }
 
-    const showToast = (message, type = 'success') => {
-      console.log(`[Toast ${type}]: ${message}`)
-      alert(`[${type.toUpperCase()}]: ${message}`)
-    }
+ 
 
     const checkDetectionStatus = async () => {
       try {
@@ -399,17 +396,16 @@ export default {
         })
         
         isDetecting.value = !isDetecting.value
-        showToast(
+        toast.success(
           isDetecting.value 
             ? `Detection started for ${props.stream.streamer_username}` 
-            : `Detection stopped for ${props.stream.streamer_username}`,
-          'success'
+            : `Detection stopped for ${props.stream.streamer_username}`
         )
         emit('detection-toggled', { streamId: props.stream.id, isDetecting: isDetecting.value })
       } catch (error) {
         console.error('Error toggling detection:', error)
         detectionError.value = error.message
-        showToast(`Error toggling detection: ${error.message}`, 'error')
+        toast.error(`Error toggling detection: ${error.message}`)
       } finally {
         isDetectionLoading.value = false
       }
@@ -646,7 +642,7 @@ export default {
       if (!isOnline.value) {
         const userConfirmed = confirm('Stream is offline. Do you want to view details or refresh the stream?')
         if (userConfirmed) {
-          showToast('Opening stream details or refreshing...', 'info')
+          toast.warning('Opening stream details or refreshing...', 'info')
           emit('click')
         }
       } else {
