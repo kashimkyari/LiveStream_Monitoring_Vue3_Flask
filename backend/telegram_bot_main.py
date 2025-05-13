@@ -35,10 +35,30 @@ async def main():
         application.add_handler(CommandHandler("getid", getid))
 
         # Start polling
-        await application.run_polling(allowed_updates=Update.ALL_TYPES)
-        logger.info("Telegram bot started")
+        logger.info("Telegram bot starting")
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        
+        # Run the bot until the user presses Ctrl-C
+        logger.info("Telegram bot started successfully")
+        
+        # Keep the bot running
+        await application.updater.stop()
+        await application.stop()
+        await application.shutdown()
+        
     except Exception as e:
         logger.error(f"Telegram bot error: {str(e)}")
 
+def run_bot():
+    """Run the bot in the event loop."""
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Telegram bot stopped by user")
+    except Exception as e:
+        logger.error(f"Telegram bot error in event loop: {str(e)}")
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_bot()
