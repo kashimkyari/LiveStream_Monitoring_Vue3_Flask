@@ -1,7 +1,7 @@
 import logging
-import threading
 import os
 import asyncio
+from multiprocessing import Process
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -38,25 +38,14 @@ async def run_bot_async() -> None:
         logger.error(f"Telegram bot error: {str(e)}")
 
 def run_bot() -> None:
-    """Run the Telegram bot in a separate thread with its own event loop."""
+    """Run the Telegram bot in a separate process."""
     try:
-        # Create a new event loop for this thread
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        # Run the async bot coroutine in the new event loop
-        loop.run_until_complete(run_bot_async())
-        
-        # Keep the loop running until the thread is stopped
-        loop.run_forever()
+        asyncio.run(run_bot_async())
     except Exception as e:
-        logger.error(f"Telegram bot thread error: {str(e)}")
-    finally:
-        # Clean up the event loop
-        loop.close()
+        logger.error(f"Telegram bot process error: {str(e)}")
 
 def start_telegram_bot():
-    """Start the Telegram bot in a background thread."""
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-    logger.info("Telegram bot started in background")
+    """Start the Telegram bot in a separate process."""
+    bot_process = Process(target=run_bot, daemon=True)
+    bot_process.start()
+    logger.info("Telegram bot started in separate process")
