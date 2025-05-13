@@ -14,7 +14,7 @@ import { useToast } from 'vue-toastification';
 import authService from './AuthService';
 
 // Define the API base URL
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'https://monitor-backend.jetcamstudio.com:5000/api';
 
 // Session configuration constants
 const SESSION_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes

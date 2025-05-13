@@ -347,7 +347,7 @@ export default {
 
     // Initialize Socket.IO
     const initializeSocket = () => {
-      socket = io('http://localhost:5000/notifications', {
+      socket = io('https://monitor-backend.jetcamstudio.com:5000/notifications', {
         path: '/ws',
         transports: ['websocket'],
         query: { token: localStorage.getItem('token') }
