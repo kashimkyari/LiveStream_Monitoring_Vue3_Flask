@@ -27,7 +27,6 @@ from config import create_app
 from utils.notifications import init_socketio
 from extensions import db
 from models import User
-from utils.telegram_bot import start_telegram_bot  # New import for Telegram bot
 
 # Initialize Flask app
 app = create_app()
@@ -137,7 +136,6 @@ with app.app_context():
 
         time.sleep(1)
         start_notification_monitor()
-        start_telegram_bot()  # Start the Telegram bot
         emit_notification({'system': 'Server started successfully', 'event_type': 'server_start'})
         logging.info("Background services initialized")
     

@@ -1,7 +1,7 @@
-import logging
 import os
 import asyncio
-from multiprocessing import Process
+import logging
+from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -12,13 +12,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Load environment variables
+load_dotenv()
+
 async def getid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handler for the /getid command."""
     chat_id = update.message.chat_id
     await update.message.reply_text(f"Your chat ID is: {chat_id}")
 
-async def run_bot_async() -> None:
-    """Set up and run the Telegram bot asynchronously."""
+async def main():
+    """Main function to run the Telegram bot."""
     try:
         token = os.getenv('TELEGRAM_TOKEN')
         if not token:
@@ -37,15 +40,5 @@ async def run_bot_async() -> None:
     except Exception as e:
         logger.error(f"Telegram bot error: {str(e)}")
 
-def run_bot() -> None:
-    """Run the Telegram bot in a separate process."""
-    try:
-        asyncio.run(run_bot_async())
-    except Exception as e:
-        logger.error(f"Telegram bot process error: {str(e)}")
-
-def start_telegram_bot():
-    """Start the Telegram bot in a separate process."""
-    bot_process = Process(target=run_bot, daemon=True)
-    bot_process.start()
-    logger.info("Telegram bot started in separate process")
+if __name__ == "__main__":
+    asyncio.run(main())
