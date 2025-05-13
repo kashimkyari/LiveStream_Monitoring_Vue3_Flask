@@ -57,7 +57,6 @@
                 <button
                   class="btn btn-primary"
                   @click="saveTelegramDetails"
-                  :disabled="isSaving || (!telegramUsername && usernameTouched) || (!telegramChatId && chatIdTouched) || usernameError || chatIdError"
                 >
                   <font-awesome-icon v-if="isSaving" icon="spinner" spin />
                   {{ isSaving ? 'Saving...' : 'Save' }}
