@@ -755,7 +755,7 @@ async def password_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         logger.error(f"Error deleting password message: {str(e)}")
     
     # Attempt login
-    dataimport os
+import os
 import asyncio
 import logging
 import signal
