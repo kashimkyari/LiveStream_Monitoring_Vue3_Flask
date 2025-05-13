@@ -15,12 +15,6 @@ import secrets
 import string
 from flask_cors import CORS
 
-# === New Imports for Telegram Bot ===
-import threading
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
-# === End New Imports ===
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +27,7 @@ from config import create_app
 from utils.notifications import init_socketio
 from extensions import db
 from models import User
+from utils.telegram_bot import start_telegram_bot  # New import for Telegram bot
 
 # Initialize Flask app
 app = create_app()
@@ -134,49 +129,15 @@ with app.app_context():
         logging.error(f"DB init failed: {str(e)}")
         raise
 
-# === Telegram Bot Functions ===
-async def getid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handler for the /getid command."""
-    chat_id = update.message.chat_id
-    await update.message.reply_text(f"Your chat ID is: {chat_id}")
-
-def run_bot() -> None:
-    """Run the Telegram bot in a separate thread."""
-    try:
-        token = os.getenv('TELEGRAM_TOKEN')
-        if not token:
-            logging.error("TELEGRAM_TOKEN not set in environment variables")
-            return
-        
-        # Create the Application and pass the bot's token
-        application = Application.builder().token(token).build()
-
-        # Register the /getid command handler
-        application.add_handler(CommandHandler("getid", getid))
-
-        # Start polling
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-        logging.info("Telegram bot started")
-    except Exception as e:
-        logging.error(f"Telegram bot error: {str(e)}")
-
-def start_bot_in_background():
-    """Start the Telegram bot in a background thread."""
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-    logging.info("Telegram bot started in background")
-# === End Telegram Bot Functions ===
-
 # === Background Services ===
 with app.app_context():
     try:
         from utils.notifications import emit_notification
         from monitoring import start_notification_monitor
-        # Removed incomplete 'from bot' import
 
         time.sleep(1)
         start_notification_monitor()
-        start_bot_in_background()  # Start the Telegram bot
+        start_telegram_bot()  # Start the Telegram bot
         emit_notification({'system': 'Server started successfully', 'event_type': 'server_start'})
         logging.info("Background services initialized")
     
