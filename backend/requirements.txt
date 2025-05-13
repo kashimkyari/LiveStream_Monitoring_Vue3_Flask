@@ -37,3 +37,4 @@ free-proxy
 jsonify
 simple-websocket
 librosa
+flask_jwt_extended
