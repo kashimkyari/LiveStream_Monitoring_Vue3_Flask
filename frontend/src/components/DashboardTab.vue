@@ -4,26 +4,15 @@
       <h2>Dashboard</h2>
     </div>
 
-    <!-- Stats section with skeleton loading -->
+    <!-- Stats section -->
     <div class="stats-section">
-      <template v-if="!isLoading">
-        <StatCard 
-          v-for="stat in stats"
-          :key="stat.label"
-          :value="stat.value"
-          :label="stat.label"
-          :icon="stat.icon"
-        />
-      </template>
-      <template v-else>
-        <div v-for="i in 3" :key="i" class="dashboard-skeleton stat-card">
-          <div class="skeleton-icon"></div>
-          <div class="skeleton-content">
-            <div class="skeleton-value"></div>
-            <div class="skeleton-label"></div>
-          </div>
-        </div>
-      </template>
+      <StatCard 
+        v-for="stat in stats"
+        :key="stat.label"
+        :value="stat.value"
+        :label="stat.label"
+        :icon="stat.icon"
+      />
     </div>
 
     <!-- Search and Controls -->
@@ -33,7 +22,6 @@
         <input v-model="searchQuery" placeholder="Search streams..." class="search-input" />
       </div>
       <div class="view-controls" style="display: flex; gap: 1rem;">
-        
         <button @click="refreshStreams" class="view-toggle-btn refresh-btn">
           <font-awesome-icon icon="sync-alt" />
           Refresh All
@@ -41,76 +29,42 @@
       </div>
     </div>
 
-    <!-- Stream sections with skeleton loading -->
+    <!-- Stream sections -->
     <div class="streams-section">
       <!-- Online Streams -->
       <div class="section-header" @click="toggleOnlineCollapse">
-        <h3>Online Streams {{ !isLoading ? `(${onlineStreams.length})` : '' }}</h3>
+        <h3>Online Streams ({{ onlineStreams.length }})</h3>
         <font-awesome-icon :icon="isOnlineCollapsed ? 'chevron-down' : 'chevron-up'" />
       </div>
       <div v-show="!isOnlineCollapsed" :class="['stream-container', viewMode]">
-        <template v-if="!isLoading">
-          <StreamCard 
-            v-for="stream in filteredOnlineStreams" 
-            :key="stream.id"
-            :stream="enhanceStreamWithUsername(stream)" 
-            :detectionCount="getDetectionCount(stream)"
-            :totalStreams="onlineStreams.length"
-            @click="openStream(stream)"
-            @detection-toggled="handleDetectionToggled"
-            @status-change="handleStreamStatusChange"
-          />
-        </template>
-        <template v-else>
-          <div v-for="i in 3" :key="i" class="dashboard-skeleton stream-card">
-            <div class="skeleton-thumbnail"></div>
-            <div class="skeleton-content">
-              <div class="skeleton-header">
-                <div class="skeleton-title"></div>
-                <div class="skeleton-tag"></div>
-              </div>
-              <div class="skeleton-info">
-                <div class="skeleton-text"></div>
-                <div class="skeleton-text"></div>
-              </div>
-            </div>
-          </div>
-        </template>
+        <StreamCard 
+          v-for="stream in filteredOnlineStreams" 
+          :key="stream.id"
+          :stream="enhanceStreamWithUsername(stream)" 
+          :detectionCount="getDetectionCount(stream)"
+          :totalStreams="onlineStreams.length"
+          @click="openStream(stream)"
+          @detection-toggled="handleDetectionToggled"
+          @status-change="handleStreamStatusChange"
+        />
       </div>
       
       <!-- Offline Streams -->
       <div class="section-header offline-section" @click="toggleOfflineCollapse">
-        <h3>Offline Streams {{ !isLoading ? `(${offlineStreams.length})` : '' }}</h3>
+        <h3>Offline Streams ({{ offlineStreams.length }})</h3>
         <font-awesome-icon :icon="isOfflineCollapsed ? 'chevron-down' : 'chevron-up'" />
       </div>
       <div v-show="!isOfflineCollapsed" :class="['stream-container', viewMode]">
-        <template v-if="!isLoading">
-          <StreamCard 
-            v-for="stream in filteredOfflineStreams" 
-            :key="stream.id"
-            :stream="enhanceStreamWithUsername(stream)" 
-            :detectionCount="getDetectionCount(stream)"
-            :totalStreams="offlineStreams.length"
-            @click="openStream(stream)"
-            @detection-toggled="handleDetectionToggled"
-            @status-change="handleStreamStatusChange"
-          />
-        </template>
-        <template v-else>
-          <div v-for="i in 3" :key="i" class="dashboard-skeleton stream-card">
-            <div class="skeleton-thumbnail"></div>
-            <div class="skeleton-content">
-              <div class="skeleton-header">
-                <div class="skeleton-title"></div>
-                <div class="skeleton-tag"></div>
-              </div>
-              <div class="skeleton-info">
-                <div class="skeleton-text"></div>
-                <div class="skeleton-text"></div>
-              </div>
-            </div>
-          </div>
-        </template>
+        <StreamCard 
+          v-for="stream in filteredOfflineStreams" 
+          :key="stream.id"
+          :stream="enhanceStreamWithUsername(stream)" 
+          :detectionCount="getDetectionCount(stream)"
+          :totalStreams="offlineStreams.length"
+          @click="openStream(stream)"
+          @detection-toggled="handleDetectionToggled"
+          @status-change="handleStreamStatusChange"
+        />
       </div>
     </div>
   </section>
@@ -364,302 +318,5 @@ export default {
     flex: 1;
     justify-content: center;
   }
-}
-
-/* Skeleton Loading Styles */
-@keyframes shimmer {
-  0% {
-    background-position: -1000px 0;
-  }
-  100% {
-    background-position: 1000px 0;
-  }
-}
-
-.skeleton-base {
-  background: linear-gradient(
-    90deg,
-    var(--skeleton-base) 8%,
-    var(--skeleton-highlight) 18%,
-    var(--skeleton-base) 33%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite linear;
-}
-
-.stat-skeleton {
-  background: var(--card-bg);
-  border-radius: 8px;
-  padding: 1rem;
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  box-shadow: var(--shadow-sm);
-}
-
-.skeleton-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: linear-gradient(
-    90deg,
-    var(--skeleton-base) 8%,
-    var(--skeleton-highlight) 18%,
-    var(--skeleton-base) 33%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite linear;
-}
-
-.skeleton-content {
-  flex: 1;
-}
-
-.skeleton-value {
-  height: 24px;
-  width: 60%;
-  margin-bottom: 8px;
-  border-radius: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--skeleton-base) 8%,
-    var(--skeleton-highlight) 18%,
-    var(--skeleton-base) 33%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite linear;
-}
-
-.skeleton-label {
-  height: 16px;
-  width: 80%;
-  border-radius: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--skeleton-base) 8%,
-    var(--skeleton-highlight) 18%,
-    var(--skeleton-base) 33%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite linear;
-}
-
-.stream-skeleton {
-  background: var(--card-bg);
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-
-.skeleton-thumbnail {
-  width: 100%;
-  height: 160px;
-  background: linear-gradient(
-    90deg,
-    var(--skeleton-base) 8%,
-    var(--skeleton-highlight) 18%,
-    var(--skeleton-base) 33%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite linear;
-}
-
-.skeleton-content {
-  padding: 1rem;
-}
-
-.skeleton-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.skeleton-title {
-  height: 20px;
-  width: 60%;
-  border-radius: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--skeleton-base) 8%,
-    var(--skeleton-highlight) 18%,
-    var(--skeleton-base) 33%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite linear;
-}
-
-.skeleton-tag {
-  height: 20px;
-  width: 80px;
-  border-radius: 20px;
-  background: linear-gradient(
-    90deg,
-    var(--skeleton-base) 8%,
-    var(--skeleton-highlight) 18%,
-    var(--skeleton-base) 33%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite linear;
-}
-
-.skeleton-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.skeleton-text {
-  height: 16px;
-  width: 100%;
-  border-radius: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--skeleton-base) 8%,
-    var(--skeleton-highlight) 18%,
-    var(--skeleton-base) 33%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite linear;
-}
-
-.skeleton-text:last-child {
-  width: 70%;
-}
-
-[data-theme='dark'] {
-  --skeleton-base: rgba(255, 255, 255, 0.05);
-  --skeleton-highlight: rgba(255, 255, 255, 0.1);
-}
-
-[data-theme='light'] {
-  --skeleton-base: rgba(0, 0, 0, 0.05);
-  --skeleton-highlight: rgba(0, 0, 0, 0.1);
-}
-
-/* Dashboard-specific Skeleton Loading Styles */
-@keyframes dashboardShimmer {
-  0% { background-position: -1000px 0; }
-  100% { background-position: 1000px 0; }
-}
-
-.dashboard-skeleton {
-  background: var(--card-bg);
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.dashboard-skeleton.stat-card {
-  padding: 1rem;
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
-.dashboard-skeleton.stream-card {
-  height: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.skeleton-thumbnail {
-  width: 100%;
-  height: 160px;
-  background: var(--skeleton-bg);
-  animation: dashboardShimmer 2s infinite linear;
-}
-
-.skeleton-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--skeleton-bg);
-  animation: dashboardShimmer 2s infinite linear;
-}
-
-.skeleton-content {
-  flex: 1;
-  padding: 1rem;
-}
-
-.skeleton-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.skeleton-title {
-  height: 20px;
-  width: 60%;
-  border-radius: 4px;
-  background: var(--skeleton-bg);
-  animation: dashboardShimmer 2s infinite linear;
-}
-
-.skeleton-tag {
-  height: 20px;
-  width: 80px;
-  border-radius: 20px;
-  background: var(--skeleton-bg);
-  animation: dashboardShimmer 2s infinite linear;
-}
-
-.skeleton-value {
-  height: 24px;
-  width: 60%;
-  margin-bottom: 8px;
-  border-radius: 4px;
-  background: var(--skeleton-bg);
-  animation: dashboardShimmer 2s infinite linear;
-}
-
-.skeleton-label {
-  height: 16px;
-  width: 80%;
-  border-radius: 4px;
-  background: var(--skeleton-bg);
-  animation: dashboardShimmer 2s infinite linear;
-}
-
-.skeleton-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.skeleton-text {
-  height: 16px;
-  border-radius: 4px;
-  background: var(--skeleton-bg);
-  animation: dashboardShimmer 2s infinite linear;
-}
-
-.skeleton-text:first-child {
-  width: 100%;
-}
-
-.skeleton-text:last-child {
-  width: 70%;
-}
-
-/* Dashboard-specific theme variables */
-:root {
-  --skeleton-bg: linear-gradient(
-    90deg,
-    rgba(0, 0, 0, 0.05) 8%,
-    rgba(0, 0, 0, 0.1) 18%,
-    rgba(0, 0, 0, 0.05) 33%
-  );
-}
-
-[data-theme='dark'] {
-  --skeleton-bg: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.05) 8%,
-    rgba(255, 255, 255, 0.1) 18%,
-    rgba(255, 255, 255, 0.05) 33%
-  );
 }
 </style>

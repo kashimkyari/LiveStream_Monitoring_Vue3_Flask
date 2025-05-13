@@ -94,7 +94,7 @@
           <div class="action-buttons">
             <button 
               class="btn btn-primary" 
-              @click="$emit('save-settings')"
+              @click="saveSettings"
             >
               <font-awesome-icon icon="save" class="icon-left" />
               Save Changes
@@ -116,7 +116,6 @@
       </div>
     </div>
 
-    <!-- Logout Confirmation Modal -->
     <transition name="modal-fade">
       <div v-if="showLogoutConfirmation" class="modal-overlay" @click="showLogoutConfirmation = false">
         <div class="modal-container" @click.stop>
@@ -131,7 +130,7 @@
           <div class="modal-actions">
             <button 
               class="btn btn-danger" 
-              @click="handleLogout"
+              @click="handleLogout(playLogoutAnimation)"
               :disabled="isLoggingOut"
             >
               <font-awesome-icon 
@@ -152,7 +151,6 @@
       </div>
     </transition>
 
-    <!-- Logout Animation -->
     <div v-if="showLogoutAnimation" class="logout-animation-overlay">
       <div class="logout-animation-container" ref="logoutAnimationContainer">
         <font-awesome-icon icon="sign-out-alt" class="logout-icon" ref="logoutIcon" />
@@ -163,9 +161,10 @@
       </div>
     </div>
 
-    <!-- Telegram Setup Modal -->
-    <TelegramSetupModal 
+    <TelegramOnboarding
       :is-visible="showTelegramModal"
+      :existing-username="telegramUsername"
+      :existing-chat-id="telegramChatId"
       @close="showTelegramModal = false"
       @telegram-connected="handleTelegramConnected"
     />
@@ -173,108 +172,41 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits, ref, nextTick, onMounted } from 'vue'
-import axios from 'axios'
+import { defineProps, defineEmits, ref, nextTick } from 'vue'
 import anime from 'animejs/lib/anime.es.js'
-import TelegramSetupModal from './TelegramSetupModal.vue'
+import TelegramOnboarding from './TelegramOnboarding.vue'
+import { useSettings } from '../composables/useSettings'
 
-const props = defineProps({
-  settings: {
-    type: Object,
-    default: () => ({
-      emailNotifications: true,
-      pushNotifications: false
-    })
-  },
+defineProps({
   isDarkTheme: {
-    type: Boolean,
-    default: false
-  },
-  isLoggingOut: {
     type: Boolean,
     default: false
   }
 })
 
-const emit = defineEmits([
-  'toggle-setting', 
-  'set-theme', 
-  'save-settings',
-  'logout',
-  'logout-start',
-  'logout-error',
-  'update-settings'
-])
+const emit = defineEmits(['fetch-settings', 'set-theme', 'logout'])
 
-// Modal and animation controls
-const showLogoutConfirmation = ref(false)
+const {
+  settings,
+  telegramConnected,
+  telegramUsername,
+  telegramChatId,
+  showTelegramModal,
+  isLoggingOut,
+  showLogoutConfirmation,
+  toggleEmailNotifications,
+  togglePushNotifications,
+  handleTelegramConnected,
+  handleLogout,
+  saveSettings
+} = useSettings()
+
 const showLogoutAnimation = ref(false)
 const logoutAnimationContainer = ref(null)
 const logoutIcon = ref(null)
 const logoutMessage = ref(null)
 const logoutSpinner = ref(null)
 
-// Telegram related state
-const showTelegramModal = ref(false)
-const telegramConnected = ref(false)
-const telegramUsername = ref('')
-
-// Check if telegram is connected on component mount
-onMounted(async () => {
-  try {
-    const userSettings = localStorage.getItem('userSettings')
-    if (userSettings) {
-      const parsedSettings = JSON.parse(userSettings)
-      if (parsedSettings.telegramUsername) {
-        telegramConnected.value = true
-        telegramUsername.value = parsedSettings.telegramUsername
-      }
-    }
-  } catch (error) {
-    console.error('Error loading telegram settings:', error)
-  }
-})
-
-// Toggle notification settings
-const toggleEmailNotifications = () => {
-  emit('toggle-setting', 'emailNotifications')
-}
-
-const togglePushNotifications = () => {
-  if (!props.settings.pushNotifications && !telegramConnected.value) {
-    showTelegramModal.value = true
-  }
-  
-  emit('toggle-setting', 'pushNotifications')
-}
-
-// Handle telegram connection success
-const handleTelegramConnected = ({ username, chatId }) => {
-  telegramConnected.value = true
-  telegramUsername.value = username
-  
-  try {
-    const currentSettings = localStorage.getItem('userSettings') 
-      ? JSON.parse(localStorage.getItem('userSettings')) 
-      : {}
-      
-    localStorage.setItem('userSettings', JSON.stringify({
-      ...currentSettings,
-      telegramUsername: username,
-      telegramChatId: chatId
-    }))
-    
-    emit('update-settings', {
-      ...props.settings,
-      telegramUsername: username,
-      telegramChatId: chatId
-    })
-  } catch (error) {
-    console.error('Error saving telegram settings:', error)
-  }
-}
-
-// Logout animation
 const playLogoutAnimation = () => {
   showLogoutAnimation.value = true
   
@@ -339,7 +271,6 @@ const playLogoutAnimation = () => {
   })
 }
 
-// Fade out animation and complete logout
 const completeLogout = () => {
   anime({
     targets: logoutAnimationContainer.value,
@@ -355,28 +286,10 @@ const completeLogout = () => {
     }
   })
 }
-
-const handleLogout = async () => {
-  try {
-    showLogoutConfirmation.value = false
-    emit('logout-start')
-    
-    const response = await axios.post('/api/logout', {}, {
-      withCredentials: true
-    })
-    
-    if (response.status === 200) {
-      playLogoutAnimation()
-    }
-  } catch (error) {
-    console.error('Logout failed:', error)
-    emit('logout-error', error)
-    showLogoutAnimation.value = false
-  }
-}
 </script>
 
 <style scoped>
+@import '../styles/shared.css';
 .agent-settings-page {
   display: flex;
   min-height: 100vh;

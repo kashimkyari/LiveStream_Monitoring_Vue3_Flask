@@ -1,14 +1,11 @@
-# routes/keyword_object_routes.py
 from flask import Blueprint, request, jsonify
 from extensions import db
-from models import ChatKeyword, FlaggedObject, TelegramRecipient
+from models import ChatKeyword, FlaggedObject, User
 from utils import login_required
+from flask_jwt_extended import get_jwt_identity
 
 keyword_bp = Blueprint('keyword', __name__)
 
-# --------------------------------------------------------------------
-# Keyword, Object, and Telegram Routes
-# --------------------------------------------------------------------
 @keyword_bp.route("/api/keywords", methods=["GET"])
 @login_required(role=["admin", "agent"])
 def get_keywords():
@@ -28,7 +25,6 @@ def create_keyword():
     db.session.add(kw)
     db.session.commit()
     
-    # Function needs to be imported or defined elsewhere
     from monitoring import refresh_flagged_keywords
     refresh_flagged_keywords()
     
@@ -47,7 +43,6 @@ def update_keyword(keyword_id):
     kw.keyword = new_kw
     db.session.commit()
     
-    # Function needs to be imported or defined elsewhere
     from monitoring import refresh_flagged_keywords
     refresh_flagged_keywords()
     
@@ -62,7 +57,6 @@ def delete_keyword(keyword_id):
     db.session.delete(kw)
     db.session.commit()
     
-    # Function needs to be imported or defined elsewhere
     from monitoring import refresh_flagged_keywords
     refresh_flagged_keywords()
     
@@ -111,34 +105,3 @@ def delete_object(object_id):
     db.session.delete(obj)
     db.session.commit()
     return jsonify({"message": "Object deleted"})
-
-@keyword_bp.route("/api/telegram_recipients", methods=["GET"])
-@login_required(role=["admin", "agent"])
-def get_telegram_recipients():
-    recipients = TelegramRecipient.query.all()
-    return jsonify([r.serialize() for r in recipients])
-
-@keyword_bp.route("/api/telegram_recipients", methods=["POST"])
-@login_required()
-def create_telegram_recipient():
-    data = request.get_json()
-    username = data.get("telegram_username")
-    chat_id = data.get("chat_id")
-    if not username or not chat_id:
-        return jsonify({"message": "Telegram username and chat_id required"}), 400
-    if TelegramRecipient.query.filter_by(telegram_username=username).first():
-        return jsonify({"message": "Recipient exists"}), 400
-    recipient = TelegramRecipient(telegram_username=username, chat_id=chat_id)
-    db.session.add(recipient)
-    db.session.commit()
-    return jsonify({"message": "Recipient added", "recipient": recipient.serialize()}), 201
-
-@keyword_bp.route("/api/telegram_recipients/<int:recipient_id>", methods=["DELETE"])
-@login_required(role="admin")
-def delete_telegram_recipient(recipient_id):
-    recipient = TelegramRecipient.query.get(recipient_id)
-    if not recipient:
-        return jsonify({"message": "Recipient not found"}), 404
-    db.session.delete(recipient)
-    db.session.commit()
-    return jsonify({"message": "Recipient deleted"})

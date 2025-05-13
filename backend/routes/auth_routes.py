@@ -15,7 +15,6 @@ auth_bp = Blueprint('auth', __name__)
 # --------------------------------------------------------------------
 @auth_bp.route("/api/login", methods=["POST"])
 def login():
-    # Add debug logging for incoming requests
     current_app.logger.debug(f"Login attempt from: {request.remote_addr}, User-Agent: {request.headers.get('User-Agent')}")
     
     try:
@@ -61,7 +60,9 @@ def login():
             response = jsonify({
                 "message": "Login successful",
                 "role": user.role,
-                "username": user.username
+                "username": user.username,
+                "telegram_username": user.telegram_username,
+                "telegram_chat_id": user.telegram_chat_id
             })
             response.set_cookie(
                 'user_role',
@@ -147,7 +148,9 @@ def check_session():
             "user": {
                 "id": user.id,
                 "username": user.username,
-                "role": user.role
+                "role": user.role,
+                "telegram_username": user.telegram_username,
+                "telegram_chat_id": user.telegram_chat_id
             }
         })
     except Exception as e:
@@ -196,9 +199,11 @@ def register():
     email = data.get("email")
     password = data.get("password")
     receive_updates = data.get("receiveUpdates", False)
+    telegram_username = data.get("telegram_username")
+    telegram_chat_id = data.get("telegram_chat_id")
     
     if not username or not email or not password:
-        return jsonify({"message": "All fields are required"}), 400
+        return jsonify({"message": "Username, email, and password are required"}), 400
     
     if not re.match(r'^[a-zA-Z0-9_]{3,20}$', username):
         return jsonify({
@@ -226,6 +231,12 @@ def register():
     if User.query.filter_by(email=email).first():
         return jsonify({"message": "Email already registered"}), 400
     
+    if telegram_username and not telegram_username.startswith('@'):
+        return jsonify({"message": "Telegram username must start with @"}), 400
+    
+    if telegram_username and User.query.filter_by(telegram_username=telegram_username).first():
+        return jsonify({"message": "Telegram username already taken"}), 400
+    
     hashed_password = generate_password_hash(password)
     new_user = User(
         username=username,
@@ -234,7 +245,9 @@ def register():
         role="agent",
         receive_updates=receive_updates,
         created_at=datetime.utcnow(),
-        last_active=datetime.utcnow()
+        last_active=datetime.utcnow(),
+        telegram_username=telegram_username,
+        telegram_chat_id=telegram_chat_id
     )
     
     try:
@@ -251,10 +264,27 @@ def register():
         except Exception as e:
             current_app.logger.error(f"Failed to send welcome email: {str(e)}")
         
-        return jsonify({
+        response = jsonify({
             "message": "Account created successfully",
             "user": new_user.serialize()
-        }), 201
+        })
+        response.set_cookie(
+            'user_role',
+            new_user.role,
+            max_age=30*24*60*60,
+            httponly=False,
+            secure=True,
+            samesite='None'
+        )
+        response.set_cookie(
+            'session_active',
+            'true',
+            max_age=30*24*60*60,
+            httponly=True,
+            secure=True,
+            samesite='None'
+        )
+        return response, 201
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Registration error: {str(e)}")
@@ -272,7 +302,6 @@ def forgot_password():
     if not user:
         return jsonify({"message": "If your email is registered, you will receive a password reset code"}), 200
     
-    # Generate a 6-digit numeric token
     token = generate_six_digit_token()
     
     expiration = datetime.utcnow() + timedelta(hours=1)
@@ -284,7 +313,6 @@ def forgot_password():
     )
     
     try:
-        # Delete any existing reset tokens for this user
         PasswordReset.query.filter_by(user_id=user.id).delete()
         
         db.session.add(password_reset)
@@ -314,7 +342,6 @@ def verify_reset_token():
     if not token:
         return jsonify({"valid": False, "message": "Token is required"}), 400
     
-    # Validate that token is a 6-digit number
     if not token.isdigit() or len(token) != 6:
         return jsonify({"valid": False, "message": "Token must be a 6-digit number"}), 400
     
@@ -337,7 +364,6 @@ def reset_password():
     if not token or not new_password:
         return jsonify({"message": "Token and new password are required"}), 400
     
-    # Validate that token is a 6-digit number
     if not token.isdigit() or len(token) != 6:
         return jsonify({"message": "Token must be a 6-digit number"}), 400
     
@@ -384,7 +410,6 @@ def reset_password():
                 <meta name="supported-color-schemes" content="light dark">
                 <title>Password Reset Confirmation</title>
                 <style type="text/css">
-                    /* Gmail and client-specific styles */
                     body {{ width: 100% !important; margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
                     table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
                     td {{ border-collapse: collapse; }}
@@ -405,20 +430,17 @@ def reset_password():
                     <tr>
                         <td align="center">
                             <table role="presentation" class="container" width="600" style="margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden;" cellpadding="0" cellspacing="0">
-                                <!-- Header -->
                                 <tr>
                                     <td class="header" style="background-color: #4caf50; padding: 20px; text-align: center;">
                                         <img src="https://jetcamstudio.com/wp-content/uploads/2023/04/Untitled-9-1-2.png" alt="JetCam Studio Logo" style="max-width: 150px; height: auto; border: 0;">
                                     </td>
                                 </tr>
-                                <!-- Content -->
                                 <tr>
                                     <td class="content" style="padding: 30px;">
                                         <h1 style="margin: 0 0 15px; font-size: 24px; font-weight: 600; color: #202124;">Password Reset Successful</h1>
                                         <p style="margin: 0 0 20px; font-size: 16px; line-height: 24px; color: #444444;">Your JetCam Studio account password has been successfully reset.</p>
                                         <p style="margin: 0 0 20px; font-size: 16px; line-height: 24px; color: #444444;">You can now log in with your new password.</p>
                                         <p style="margin: 0 0 20px; font-size: 14px; color: #666666;">If you did not initiate this change, please contact <a href="mailto:support@jetcamstudio.com" style="color: #4caf50; text-decoration: none;">support@jetcamstudio.com</a> immediately.</p>
-                                        <!-- CTA Button -->
                                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0;">
                                             <tr>
                                                 <td align="center">
@@ -428,7 +450,6 @@ def reset_password():
                                         </table>
                                     </td>
                                 </tr>
-                                <!-- Footer -->
                                 <tr>
                                     <td class="footer" style="padding: 15px; background-color: #f5f5f5; text-align: center; font-size: 12px; color: #666666;">
                                         <p style="margin: 0;">© {current_year} JetCam Studio. All rights reserved.</p>
@@ -502,7 +523,6 @@ def change_password():
                 <meta name="supported-color-schemes" content="light dark">
                 <title>Password Change Confirmation</title>
                 <style type="text/css">
-                    /* Gmail and client-specific styles */
                     body {{ width: 100% !important; margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
                     table {{ border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
                     td {{ border-collapse: collapse; }}
@@ -523,13 +543,11 @@ def change_password():
                     <tr>
                         <td align="center">
                             <table role="presentation" class="container" width="600" style="margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden;" cellpadding="0" cellspacing="0">
-                                <!-- Header -->
                                 <tr>
                                     <td class="header" style="background-color: #4caf50; padding: 20px; text-align: center;">
                                         <img src="https://jetcamstudio.com/wp-content/uploads/2023/04/Untitled-9-1-2.png" alt="JetCam Studio Logo" style="max-width: 150px; height: auto; border: 0;">
                                     </td>
                                 </tr>
-                                <!-- Content -->
                                 <tr>
                                     <td class="content" style="padding: 30px;">
                                         <h1 style="margin: 0 0 15px; font-size: 24px; font-weight: 600; color: #202124;">Password Changed Successfully</h1>
@@ -537,7 +555,6 @@ def change_password():
                                         <p style="margin: 0 0 20px; font-size: 14px; color: #666666;">If you did not initiate this change, please contact <a href="mailto:support@jetcamstudio.com" style="color: #4caf50; text-decoration: none;">support@jetcamstudio.com</a> immediately.</p>
                                     </td>
                                 </tr>
-                                <!-- Footer -->
                                 <tr>
                                     <td class="footer" style="padding: 15px; background-color: #f5f5f5; text-align: center; font-size: 12px; color: #666666;">
                                         <p style="margin: 0;">© {current_year} JetCam Studio. All rights reserved.</p>
@@ -580,6 +597,17 @@ def update_profile():
     if "receive_updates" in data:
         user.receive_updates = data["receive_updates"]
     
+    if "telegram_username" in data:
+        telegram_username = data["telegram_username"].strip() if data["telegram_username"] else None
+        if telegram_username and not telegram_username.startswith('@'):
+            return jsonify({"message": "Telegram username must start with @"}), 400
+        if telegram_username and User.query.filter(User.telegram_username == telegram_username, User.id != user.id).first():
+            return jsonify({"message": "Telegram username already taken"}), 400
+        user.telegram_username = telegram_username
+    
+    if "telegram_chat_id" in data:
+        user.telegram_chat_id = data["telegram_chat_id"].strip() if data["telegram_chat_id"] else None
+    
     try:
         db.session.commit()
         return jsonify({
@@ -590,3 +618,54 @@ def update_profile():
         db.session.rollback()
         current_app.logger.error(f"Profile update error: {str(e)}")
         return jsonify({"message": "An error occurred updating your profile"}), 500
+
+# backend/routes/auth_routes.py
+@auth_bp.route('/api/user/telegram', methods=['GET'])
+@login_required
+def get_telegram_details():
+    user = db.session.get(User, session["user_id"])
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    return jsonify({
+        "telegram_username": user.telegram_username or '',
+        "chat_id": user.telegram_chat_id or '',
+        "receive_updates": user.receive_updates or False
+    }), 200
+
+@auth_bp.route('/api/user/telegram', methods=['POST'])
+@login_required
+def update_telegram_details():
+    data = request.get_json()
+    telegram_username = data.get('telegram_username', '').strip() if data.get('telegram_username') else None
+    chat_id = data.get('chat_id', '').strip() if data.get('chat_id') else None
+    receive_updates = data.get('receive_updates', False)
+
+    user = db.session.get(User, session["user_id"])
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    if telegram_username:
+        if not telegram_username.startswith('@'):
+            return jsonify({"message": "Telegram username must start with @"}), 400
+        # Check for uniqueness (excluding current user)
+        if User.query.filter(User.telegram_username == telegram_username, User.id != user.id).first():
+            return jsonify({"message": "Telegram username already taken"}), 400
+        user.telegram_username = telegram_username
+    else:
+        user.telegram_username = None
+
+    user.telegram_chat_id = chat_id
+    user.receive_updates = receive_updates
+
+    try:
+        db.session.commit()
+        return jsonify({
+            "message": "Telegram details updated successfully",
+            "telegram_username": user.telegram_username or '',
+            "chat_id": user.telegram_chat_id or '',
+            "receive_updates": user.receive_updates
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Telegram details update error: {str(e)}")
+        return jsonify({"message": "An error occurred updating Telegram details"}), 500

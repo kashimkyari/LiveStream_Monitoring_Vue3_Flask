@@ -1,7 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from extensions import db
 
-# Updated User model in models.py
 class User(db.Model):
     """
     User model represents an application user, such as agents or administrators.
@@ -9,20 +8,22 @@ class User(db.Model):
     __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
-    password = db.Column(db.String(255), nullable=False)  # Increase from 120 to 255
+    password = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(10), nullable=False, default="agent", index=True)
     online = db.Column(db.Boolean, default=False, index=True)
     last_active = db.Column(
-            db.DateTime(timezone=True), 
-            default=lambda: datetime.now(timezone.utc),  # Use datetime directly
-            onupdate=lambda: datetime.now(timezone.utc),  # No timezone.utc() call
-            index=True
-        )
-    receive_updates = db.Column(db.Boolean, default=False)  # Must match DB
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        index=True
+    )
+    receive_updates = db.Column(db.Boolean, default=False)
     email = db.Column(db.String(120), nullable=False, unique=True)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    # New fields for Telegram details
+    telegram_username = db.Column(db.String(50), unique=True, nullable=True, index=True)
+    telegram_chat_id = db.Column(db.String(50), nullable=True, index=True)
 
-    # Relationship with Assignments (agents may have multiple assignments)
     assignments = db.relationship('Assignment', back_populates='agent', lazy='selectin', cascade="all, delete")
 
     def __repr__(self):
@@ -35,6 +36,8 @@ class User(db.Model):
             "email": self.email,
             "role": self.role,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "telegram_username": self.telegram_username,
+            "telegram_chat_id": self.telegram_chat_id
         }
 
 class Stream(db.Model):
@@ -46,11 +49,10 @@ class Stream(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     room_url = db.Column(db.String(300), unique=True, nullable=False, index=True)
     streamer_username = db.Column(db.String(100), index=True)
-    type = db.Column(db.String(50), index=True)  # Discriminator column
-    status = db.Column(db.String(20), default='online', nullable=False, index=True)  # Added status field
-    is_monitored = db.Column(db.Boolean, default=False, nullable=False)  # Added to track monitoring status
+    type = db.Column(db.String(50), index=True)
+    status = db.Column(db.String(20), default='online', nullable=False, index=True)
+    is_monitored = db.Column(db.Boolean, default=False, nullable=False)
 
-    # Relationship with Assignments; assignments are loaded using 'selectin' for performance.
     assignments = db.relationship('Assignment', back_populates='stream', lazy='selectin', cascade="all, delete")
 
     __mapper_args__ = {
@@ -73,7 +75,6 @@ class Stream(db.Model):
         if include_relationships and hasattr(self, 'assignments'):
             data["assignments"] = [assignment.serialize(include_relationships=False) for assignment in self.assignments]
         return data
-
 
 class ChaturbateStream(Stream):
     """
@@ -99,7 +100,6 @@ class ChaturbateStream(Stream):
         })
         return data
 
-
 class StripchatStream(Stream):
     """
     StripchatStream model extends Stream for Stripchat-specific streams.
@@ -124,7 +124,6 @@ class StripchatStream(Stream):
         })
         return data
 
-
 class Assignment(db.Model):
     """
     Assignment model links a User (agent) with a Stream.
@@ -135,7 +134,6 @@ class Assignment(db.Model):
     stream_id = db.Column(db.Integer, db.ForeignKey('streams.id'), nullable=False, index=True)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
-    # Relationships: agent is loaded eagerly (joined) and stream using selectin.
     agent = db.relationship('User', back_populates='assignments', lazy='joined')
     stream = db.relationship('Stream', back_populates='assignments', lazy='selectin')
 
@@ -175,7 +173,6 @@ class Assignment(db.Model):
                 data["stream"] = None
         return data
 
-
 class Log(db.Model):
     """
     Log model records events such as detections, video notifications, and chat events.
@@ -185,7 +182,7 @@ class Log(db.Model):
     timestamp = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     room_url = db.Column(db.String(300), index=True)
     event_type = db.Column(db.String(50), index=True)
-    details = db.Column(db.JSON)  # Stores detection details, images, etc.
+    details = db.Column(db.JSON)
     read = db.Column(db.Boolean, default=False, index=True)
 
     __table_args__ = (
@@ -206,7 +203,6 @@ class Log(db.Model):
             "read": self.read,
         }
 
-
 class ChatKeyword(db.Model):
     """
     ChatKeyword model stores keywords for flagging chat messages.
@@ -220,7 +216,6 @@ class ChatKeyword(db.Model):
 
     def serialize(self):
         return {"id": self.id, "keyword": self.keyword}
-
 
 class FlaggedObject(db.Model):
     """
@@ -242,27 +237,6 @@ class FlaggedObject(db.Model):
             "confidence_threshold": float(self.confidence_threshold),
         }
 
-
-class TelegramRecipient(db.Model):
-    """
-    TelegramRecipient model stores Telegram user information for notifications.
-    """
-    __tablename__ = "telegram_recipients"
-    id = db.Column(db.Integer, primary_key=True)
-    telegram_username = db.Column(db.String(50), unique=True, nullable=False, index=True)
-    chat_id = db.Column(db.String(50), nullable=False, index=True)
-
-    def __repr__(self):
-        return f"<TelegramRecipient {self.telegram_username}>"
-
-    def serialize(self):
-        return {
-            "id": self.id,
-            "telegram_username": self.telegram_username,
-            "chat_id": self.chat_id,
-        }
-
-
 class DetectionLog(db.Model):
     """
     DetectionLog model stores detection events, including the annotated image.
@@ -273,19 +247,17 @@ class DetectionLog(db.Model):
     room_url = db.Column(db.String(255), nullable=False)
     event_type = db.Column(db.String(50), nullable=False)
     details = db.Column(db.JSON, nullable=True)
-    detection_image = db.Column(db.LargeBinary, nullable=True)  # JPEG image bytes
-    assigned_agent = db.Column(db.Integer, nullable=True)  # Changed to non-nullable
+    detection_image = db.Column(db.LargeBinary, nullable=True)
+    assigned_agent = db.Column(db.Integer, nullable=True)
     assignment_id = db.Column(db.Integer, db.ForeignKey('assignments.id'), nullable=True)
     timestamp = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     sender_username = db.Column(db.String(100), nullable=True)
     read = db.Column(db.Boolean, default=False)
 
-    # Relationship to Assignment (if this detection is associated with a stream assignment)
     assignment = db.relationship("Assignment", backref=db.backref("detection_logs", lazy="dynamic"))
 
     def serialize(self):
         assigned = self.assigned_agent
-        # If the assignment relationship exists, override with agent's id
         if self.assignment and self.assignment.agent:
             assigned = self.assignment.agent.id
         return {
@@ -311,7 +283,6 @@ class MessageAttachment(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     
-    # Relationship with User
     user = db.relationship("User")
     
     def __repr__(self):
@@ -328,8 +299,6 @@ class MessageAttachment(db.Model):
             "user_id": self.user_id
         }
 
-
-# Update the ChatMessage model to support attachments
 class ChatMessage(db.Model):
     __tablename__ = "chat_messages"
     id = db.Column(db.Integer, primary_key=True)
@@ -340,13 +309,10 @@ class ChatMessage(db.Model):
     read = db.Column(db.Boolean, default=False, index=True)
     is_system = db.Column(db.Boolean, default=False)
     details = db.Column(db.JSON)
-    # Add this new column to support attachments
     attachment_id = db.Column(db.Integer, db.ForeignKey('message_attachments.id'), nullable=True)
 
-    # Relationships
     sender = db.relationship("User", foreign_keys=[sender_id])
     receiver = db.relationship("User", foreign_keys=[receiver_id])
-    # Add this new relationship
     attachment = db.relationship("MessageAttachment", foreign_keys=[attachment_id])
 
     def serialize(self):
@@ -363,7 +329,6 @@ class ChatMessage(db.Model):
             "receiver_username": self.receiver.username if self.receiver else None
         }
         
-        # Include attachment data if present
         if self.attachment:
             result["attachment"] = {
                 "id": self.attachment.id,
@@ -375,7 +340,6 @@ class ChatMessage(db.Model):
             
         return result
 
-
 class PasswordReset(db.Model):
     __tablename__ = 'password_resets'
     
@@ -385,7 +349,6 @@ class PasswordReset(db.Model):
     expires_at = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Relationship with User model
     user = db.relationship('User', backref=db.backref('password_resets', lazy=True))
     
     def __repr__(self):
@@ -394,7 +357,6 @@ class PasswordReset(db.Model):
     def is_expired(self):
         return self.expires_at < datetime.utcnow()
 
-# Add this near other models in models.py
 class PasswordResetToken(db.Model):
     """
     Stores hashed password reset tokens with expiration and CASCADE deletion.
@@ -407,7 +369,6 @@ class PasswordResetToken(db.Model):
     expires_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    # Relationship with User
     user = db.relationship('User', backref=db.backref('password_reset_tokens', lazy='dynamic'))
 
     __table_args__ = (

@@ -14,7 +14,7 @@ import { useToast } from 'vue-toastification';
 import sessionService from './SessionService';
 
 // Define the API base URL - switched to HTTP for better compatibility
-const API_BASE_URL = 'https://monitor-backend.jetcamstudio.com:5000/api'; // Local development API URL (relative path)
+const API_BASE_URL = 'http://localhost:5000/api'; // Local development API URL (relative path)
 
 // Create axios instance with the base URL
 const apiClient = axios.create({
@@ -413,13 +413,13 @@ class AuthService {
   async updateProfile(profileData) {
     try {
       const response = await apiClient.post('/update-profile', profileData);
-      
+
       if (response.data && response.data.success) {
         // Update localStorage with updated user info
         if (response.data.user) {
           sessionService.updateLocalUserData(response.data.user);
         }
-        
+
         return {
           success: true,
           user: response.data.user,
@@ -433,13 +433,13 @@ class AuthService {
       }
     } catch (error) {
       console.error('Profile update error:', error);
-      
+
       let errorMessage = 'Failed to update profile. Please try again.';
-      
+
       if (error.response && error.response.data && error.response.data.message) {
         errorMessage = error.response.data.message;
       }
-      
+
       return {
         success: false,
         message: errorMessage

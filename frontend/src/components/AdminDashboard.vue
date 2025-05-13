@@ -18,7 +18,7 @@
     >
       <div v-if="loading" class="loading-state">
         <div class="loading-spinner"></div>
-        <p>Loading dashboard data...</p>
+        <p>Loading...</p>
       </div>
 
       <div v-else-if="hasError" class="error-state">
@@ -540,20 +540,7 @@ export default {
   /* margin-left: 60px; */
 }
 
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 50vh;
-  transition: opacity 0.3s ease; /* Smooth transition for content */
-}
-
-.loading-state p {
-  margin-top: 1rem;
-  font-size: 1rem;
-  color: var(--text-color);
-}
+/* Remove loading-state and loading-spinner styles */
 
 .error-state {
   max-width: 100%;
@@ -604,6 +591,59 @@ export default {
   display: inline-block;
 }
 
+/* Add new skeleton loading styles */
+.skeleton-loading {
+  padding: 2rem;
+}
+
+.skeleton-loading .stats-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.skeleton-loading .controls-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+}
+
+.skeleton-search {
+  width: 300px;
+  height: 40px;
+  border-radius: 6px;
+}
+
+.skeleton-button {
+  width: 120px;
+  height: 40px;
+  border-radius: 6px;
+}
+
+.skeleton-loading .section-header {
+  margin: 1.5rem 0 1rem;
+}
+
+.skeleton-loading .section-header .skeleton-title {
+  width: 200px;
+  height: 24px;
+}
+
+[data-theme='dark'] .skeleton-search,
+[data-theme='dark'] .skeleton-button {
+  background: linear-gradient(
+    90deg,
+    rgba(45, 45, 45, 0.7) 0%,
+    rgba(55, 55, 55, 0.9) 50%,
+    rgba(45, 45, 45, 0.7) 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite linear;
+}
+
 .loading-spinner {
   width: 3rem;
   height: 3rem;
@@ -647,6 +687,28 @@ export default {
   }
 }
 
+/* Add loading state styles */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  gap: 1rem;
+}
 
+.loading-spinner {
+  width: 3rem;
+  height: 3rem;
+  border: 0.25rem solid rgba(var(--primary-rgb), 0.1);
+  border-radius: 50%;
+  border-top-color: rgb(var(--primary-rgb));
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 
 </style>

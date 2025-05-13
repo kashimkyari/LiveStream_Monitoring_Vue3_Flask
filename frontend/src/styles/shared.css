@@ -1,0 +1,55 @@
+/* src/styles/shared.css */
+.telegram-status {
+    margin-top: 1rem;
+  }
+  
+  .status-connected,
+  .status-disconnected {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+  }
+  
+  .status-connected {
+    background-color: var(--success-bg);
+  }
+  
+  .status-disconnected {
+    background-color: var(--warning-bg);
+    cursor: pointer;
+  }
+  
+  .status-disconnected:hover {
+    background-color: var(--hover-bg);
+  }
+  
+  .telegram-icon {
+    font-size: 1.5rem;
+    margin-right: 1rem;
+    color: var(--primary-color);
+  }
+  
+  .status-text,
+  .status-details {
+    flex: 1;
+  }
+  
+  .status-label {
+    display: block;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-color);
+  }
+  
+  .status-username,
+  .status-description {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+  }
+  
+  .icon-right {
+    font-size: 1rem;
+    color: var(--text-secondary);
+  }

@@ -51,7 +51,7 @@ import threading
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Import models and database session for stream creation.
-from models import Stream, ChaturbateStream, StripchatStream, Assignment, TelegramRecipient, User
+from models import Stream, ChaturbateStream, StripchatStream, Assignment, User
 from extensions import db
 from notifications import send_text_message
 
@@ -110,7 +110,7 @@ def get_random_proxy() -> dict:
         if not PROXY_LIST or not PROXY_LIST_LAST_UPDATED or \
            current_time - PROXY_LIST_LAST_UPDATED > PROXY_UPDATE_INTERVAL:
             # Try different methods to get proxies
-            new_proxies = update_proxy_list() or get_proxies_with_library() or scrape_free_proxy_list()
+            new_proxies = update_proxy_list() or get_proxies_with_library() or scrape_free_proxy_list() # type: ignore
             
             if new_proxies and len(new_proxies) >= 10:
                 PROXY_LIST = new_proxies
@@ -1134,7 +1134,7 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
 def send_telegram_notifications(platform, streamer, room_url):
     """Robust notification handler"""
     try:
-        recipients = TelegramRecipient.query.all()
+        recipients = User.query.filter(User.telegram_chat_id.isnot(None)).all()
         if not recipients:
             return
 

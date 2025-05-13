@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 from flask import current_app
 from models import (
     ChatKeyword, FlaggedObject, DetectionLog, Stream, User, Assignment,
-    ChaturbateStream, StripchatStream, TelegramRecipient, Log
+    ChaturbateStream, StripchatStream, Log
 )
 from extensions import db
 from utils.notifications import emit_notification, emit_stream_update
@@ -417,9 +417,9 @@ def fetch_chat_messages(stream_url):
     """Fetch chat messages based on platform"""
     platform, streamer = get_stream_info(stream_url)
     try:
-        if platform == "chaturbate":
+        if (platform == "chaturbate"):
             return fetch_chaturbate_chat(stream_url, streamer)
-        elif platform == "stripchat":
+        elif (platform == "stripchat"):
             return fetch_stripchat_chat(stream_url, streamer)
         else:
             logger.warning(f"Unsupported platform {platform}")
@@ -615,13 +615,27 @@ def stop_monitoring(stream):
         'type': stream.type
     })
 
+def start_notification_monitor():
+    """Initialize background tasks for notifications monitoring"""
+    logger.info("Starting notification monitor")
+    try:
+        with current_app.app_context():
+            streams = Stream.query.filter_by(is_monitored=True).all()
+            for stream in streams:
+                start_monitoring(stream)
+        logger.info("Notification monitor started successfully")
+    except Exception as e:
+        logger.error(f"Error starting notification monitor: {e}")
+        raise
+
 # =============== EXPORTS ===============
 __all__ = [
     'start_monitoring',
     'stop_monitoring',
     'process_audio_segment',
     'process_video_frame',
-    'process_chat_messages'
+    'process_chat_messages',
+    'start_notification_monitor'  # Added to exports
 ]
 
 if __name__ == "__main__":

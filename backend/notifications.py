@@ -3,7 +3,7 @@ import json
 import logging
 import base64
 from flask import current_app
-from models import Log, TelegramRecipient
+from models import Log
 from extensions import db
 from telegram import Bot, InputFile
 from concurrent.futures import ThreadPoolExecutor
