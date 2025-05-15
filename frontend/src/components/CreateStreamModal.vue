@@ -12,7 +12,6 @@
         <h3>Add New Stream</h3>
       </div>
       
-      <!-- Connection Status - Moved below header -->
       <div class="connection-status-container" v-if="isCreating">
         <div class="connection-status">
           <div class="status-indicator" :class="connectionStatus">
@@ -24,7 +23,7 @@
       
       <div class="modal-body">
         <form @submit.prevent="submitForm">
-          <!-- Platform Selection with Icons -->
+          <!-- Platform Selection -->
           <div class="form-group" v-show="!isCreating">
             <label for="platform">
               <font-awesome-icon icon="broadcast-tower" class="field-icon" />
@@ -51,7 +50,7 @@
             <input type="hidden" v-model="form.platform" required>
           </div>
           
-          <!-- Room URL with validation -->
+          <!-- Room URL -->
           <div class="form-group" v-show="!isCreating">
             <label for="room_url">
               <font-awesome-icon icon="link" class="field-icon" />
@@ -79,11 +78,12 @@
             </div>
           </div>
           
-          <!-- Agent Assignment with Avatar -->
+          <!-- Agent Assignment -->
           <div class="form-group" v-show="!isCreating">
             <label for="stream_agent">
               <font-awesome-icon icon="user-secret" class="field-icon" />
               Assign Agent (Optional)
+              <span class="tooltip" v-tooltip="'Select an agent to monitor this stream'">?</span>
             </label>
             <div class="select-wrapper">
               <select id="stream_agent" v-model="form.agent_id">
@@ -96,7 +96,47 @@
             </div>
           </div>
           
-          <!-- Animated Progress Section -->
+          <!-- Assignment Notes -->
+          <div class="form-group" v-show="!isCreating">
+            <label for="notes">
+              <font-awesome-icon icon="sticky-note" class="field-icon" />
+              Assignment Notes (Optional)
+              <span class="tooltip" v-tooltip="'Add notes for the assigned agent (max 500 characters)'">?</span>
+            </label>
+            <textarea
+              id="notes"
+              v-model="form.notes"
+              placeholder="Enter any special instructions for the agent..."
+              :class="{ 'has-error': notesError }"
+              maxlength="500"
+              @input="validateNotes"
+            ></textarea>
+            <div v-if="notesError" class="field-error">
+              {{ notesError }}
+            </div>
+            <div class="form-hint">
+              {{ form.notes ? form.notes.length : 0 }}/500 characters
+            </div>
+          </div>
+          
+          <!-- Priority Selection -->
+          <div class="form-group" v-show="!isCreating">
+            <label for="priority">
+              <font-awesome-icon icon="exclamation-circle" class="field-icon" />
+              Priority
+              <span class="tooltip" v-tooltip="'Set the urgency of this stream assignment'">?</span>
+            </label>
+            <div class="select-wrapper">
+              <select id="priority" v-model="form.priority">
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+              </select>
+              <font-awesome-icon icon="chevron-down" class="select-arrow" />
+            </div>
+          </div>
+          
+          <!-- Progress Section -->
           <div v-if="isCreating" class="progress-container">
             <div class="progress-header">
               <div class="platform-icon-animated" :class="form.platform.toLowerCase()">
@@ -123,7 +163,7 @@
               <div class="progress-stats">
                 <div class="progress-percentage">{{ progressPercentage }}%</div>
                 <div v-if="estimatedTime" class="estimated-time">
-                  <font-awesome-icon icon="clock" /> {{ estimatedTime }}
+                  <font-awesome-icon icon="clock" /> {{ estimatedTime }}s
                 </div>
               </div>
             </div>
@@ -144,9 +184,17 @@
                 <div class="step-label">{{ step.label }}</div>
               </div>
             </div>
+            
+            <!-- Assignment Details on Completion -->
+            <div v-if="progressPercentage >= 100 && assignmentDetails" class="assignment-details">
+              <h5>Assignment Details</h5>
+              <p><strong>Agent:</strong> {{ assignmentDetails.agent?.username || 'Unassigned' }}</p>
+              <p><strong>Priority:</strong> {{ assignmentDetails.priority }}</p>
+              <p v-if="assignmentDetails.notes"><strong>Notes:</strong> {{ assignmentDetails.notes }}</p>
+            </div>
           </div>
           
-          <!-- Error message display -->
+          <!-- Error Message -->
           <div v-if="error" class="error-message">
             <font-awesome-icon icon="exclamation-circle" class="error-icon" />
             <span>{{ error }}</span>
@@ -171,8 +219,7 @@
 </template>
 
 <script>
-  /* eslint-disable */
-import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useToast } from 'vue-toastification'
 import anime from 'animejs/lib/anime.es.js'
 import axios from 'axios'
@@ -198,7 +245,9 @@ export default {
     const form = ref({
       platform: '',
       room_url: '',
-      agent_id: ''
+      agent_id: '',
+      notes: '',
+      priority: 'normal'
     })
     
     // Progress state
@@ -207,9 +256,11 @@ export default {
     const progressMessage = ref('Initializing...')
     const estimatedTime = ref('')
     const urlError = ref('')
+    const notesError = ref('')
     const jobId = ref('')
     const connectionStatus = ref('none')
     const latency = ref(null)
+    const assignmentDetails = ref(null)
     
     // DOM refs
     const progressBarContainer = ref(null)
@@ -226,14 +277,14 @@ export default {
     let pollingInterval = null
     let lastPollTime = 0
     
-    // Progress steps
+    // Progress steps (aligned with backend phases)
     const progressSteps = [
       { threshold: 0, label: 'Initialization' },
-      { threshold: 20, label: 'Validating URL' },
-      { threshold: 40, label: 'Connecting to Stream' },
-      { threshold: 60, label: 'Fetching Stream Data' },
-      { threshold: 80, label: 'Processing' },
-      { threshold: 100, label: 'Completed' }
+      { threshold: 10, label: 'Validating' },
+      { threshold: 55, label: 'Scraping' },
+      { threshold: 75, label: 'Database' },
+      { threshold: 90, label: 'Assignment' },
+      { threshold: 100, label: 'Finalizing' }
     ]
     
     const currentStepIndex = computed(() => {
@@ -248,7 +299,7 @@ export default {
     const progressStage = computed(() => progressSteps[currentStepIndex.value].label)
     
     const currentStageIcon = computed(() => {
-      const icons = ['rocket', 'check-circle', 'link', 'download', 'cogs', 'flag-checkered']
+      const icons = ['rocket', 'check-circle', 'download', 'database', 'user-secret', 'flag-checkered']
       return icons[currentStepIndex.value] || 'circle-notch'
     })
     
@@ -258,7 +309,8 @@ export default {
              form.value.room_url && 
              isValidUrl(form.value.room_url) &&
              validateUrlForPlatform(form.value.room_url, form.value.platform) &&
-             !urlError.value
+             !urlError.value &&
+             !notesError.value
     })
     
     // Progress animation methods
@@ -275,14 +327,12 @@ export default {
           elasticity: 300,
           duration: 1500,
           easing: 'easeOutElastic(1, .5)',
-          update: function(animObj) {
-            if (newValue >= 20 && oldValue < 20 || 
-                newValue >= 40 && oldValue < 40 ||
-                newValue >= 60 && oldValue < 60 ||
-                newValue >= 80 && oldValue < 80 ||
-                newValue >= 100 && oldValue < 100) {
-              createParticles(newValue)
-            }
+          update: function() {
+            progressSteps.forEach(step => {
+              if (newValue >= step.threshold && oldValue < step.threshold) {
+                createParticles(newValue)
+              }
+            })
           }
         })
       })
@@ -354,13 +404,21 @@ export default {
       if (!url || !platform) return false
       
       const patterns = {
-        Chaturbate: /https?:\/\/(www\.)?chaturbate\.com\/[a-zA-Z0-9_-]+\/?$/i,
-        Stripchat: /https?:\/\/(www\.)?stripchat\.com\/[a-zA-Z0-9_-]+\/?$/i
+        Chaturbate: /https?:\/\/(www\.)?chaturbate\.com\/[\w-]+\/?$/i,
+        Stripchat: /https?:\/\/(www\.)?stripchat\.com\/[\w-]+\/?$/i
       }
       
       const isValid = patterns[platform]?.test(url.toLowerCase()) || false
       urlError.value = isValid ? '' : `This URL doesn't match the ${platform} format`
       return isValid
+    }
+    
+    const validateNotes = () => {
+      if (form.value.notes.length > 500) {
+        notesError.value = 'Notes cannot exceed 500 characters'
+      } else {
+        notesError.value = ''
+      }
     }
     
     const selectPlatform = (platform) => {
@@ -389,7 +447,7 @@ export default {
       try {
         const cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url
         const segments = cleanUrl.split('/')
-        return segments[segments.length - 1]
+        return segments[segments.length - 1] || 'Stream'
       } catch (e) {
         return 'Stream'
       }
@@ -397,55 +455,56 @@ export default {
     
     // SSE Implementation
     const setupSSEConnection = () => {
-      // Close any existing connections
       cleanupConnections()
       
       try {
-        // Create new EventSource connection to SSE endpoint
         const url = `/api/streams/interactive/sse?job_id=${jobId.value}`
         eventSource = new EventSource(url)
         connectionStatus.value = 'sse'
         
-        // Track connection performance
         const startTime = Date.now()
         
-        // Handle incoming messages
+        eventSource.onopen = () => {
+          console.log('SSE connection established')
+        }
+        
         eventSource.onmessage = (event) => {
           try {
-            // Update latency
             latency.value = Date.now() - startTime
-            
-            // Parse data
             const data = JSON.parse(event.data)
             
-            // Update UI with received progress
             if (data.progress !== undefined) {
-              progressPercentage.value = data.progress
-              animateProgress(data.progress)
+              progressPercentage.value = Math.min(data.progress, 100)
+              animateProgress(data.progress, progressPercentage.value)
             }
             
-            // Update progress message
             if (data.message) {
               progressMessage.value = data.message
             }
             
-            // Update estimated time
             if (data.estimated_time) {
-              estimatedTime.value = data.estimated_time
+              estimatedTime.value = Math.round(data.estimated_time)
             }
             
-            // Handle errors
             if (data.error) {
               emit('error', data.error)
               toast.error(`Stream creation failed: ${data.error}`)
               cleanupConnections()
+              isCreating.value = false
+            }
+            
+            if (data.stream) {
+              assignmentDetails.value = data.assignment
+              emit('streamCreated', data.stream)
+              toast.success('Stream created successfully!')
+              cleanupConnections()
+              isCreating.value = false
             }
           } catch (e) {
             console.error('Error parsing SSE message:', e)
           }
         }
         
-        // Handle connection errors
         eventSource.onerror = () => {
           console.warn('SSE connection failed, falling back to polling')
           eventSource.close()
@@ -453,29 +512,6 @@ export default {
           connectionStatus.value = 'polling'
           setupPolling()
         }
-        
-        // Handle completed event
-        eventSource.addEventListener('completed', (event) => {
-          try {
-            const streamData = JSON.parse(event.data)
-            emit('streamCreated', streamData)
-            cleanupConnections()
-            isCreating.value = false
-          } catch (e) {
-            console.error('Error parsing completion event:', e)
-          }
-        })
-        
-        // Handle error event
-        eventSource.addEventListener('error', (event) => {
-          try {
-            const errorData = JSON.parse(event.data)
-            emit('error', errorData.message || 'Unknown error')
-            cleanupConnections()
-          } catch (e) {
-            console.error('Error parsing error event:', e)
-          }
-        })
       } catch (e) {
         console.warn('SSE not supported, falling back to polling')
         connectionStatus.value = 'polling'
@@ -486,62 +522,57 @@ export default {
     // Fallback polling method
     const setupPolling = () => {
       if (pollingInterval) return
-      
+
       pollingInterval = setInterval(async () => {
         try {
-          // Prevent polling too frequently
           const now = Date.now()
           if (now - lastPollTime < 500) return
           lastPollTime = now
-          
-          // Track latency
+
           const startTime = Date.now()
-          
-          // Make request
           const response = await axios.get(`/api/streams/interactive/status?job_id=${jobId.value}`)
-          
-          // Update latency
+
           latency.value = Date.now() - startTime
-          
-          // Check for success
+
           if (!response.data) return
-          
-          // Update progress
+
           if (response.data.progress !== undefined) {
-            progressPercentage.value = response.data.progress
-            animateProgress(response.data.progress)
+            progressPercentage.value = Math.min(response.data.progress, 100)
+            animateProgress(response.data.progress, progressPercentage.value)
           }
-          
-          // Update message
+
           if (response.data.message) {
             progressMessage.value = response.data.message
           }
-          
-          // Update estimated time
+
           if (response.data.estimated_time) {
-            estimatedTime.value = response.data.estimated_time
+            estimatedTime.value = Math.round(response.data.estimated_time)
           }
-          
-          // Handle errors
+
           if (response.data.error) {
             emit('error', response.data.error)
             toast.error(`Stream creation failed: ${response.data.error}`)
             cleanupConnections()
+            isCreating.value = false
           }
-          
-          // Handle completion
-          if (response.data.progress >= 100 || response.data.stream_data) {
+
+          if (response.data.stream) {
+            assignmentDetails.value = response.data.assignment
+            emit('streamCreated', response.data.stream)
             toast.success('Stream created successfully!')
-            if (response.data.stream_data) {
-              emit('streamCreated', response.data.stream_data)
-            }
             cleanupConnections()
             isCreating.value = false
           }
         } catch (e) {
           console.error('Polling error:', e)
+          if (e.response?.status === 404) {
+            emit('error', 'Job not found')
+            toast.error('Stream creation job not found')
+            cleanupConnections()
+            isCreating.value = false
+          }
         }
-      }, 1000)
+      }, 500)
     }
     
     // Cleanup connections
@@ -561,44 +592,43 @@ export default {
     const submitForm = async () => {
       if (!formValid.value) return
       
-      // Prepare form data
       const streamData = {
         room_url: form.value.room_url.trim(),
         platform: form.value.platform,
-        agent_id: form.value.agent_id || null
+        agent_id: form.value.agent_id || null,
+        notes: form.value.notes.trim() || null,
+        priority: form.value.priority
       }
       
       try {
-        // Update UI state
         isCreating.value = true
         progressPercentage.value = 0
         progressMessage.value = 'Initializing stream creation...'
+        assignmentDetails.value = null
         
-        // Submit to backend
         const response = await axios.post('/api/streams/interactive', streamData)
         
-        // Handle response
         if (response.data && response.data.job_id) {
-          // Store job ID
           jobId.value = response.data.job_id
-          
-          // Setup SSE connection
           setupSSEConnection()
-          
-          // Show toast notification
           toast.info(`Creating ${form.value.platform} stream...`, {
             timeout: 3000
           })
-          
-          // Emit event
           emit('submit', streamData)
         } else {
           throw new Error('No job ID returned from server')
         }
       } catch (error) {
-        // Handle errors
         isCreating.value = false
-        const errorMessage = error.response?.data?.message || 'Failed to create stream'
+        let errorMessage = 'Failed to create stream'
+        if (error.response?.status === 429) {
+          errorMessage = 'Another stream creation is in progress. Please wait.'
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message
+          if (error.response.data.error === 'duplicate_stream') {
+            errorMessage += ` (Stream ID: ${error.response.data.existing_id})`
+          }
+        }
         emit('error', errorMessage)
         toast.error(errorMessage)
       }
@@ -607,29 +637,23 @@ export default {
     // Retry creation
     const retryCreation = () => {
       emit('retry', form.value)
+      submitForm()
     }
     
     // Lifecycle hooks
     onMounted(() => {
-      // Setup particle cleanup interval
       particleCleanupInterval = setInterval(() => {
         particleAnimations = particleAnimations.filter(anim => !anim.completed)
       }, 1000)
     })
     
     onBeforeUnmount(() => {
-      // Clean up all resources
       cleanupConnections()
-      
-      // Clean up animations
       if (progressAnimation) progressAnimation.pause()
       particleAnimations.forEach(anim => anim.pause())
-      
-      // Clear intervals
       clearInterval(particleCleanupInterval)
     })
     
-    // Return exposed properties and methods
     return {
       form,
       isCreating,
@@ -637,6 +661,7 @@ export default {
       progressMessage,
       estimatedTime,
       urlError,
+      notesError,
       connectionStatus,
       latency,
       progressBarContainer,
@@ -651,79 +676,15 @@ export default {
       selectPlatform,
       formValid,
       extractUsername,
-      retryCreation
+      retryCreation,
+      assignmentDetails,
+      validateNotes
     }
   }
 }
 </script>
 
 <style scoped>
-/* Modal Header - Updated to center title */
-.modal-header {
-  padding: 25px 30px 20px;
-  border-bottom: 1px solid var(--card-border);
-  display: flex;
-  align-items: center;
-  justify-content: center; /* Center the content horizontally */
-  gap: 12px;
-  position: relative; /* Added for absolute positioning context */
-}
-
-.header-icon {
-  font-size: 1.5rem;
-  color: var(--primary-color);
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.6rem;
-  font-weight: 600;
-}
-
-/* Added container for connection status */
-.connection-status-container {
-  padding: 0 30px;
-  display: flex;
-  justify-content: center;
-  margin-top: -5px;
-  margin-bottom: 10px;
-  border-bottom: 1px solid var(--card-border);
-  padding-bottom: 10px;
-}
-
-/* Connection Status - Modified */
-.connection-status {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: center;
-}
-
-.status-indicator {
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid var(--input-border);
-}
-
-.status-indicator.sse {
-  color: #4CAF50;
-  border-color: #4CAF50;
-}
-
-.status-indicator.polling {
-  color: #FFC107;
-  border-color: #FFC107;
-}
-
-.status-latency {
-  font-size: 0.7rem;
-  opacity: 0.7;
-}
-
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -744,7 +705,7 @@ export default {
   background-color: var(--card-bg);
   border-radius: 16px;
   width: 100%;
-  max-width: 550px;
+  max-width: 600px;
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
@@ -785,6 +746,68 @@ export default {
   transform: rotate(90deg);
 }
 
+.modal-header {
+  padding: 25px 30px 20px;
+  border-bottom: 1px solid var(--card-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.header-icon {
+  font-size: 1.5rem;
+  color: var(--primary-color);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.connection-status-container {
+  padding: 0 30px;
+  display: flex;
+  justify-content: center;
+  margin-top: -5px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--card-border);
+  padding-bottom: 10px;
+}
+
+.connection-status {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-indicator {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--input-border);
+}
+
+.status-indicator.sse {
+  color: #4CAF50;
+  border-color: #4CAF50;
+}
+
+.status-indicator.polling {
+  color: #FFC107;
+  border-color: #FFC107;
+}
+
+.status-latency {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
 .modal-body {
   padding: 25px 30px 30px;
 }
@@ -820,7 +843,6 @@ export default {
   color: var(--danger-color);
 }
 
-/* Platform selector */
 .platform-selector {
   display: flex;
   gap: 10px;
@@ -868,7 +890,6 @@ export default {
   transform: scale(1.1);
 }
 
-/* Input styling */
 .input-wrapper {
   position: relative;
 }
@@ -912,7 +933,6 @@ export default {
   font-weight: 500;
 }
 
-/* Select styling */
 .select-wrapper {
   position: relative;
 }
@@ -936,7 +956,6 @@ export default {
   outline: none;
 }
 
-
 .select-arrow {
   position: absolute;
   right: 15px;
@@ -947,7 +966,44 @@ export default {
   opacity: 0.7;
 }
 
-/* Animated Progress Container */
+textarea {
+  width: 100%;
+  padding: 12px 15px;
+  border: 2px solid var(--input-border);
+  border-radius: 10px;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  resize: vertical;
+  min-height: 80px;
+  max-height: 200px;
+}
+
+textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb, 0, 123, 255), 0.1);
+  outline: none;
+}
+
+textarea.has-error {
+  border-color: var(--danger-color);
+}
+
+.tooltip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: white;
+  font-size: 0.7rem;
+  margin-left: 6px;
+  cursor: help;
+}
+
 .progress-container {
   background: var(--card-bg);
   border-radius: 16px;
@@ -991,7 +1047,6 @@ export default {
   font-weight: 600;
 }
 
-/* Progress Stage */
 .progress-stage {
   display: flex;
   align-items: center;
@@ -1032,7 +1087,6 @@ export default {
   font-size: 0.9rem;
 }
 
-/* Progress Tracker */
 .progress-tracker {
   margin-bottom: 20px;
 }
@@ -1110,7 +1164,6 @@ export default {
   gap: 5px;
 }
 
-/* Progress Steps */
 .progress-steps {
   display: flex;
   justify-content: space-between;
@@ -1178,7 +1231,25 @@ export default {
   font-weight: 600;
 }
 
-/* Error message */
+.assignment-details {
+  margin-top: 20px;
+  padding: 15px;
+  background: var(--hover-bg);
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+}
+
+.assignment-details h5 {
+  margin: 0 0 10px;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.assignment-details p {
+  margin: 5px 0;
+  font-size: 0.9rem;
+}
+
 .error-message {
   margin: 20px 0;
   padding: 15px;
@@ -1220,7 +1291,6 @@ export default {
   transform: translateY(-1px);
 }
 
-/* Form Actions */
 .form-actions {
   display: flex;
   justify-content: flex-end;
@@ -1270,7 +1340,6 @@ export default {
   box-shadow: none;
 }
 
-/* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -1297,10 +1366,10 @@ export default {
   100% { transform: translateX(100%); }
 }
 
-/* Responsive Styles */
 @media (max-width: 768px) {
   .modal-content {
     max-width: 100%;
+    margin: 0 10px;
   }
   
   .progress-steps {
@@ -1318,9 +1387,17 @@ export default {
   .modal-body {
     padding: 20px;
   }
+  
+  .form-actions {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .cancel-button, .submit-button {
+    width: 100%;
+  }
 }
 
-/* Dark Mode Enhancements */
 @media (prefers-color-scheme: dark) {
   .progress-bar::after {
     background: linear-gradient(
@@ -1335,5 +1412,4 @@ export default {
     background: rgba(255, 255, 255, 0.05);
   }
 }
-
 </style>

@@ -254,37 +254,16 @@ def register():
         db.session.add(new_user)
         db.session.commit()
         
-        session.permanent = True
-        session["user_id"] = new_user.id
-        session["user_role"] = new_user.role
-        
         try:
             send_welcome_email(email, username)
             current_app.logger.info(f"Welcome email sent to {email}")
         except Exception as e:
             current_app.logger.error(f"Failed to send welcome email: {str(e)}")
         
-        response = jsonify({
+        return jsonify({
             "message": "Account created successfully",
             "user": new_user.serialize()
-        })
-        response.set_cookie(
-            'user_role',
-            new_user.role,
-            max_age=30*24*60*60,
-            httponly=False,
-            secure=True,
-            samesite='None'
-        )
-        response.set_cookie(
-            'session_active',
-            'true',
-            max_age=30*24*60*60,
-            httponly=True,
-            secure=True,
-            samesite='None'
-        )
-        return response, 201
+        }), 201
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Registration error: {str(e)}")

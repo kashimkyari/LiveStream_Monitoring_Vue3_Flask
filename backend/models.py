@@ -20,11 +20,16 @@ class User(db.Model):
     receive_updates = db.Column(db.Boolean, default=False)
     email = db.Column(db.String(120), nullable=False, unique=True)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    # New fields for Telegram details
     telegram_username = db.Column(db.String(50), unique=True, nullable=True, index=True)
     telegram_chat_id = db.Column(db.String(50), nullable=True, index=True)
 
-    assignments = db.relationship('Assignment', back_populates='agent', lazy='selectin', cascade="all, delete")
+    assignments = db.relationship(
+        'Assignment',
+        back_populates='agent',
+        foreign_keys='Assignment.agent_id',  # Specify the foreign key
+        lazy='selectin',
+        cascade="all, delete"
+    )
 
     def __repr__(self):
         return f"<User {self.username}>"
@@ -126,16 +131,22 @@ class StripchatStream(Stream):
 
 class Assignment(db.Model):
     """
-    Assignment model links a User (agent) with a Stream.
+    Assignment model links a User (agent) with a Stream, with additional metadata.
     """
     __tablename__ = "assignments"
     id = db.Column(db.Integer, primary_key=True)
     agent_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     stream_id = db.Column(db.Integer, db.ForeignKey('streams.id'), nullable=False, index=True)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    assigned_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)  # Who assigned it
+    notes = db.Column(db.Text, nullable=True)  # Optional notes for the assignment
+    priority = db.Column(db.String(20), default='normal', index=True)  # Priority: low, normal, high
+    status = db.Column(db.String(20), default='active', index=True)  # Status: active, completed, paused
+    assignment_metadata = db.Column(db.JSON, nullable=True)  # Renamed from 'metadata' to avoid conflict
 
-    agent = db.relationship('User', back_populates='assignments', lazy='joined')
+    agent = db.relationship('User', foreign_keys=[agent_id], back_populates='assignments', lazy='joined')
     stream = db.relationship('Stream', back_populates='assignments', lazy='selectin')
+    assigner = db.relationship('User', foreign_keys=[assigned_by], lazy='joined')
 
     __table_args__ = (
         db.Index('idx_assignment_agent_stream', 'agent_id', 'stream_id'),
@@ -151,6 +162,11 @@ class Assignment(db.Model):
             "agent_id": self.agent_id,
             "stream_id": self.stream_id,
             "created_at": self.created_at.isoformat(),
+            "assigned_by": self.assigned_by,
+            "notes": self.notes,
+            "priority": self.priority,
+            "status": self.status,
+            "assignment_metadata": self.assignment_metadata or {},  # Updated to match renamed column
         }
         if include_relationships:
             if self.agent:
@@ -158,7 +174,8 @@ class Assignment(db.Model):
                     "id": self.agent.id,
                     "username": self.agent.username,
                     "email": self.agent.email,
-                    "role": self.agent.role
+                    "role": self.agent.role,
+                    "telegram_username": self.agent.telegram_username,
                 }
             else:
                 data["agent"] = None
@@ -167,10 +184,19 @@ class Assignment(db.Model):
                     "id": self.stream.id,
                     "room_url": self.stream.room_url,
                     "streamer_username": self.stream.streamer_username,
-                    "platform": self.stream.type.capitalize() if self.stream.type else None
+                    "platform": self.stream.type.capitalize() if self.stream.type else None,
+                    "status": self.stream.status,
                 }
             else:
                 data["stream"] = None
+            if self.assigner:
+                data["assigner"] = {
+                    "id": self.assigner.id,
+                    "username": self.assigner.username,
+                    "role": self.assigner.role,
+                }
+            else:
+                data["assigner"] = None
         return data
 
 class Log(db.Model):

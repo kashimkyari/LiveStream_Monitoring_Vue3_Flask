@@ -235,3 +235,43 @@ PL/pgSQL function inline_code_block line 8 at EXECUTE
 2025-05-13 03:29:37,276 [INFO] Dropping any remaining views...
 2025-05-13 03:29:38,240 [INFO] Success! All tables have been dropped from the database.
 2025-05-13 03:29:38,444 [INFO] PostgreSQL table deletion process completed
+2025-05-15 12:30:16,460 [INFO] Starting PostgreSQL table deletion process
+2025-05-15 12:30:17,275 [INFO] Server initialized for gevent.
+2025-05-15 12:33:07,568 [INFO] Starting PostgreSQL table deletion process
+2025-05-15 12:33:07,923 [INFO] Server initialized for gevent.
+2025-05-15 12:33:17,026 [INFO] [Background] Updated proxy list with 415 proxies at 2025-05-15 12:33:17.026582
+2025-05-15 12:33:42,480 [INFO] Disabling triggers
+2025-05-15 12:33:43,031 [INFO] Working with schema: public
+2025-05-15 12:33:43,236 [INFO] Found 13 tables: assignments, chat_keywords, chat_messages, chaturbate_streams, detection_logs, flagged_objects, logs, message_attachments, password_reset_tokens, password_resets, streams, stripchat_streams, users
+2025-05-15 12:33:43,236 [INFO] Dropping all foreign key constraints...
+2025-05-15 12:33:43,649 [INFO] Foreign key constraints dropped
+2025-05-15 12:33:43,649 [INFO] Dropping table: assignments
+2025-05-15 12:33:43,855 [INFO] Successfully dropped table: assignments
+2025-05-15 12:33:43,855 [INFO] Dropping table: chat_keywords
+2025-05-15 12:33:44,055 [INFO] Successfully dropped table: chat_keywords
+2025-05-15 12:33:44,057 [INFO] Dropping table: chat_messages
+2025-05-15 12:33:44,976 [INFO] Successfully dropped table: chat_messages
+2025-05-15 12:33:44,977 [INFO] Dropping table: chaturbate_streams
+2025-05-15 12:33:45,181 [INFO] Successfully dropped table: chaturbate_streams
+2025-05-15 12:33:45,182 [INFO] Dropping table: detection_logs
+2025-05-15 12:33:45,387 [INFO] Successfully dropped table: detection_logs
+2025-05-15 12:33:45,387 [INFO] Dropping table: flagged_objects
+2025-05-15 12:33:45,591 [INFO] Successfully dropped table: flagged_objects
+2025-05-15 12:33:45,591 [INFO] Dropping table: logs
+2025-05-15 12:33:45,796 [INFO] Successfully dropped table: logs
+2025-05-15 12:33:45,796 [INFO] Dropping table: message_attachments
+2025-05-15 12:33:46,505 [INFO] Successfully dropped table: message_attachments
+2025-05-15 12:33:46,505 [INFO] Dropping table: password_reset_tokens
+2025-05-15 12:33:46,665 [INFO] Successfully dropped table: password_reset_tokens
+2025-05-15 12:33:46,665 [INFO] Dropping table: password_resets
+2025-05-15 12:33:47,425 [INFO] Successfully dropped table: password_resets
+2025-05-15 12:33:47,426 [INFO] Dropping table: streams
+2025-05-15 12:33:47,598 [INFO] Successfully dropped table: streams
+2025-05-15 12:33:47,598 [INFO] Dropping table: stripchat_streams
+2025-05-15 12:33:47,897 [INFO] Successfully dropped table: stripchat_streams
+2025-05-15 12:33:47,897 [INFO] Dropping table: users
+2025-05-15 12:33:48,356 [INFO] Successfully dropped table: users
+2025-05-15 12:33:48,356 [INFO] Resetting sequences...
+2025-05-15 12:33:48,536 [INFO] Dropping any remaining views...
+2025-05-15 12:33:49,892 [INFO] Success! All tables have been dropped from the database.
+2025-05-15 12:33:50,096 [INFO] PostgreSQL table deletion process completed

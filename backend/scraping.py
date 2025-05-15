@@ -218,11 +218,9 @@ def update_job_progress(job_id, percent, message):
                  scrape_jobs[job_id]['elapsed'],
                  scrape_jobs[job_id]['estimated_time'])
 
-def update_stream_job_progress(job_id, percent, message):
-    """Update job progress with safe initialization"""
+def update_stream_job_progress(job_id, percent, message, estimated_time=None):
+    """Update job progress with safe initialization."""
     now = time.time()
-    
-    # Initialize job with default values
     job = stream_creation_jobs.setdefault(job_id, {
         'start_time': now,
         'progress': 0,
@@ -230,10 +228,10 @@ def update_stream_job_progress(job_id, percent, message):
         'estimated_time': 0,
         'last_updated': now,
         'error': None,
-        'stream': None
+        'stream': None,
+        'assignment': None,
     })
-    
-    # Calculate time estimates
+
     elapsed = now - job['start_time']
     if percent > 0 and percent < 100:
         estimated_total = elapsed / (percent / 100)
@@ -241,20 +239,22 @@ def update_stream_job_progress(job_id, percent, message):
     else:
         estimated_remaining = 0
 
-    # Update only if significant change
+    final_estimated_time = estimated_time if estimated_time is not None else estimated_remaining
+
     if (abs(percent - job['progress']) > 1 or
         message != job['message'] or
-        percent == 100):
+        percent == 100 or
+        job['error'] is not None):
         
         job.update({
             'progress': min(100, max(0, percent)),
             'message': message,
-            'estimated_time': estimated_remaining,
-            'last_updated': now
+            'estimated_time': final_estimated_time,
+            'last_updated': now,
         })
         
         logging.info("Stream Job %s: %s%% - %s (Est: %ss)",
-                    job_id, percent, message, estimated_remaining)
+                    job_id, percent, message, final_estimated_time)
 
 # --- New Helper Functions for Chaturbate Scraping ---
 def extract_room_slug(url: str) -> str:
@@ -660,7 +660,6 @@ def scrape_stripchat_data(url, progress_callback=None):
     Enhanced Stripchat scraper combining network interception with direct JavaScript
     player state inspection to reliably capture HLS URLs.
     """
-
     def update_progress(percent, message):
         if progress_callback:
             progress_callback(percent, message)
@@ -668,7 +667,6 @@ def scrape_stripchat_data(url, progress_callback=None):
     try:
         update_progress(15, "Initializing browser")
 
-        # Configure Chrome options with enhanced stealth settings
         chrome_options = Options()
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--window-size=1920,1080")
@@ -679,11 +677,9 @@ def scrape_stripchat_data(url, progress_callback=None):
                                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                                     "Chrome/119.0.0.0 Safari/537.36")
 
-        # Advanced anti-detection configuration
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         chrome_options.add_experimental_option("useAutomationExtension", False)
 
-        # Initialize WebDriver with enhanced options
         driver = webdriver.Chrome(options=chrome_options)
         driver.execute_cdp_cmd("Network.enable", {})
 
@@ -691,7 +687,6 @@ def scrape_stripchat_data(url, progress_callback=None):
             update_progress(20, "Loading page")
             driver.get(url)
             
-            # Attempt to extract HLS URL directly from player state
             update_progress(30, "Inspecting player state")
             hls_url = None
             js_script = """
@@ -711,7 +706,6 @@ def scrape_stripchat_data(url, progress_callback=None):
             except Exception as js_error:
                 logging.warning(f"JS player inspection failed: {js_error}")
 
-            # If direct method failed, fall back to network interception
             if not hls_url:
                 update_progress(43, "Monitoring network requests")
                 m3u8_urls = set()
@@ -729,14 +723,13 @@ def scrape_stripchat_data(url, progress_callback=None):
                     if m3u8_urls:
                         break
                     time.sleep(1)
+                    update_progress(43 + ((time.time() - start_time) / max_wait) * 10, "Still searching for stream...")
 
-                # Prioritize URLs containing 'chunklist' or 'index'
                 hls_url = next((url for url in m3u8_urls 
                               if any(kw in url for kw in ['chunklist', 'index'])), None)
                 if not hls_url and m3u8_urls:
                     hls_url = next(iter(m3u8_urls))
 
-            # Validation and error handling
             if not hls_url:
                 raise RuntimeError("HLS URL not found through any method")
 
@@ -744,7 +737,6 @@ def scrape_stripchat_data(url, progress_callback=None):
             if not re.match(r"https?://[^\s]+\.m3u8", hls_url):
                 raise ValueError("Invalid HLS URL format")
 
-            # Extract additional metadata from player state
             metadata_script = """
             return {
                 resolutions: window.__NUXT__?.data?.player?.data?.resolutions,
@@ -758,26 +750,27 @@ def scrape_stripchat_data(url, progress_callback=None):
             return {
                 "status": "online",
                 "streamer_username": metadata.get("broadcaster") or url.split("/")[-1],
-                "stripchat_m3u8_url": hls_url,  # Changed from hls_url to stripchat_m3u8_url
+                "stripchat_m3u8_url": hls_url,
                 "resolutions": metadata.get("resolutions", []),
                 "is_live": metadata.get("isLive", True),
                 "detection_method": "player_state" if hls_url else "network_interception"
             }
 
-        except Exception as e:
-            logging.error(f"Scraping error: {str(e)}")
-            raise
-
         finally:
             driver.quit()
 
     except Exception as e:
+        error_msg = f"Scraping error: {str(e)}"
+        logging.error(error_msg)
+        update_progress(100, error_msg)
         return {
             "status": "error",
             "message": str(e),
             "error_type": "scraping_error",
             "platform": "stripchat"
         }
+
+
 def run_scrape_job(job_id, url):
     """Run a scraping job and update progress interactively."""
     update_job_progress(job_id, 0, "Starting scrape job")
@@ -794,19 +787,10 @@ def run_scrape_job(job_id, url):
         scrape_jobs[job_id]["error"] = "Scraping failed"
     update_job_progress(job_id, 100, scrape_jobs[job_id].get("error", "Scraping complete"))
 
-def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
-    """
-    Handles the creation of a streaming connection with fun, quirky progress updates.
-    
-    This function connects to streaming platforms (Chaturbate or Stripchat), extracts
-    stream information, saves it to a database, assigns it to an agent if requested,
-    and sends notifications when complete.
-    
-    Features entertaining progress messages that make technical processes more fun!
-    """
+# scraping.py
+def run_stream_creation_job(app, job_id, room_url, platform, agent_id=None, notes=None, priority='normal'):
     with app.app_context():
         start_time = time.time()
-        # Initialize job with fun starting message
         stream_creation_jobs[job_id] = {
             'start_time': start_time,
             'progress': 0,
@@ -814,26 +798,25 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
             'estimated_time': 120,
             'last_updated': start_time,
             'error': None,
-            'stream': None
+            'stream': None,
+            'assignment': None,
         }
-        
-        # Define progress phases with quirky technical messages for each step
+
         progress_markers = {
             'validation': {'start': 0, 'end': 10, 'microsteps': 5},
             'scraping': {'start': 10, 'end': 55, 'microsteps': 12},
             'database': {'start': 55, 'end': 75, 'microsteps': 8},
             'assignment': {'start': 75, 'end': 90, 'microsteps': 6},
-            'finalization': {'start': 90, 'end': 100, 'microsteps': 5}
+            'finalization': {'start': 90, 'end': 100, 'microsteps': 5},
         }
-        
-        # Fun, quirky messages for each phase to entertain users while they wait
+
         phase_messages = {
             'validation': [
                 "Initializing neural pathways",
                 "Verifying dimensional integrity",
                 "Checking stream paradox coefficients",
                 "Validating URL quantum state",
-                "Confirming reality alignment"
+                "Confirming reality alignment",
             ],
             'scraping': [
                 f"Deploying reconnaissance nanobots to {platform}",
@@ -847,7 +830,7 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
                 "Analyzing transmission integrity",
                 "Computing bandwidth prerequisites",
                 "Validating data fidelity",
-                "Finalizing stream parameters"
+                "Finalizing stream parameters",
             ],
             'database': [
                 "Warming up the database hyperdrive",
@@ -857,7 +840,7 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
                 "Optimizing data insertion vectors",
                 "Establishing persistence field",
                 "Committing to spacetime continuum",
-                "Synchronizing parallel universes"
+                "Synchronizing parallel universes",
             ],
             'assignment': [
                 "Locating agent in the multiverse",
@@ -865,37 +848,28 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
                 "Establishing secure neural link",
                 "Creating agent-stream quantum entanglement",
                 "Configuring assignment algorithms",
-                "Recording assignment in universal ledger"
+                "Recording assignment in universal ledger",
             ],
             'finalization': [
                 "Engaging notification hyperdrive",
                 "Broadcasting across all dimensions",
                 "Notifying the Telegram Council",
                 "Integrating with cosmic mesh network",
-                "Completing stream initialization"
-            ]
+                "Completing stream initialization",
+            ],
         }
-        
-        # Progress tracking variables
+
         last_progress = 0
         last_micro_update = time.time() - 2
-        micro_interval = 0.7  # seconds between micro-updates
-        
-        # Helper function to update progress with fun messages
+        micro_interval = 0.7
+
         def update_with_phase(phase, subprogress=0, custom_message=None):
             nonlocal last_progress, last_micro_update
-            
             if phase not in progress_markers:
                 return
-                
             markers = progress_markers[phase]
-            # Calculate overall progress percentage
             phase_progress = markers['start'] + (markers['end'] - markers['start']) * (subprogress / 100)
-            
-            # Ensure progress never goes backward
             phase_progress = max(int(phase_progress), last_progress)
-            
-            # Select a quirky message based on progress
             current_time = time.time()
             if custom_message is None and current_time - last_micro_update >= micro_interval:
                 micro_step = min(int(subprogress / (100 / len(phase_messages[phase]))), len(phase_messages[phase]) - 1)
@@ -903,234 +877,164 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id):
                 last_micro_update = current_time
             else:
                 phase_message = custom_message or f"Processing {phase}"
-            
-            # Update estimated time remaining
             elapsed = current_time - start_time
             progress_delta = phase_progress - last_progress
             if progress_delta > 0:
-                # Dynamic time estimation that decreases as progress increases
                 estimated_total = elapsed * (100 / max(phase_progress, 1)) * 0.9
                 remaining = max(estimated_total - elapsed, 0)
-                
-                # Update the job progress
                 update_stream_job_progress(
-                    job_id, 
-                    phase_progress, 
-                    phase_message,
-                    estimated_time=int(remaining)
+                    job_id, phase_progress, phase_message, estimated_time=int(remaining)
                 )
-                
                 last_progress = phase_progress
-        
-        # Updates the job progress record
-        def update_stream_job_progress(job_id, progress, message, estimated_time=None):
-            if job_id in stream_creation_jobs:
-                stream_creation_jobs[job_id].update({
-                    'progress': int(progress),  # Always use whole numbers
-                    'message': message,
-                    'last_updated': time.time()
-                })
-                if estimated_time is not None:
-                    stream_creation_jobs[job_id]['estimated_time'] = estimated_time
-        
+
         try:
-            # PHASE 1: VALIDATION - Check if we can proceed
             for i in range(progress_markers['validation']['microsteps']):
                 progress_pct = (i / progress_markers['validation']['microsteps']) * 100
                 update_with_phase('validation', progress_pct)
-                time.sleep(0.2)  # Small delay for visual feedback
-            
-            # PHASE 2: SCRAPING - Get stream data from the platform
+                time.sleep(0.2)
+
             update_with_phase('scraping', 5, f"Deploying data extraction probes to {platform}")
-            
             try:
-                # Progress callback for scraping phase
                 def scraping_progress_callback(percent, message):
-                    # Add some randomness to make it seem more "alive"
                     jitter = random.uniform(-2, 2)
                     adj_percent = max(0, min(100, percent + jitter))
-                    update_with_phase('scraping', adj_percent)
-                
-                # Try scraping with retries if needed
+                    update_with_phase('scraping', adj_percent, message)
+
                 max_retries = 3
                 retry_count = 0
                 scraped_data = None
-                
                 while retry_count < max_retries:
                     try:
                         if platform == "chaturbate":
-                            scraped_data = scrape_chaturbate_data(
-                                room_url, 
-                                progress_callback=scraping_progress_callback
-                            )
+                            scraped_data = scrape_chaturbate_data(room_url, scraping_progress_callback)
                         else:
-                            scraped_data = scrape_stripchat_data(
-                                room_url,
-                                progress_callback=scraping_progress_callback
-                            )
-                            # Fix: Handle different key naming for Stripchat
-                            if scraped_data and 'status' in scraped_data and scraped_data['status'] == 'online':
-                                if 'hls_url' in scraped_data:
-                                    # Copy the hls_url to stripchat_m3u8_url key
-                                    scraped_data['stripchat_m3u8_url'] = scraped_data['hls_url']
-                        
-                        # If we got here, scraping succeeded
-                        break
-                        
+                            scraped_data = scrape_stripchat_data(room_url, scraping_progress_callback)
+                        if scraped_data and 'status' in scraped_data and scraped_data['status'] == 'online':
+                            break
+                        retry_count += 1
+                        if retry_count >= max_retries:
+                            raise RuntimeError("Scraping failed after maximum retries")
+                        retry_delay = 2 * retry_count
+                        update_with_phase('scraping', 40 + retry_count * 10, f"Retrying scraping (attempt {retry_count+1}/{max_retries})")
+                        time.sleep(retry_delay)
                     except Exception as e:
                         retry_count += 1
                         if retry_count >= max_retries:
                             raise
-                        
-                        retry_delay = 2 * retry_count  # Exponential backoff
-                        update_with_phase('scraping', 
-                                         40 + retry_count * 10, 
-                                         f"Recalibrating scraper algorithms (attempt {retry_count+1}/{max_retries})")
+                        retry_delay = 2 * retry_count
+                        update_with_phase('scraping', 40 + retry_count * 10, f"Retrying scraping (attempt {retry_count+1}/{max_retries})")
                         time.sleep(retry_delay)
 
-                # Verify scraping results
                 update_with_phase('scraping', 85, "Verifying data integrity")
-                
                 if not scraped_data or 'status' not in scraped_data:
-                    raise RuntimeError("Invalid scraping response - the matrix has glitched")
-                
+                    raise RuntimeError("Invalid scraping response")
                 update_with_phase('scraping', 90, "Analyzing stream quantum state")
                 if scraped_data['status'] != 'online':
-                    raise RuntimeError(scraped_data.get('message', 'Stream is offline or hiding in another dimension'))
-                    
+                    raise RuntimeError(scraped_data.get('message', 'Stream is offline'))
                 update_with_phase('scraping', 95, "Confirming hyperlink stability")
                 expected_key = f"{platform}_m3u8_url"
                 if not scraped_data.get(expected_key):
-                    raise RuntimeError(f"Missing stream URL (the {expected_key} has vanished)")
-                
-                update_with_phase('scraping', 100, "Stream data successfully extracted from the ether")
-
+                    raise RuntimeError(f"Missing stream URL")
+                update_with_phase('scraping', 100, "Stream data extracted")
             except Exception as e:
-                update_with_phase('scraping', 100, f"Scraping sensors malfunctioned: {str(e)}")
-                raise RuntimeError(f"Scraping failed: {str(e)}") from e
+                update_with_phase('scraping', 100, f"Scraping failed: {str(e)}")
+                raise
 
-            # PHASE 3: DATABASE - Save the stream data
             update_with_phase('database', 10, "Preparing database quantum entanglement")
             try:
-                for i in range(progress_markers['database']['microsteps']):
-                    progress_pct = (i / progress_markers['database']['microsteps']) * 100
-                    update_with_phase('database', progress_pct)
-                    time.sleep(0.1)
-                
-                # FIX: Use a single transaction for checking existence and creating the stream
                 with db.session.begin():
-                    # First check if the stream exists within the transaction
                     existing_stream = db.session.query(Stream).filter_by(room_url=room_url).with_for_update().first()
                     if existing_stream:
                         raise ValueError(f"Stream already exists with URL: {room_url}")
-                    
-                    # Create the appropriate stream object based on platform
                     if platform == "chaturbate":
                         stream = ChaturbateStream(
                             room_url=room_url,
                             streamer_username=scraped_data['streamer_username'],
                             chaturbate_m3u8_url=scraped_data['chaturbate_m3u8_url'],
-                            type='chaturbate'
+                            type='chaturbate',
                         )
                     else:
                         stream = StripchatStream(
                             room_url=room_url,
                             streamer_username=scraped_data['streamer_username'],
                             stripchat_m3u8_url=scraped_data['stripchat_m3u8_url'],
-                            type='stripchat'
+                            type='stripchat',
                         )
-                    
-                    # Add and flush but don't commit yet
                     db.session.add(stream)
                     db.session.flush()
-                
-                # Refresh to get ID and other generated values
                 db.session.refresh(stream)
-                update_with_phase('database', 100, "Stream record materialized in the database dimension")
-                
+                update_with_phase('database', 100, "Stream record materialized")
             except Exception as e:
-                # Handle specific database constraint violation
-                if "violates unique constraint" in str(e) and "room_url" in str(e):
-                    raise RuntimeError(f"Stream already exists with this URL. Please try a different URL.")
-                else:
-                    raise RuntimeError(f"Database quantum flux error: {str(e)}")
+                update_with_phase('database', 100, f"Database error: {str(e)}")
+                raise
 
-            # PHASE 4: AGENT ASSIGNMENT - Connect stream to an agent if requested
-            stream_creation_jobs[job_id]["progress"] = 95
-            stream_creation_jobs[job_id]["message"] = "Finalizing stream creation..."
-            
-            if agent_id:
-                update_with_phase('assignment', 20, "Establishing agent neural connection")
-                try:
-                    with app.app_context():
-                        try:
-                            from models import Assignment
-                            assignment = Assignment(agent_id=agent_id, stream_id=stream.id)
-                            db.session.add(assignment)
-                            db.session.commit()
-                            update_with_phase('assignment', 100, "Stream created and assigned successfully.")
-                        except Exception as e:
-                            update_with_phase('assignment', 100, f"Stream created but assignment failed: {str(e)}")
-                            # Log the error but don't fail the stream creation
-                            logging.error(f"Assignment creation failed: {str(e)}")
-                except Exception as e:
-                    raise RuntimeError(f"Assignment failed: {str(e)}")
-            else:
-                # Skip assignment phase if no agent_id
-                update_with_phase('assignment', 100, "No agent to assign - running in autonomous mode")
-                
-            # PHASE 5: FINALIZATION - Send notifications and wrap up
+            update_with_phase('assignment', 20, "Establishing agent neural connection")
+            assignment = None
+            try:
+                if agent_id:
+                    assignment, created = AssignmentService.assign_stream_to_agent(
+                        stream_id=stream.id,
+                        agent_id=agent_id,
+                        assigner_id=None,
+                        notes=notes,
+                        priority=priority,
+                        metadata={"source": "interactive_creation"},
+                    )
+                else:
+                    assignment, created = AssignmentService.auto_assign_stream(
+                        stream_id=stream.id,
+                        assigner_id=None,
+                    )
+                update_with_phase('assignment', 100, "Assignment completed")
+            except Exception as e:
+                update_with_phase('assignment', 100, f"Assignment failed: {str(e)}")
+                logging.error(f"Assignment failed but stream created: {str(e)}")
+
             update_with_phase('finalization', 30, "Charging notification particle accelerator")
             try:
-                # Simulate notification work with micro-updates
-                for i in range(progress_markers['finalization']['microsteps']):
-                    progress_pct = (i / progress_markers['finalization']['microsteps']) * 100
-                    update_with_phase('finalization', progress_pct)
-                    time.sleep(0.15)
-                
-                # Send notifications 
-                send_telegram_notifications(
+                NotificationService.notify_admins(
+                    'stream_created',
+                    {
+                        'message': f"New stream created: {stream.streamer_username}",
+                        'room_url': room_url,
+                        'streamer_username': stream.streamer_username,
+                        'platform': platform,
+                        'assignment_id': assignment.id if assignment else None,
+                    },
+                    room_url,
                     platform,
                     stream.streamer_username,
-                    room_url
                 )
-                update_with_phase('finalization', 95, "Notifications broadcasted across the multiverse")
+                update_with_phase('finalization', 95, "Notifications broadcasted")
             except Exception as e:
-                logging.error("Notifications failed: %s", str(e))
-                update_with_phase('finalization', 95, "Notification subspace transmission jammed (non-critical)")
-            
-            # Success! We're done!
-            update_stream_job_progress(job_id, 100, "Stream successfully created and ready for observation")
+                logging.error(f"Notifications failed: {str(e)}")
+                update_with_phase('finalization', 95, "Notification transmission failed")
+
             stream_creation_jobs[job_id].update({
+                'progress': 100,
+                'message': "Stream successfully created",
                 'stream': stream.serialize(),
-                'stream_data': stream.serialize(),  # Added as per your request
-                'estimated_time': 0
+                'assignment': assignment.serialize() if assignment else None,
+                'estimated_time': 0,
             })
 
         except Exception as e:
-            # Handle any errors that occurred
             error_msg = f"Creation failed: {str(e)}"
-            logging.error("Full error: %s", error_msg)
-            if hasattr(e, '__cause__'):
-                logging.error("Root cause: %s", str(e.__cause__))
-                
+            logging.error(f"Stream creation job failed: {error_msg}")
             stream_creation_jobs[job_id].update({
                 'error': error_msg,
                 'progress': 100,
-                'message': f"Mission aborted: {error_msg}"
+                'message': f"Mission aborted: {error_msg}",
             })
-
         finally:
-            # Clean up resources
             try:
                 db.session.close()
             except Exception as e:
-                logging.warning("Session close anomaly detected: %s", str(e))
-            
-            # Log completion metrics
+                logging.warning(f"Session close failed: {str(e)}")
             completion_time = time.time() - start_time
             logging.info(f"Stream creation job {job_id} completed in {completion_time:.2f} seconds")
 
+            
 def send_telegram_notifications(platform, streamer, room_url):
     """Robust notification handler"""
     try:
