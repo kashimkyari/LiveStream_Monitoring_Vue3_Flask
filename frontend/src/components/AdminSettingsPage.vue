@@ -1,7 +1,8 @@
 <template>
   <div class="admin-settings-container" :data-theme="isDarkTheme ? 'dark' : 'light'">
+
     <div class="settings-sidebar">
-      <h3 class="sidebar-title">Admin Settings</h3>
+      <h3 class="sidebar-title">Settings</h3>
       <ul class="settings-menu">
         <li
           v-for="section in sections"
@@ -33,6 +34,21 @@
     </div>
 
     <main class="settings-content">
+       <!-- Logout Button -->
+      <div class="action-buttons">
+        <button
+          class="btn-danger"
+          @click="showLogoutConfirmation = true"
+          :disabled="isLoggingOut"
+        >
+          <font-awesome-icon
+            :icon="isLoggingOut ? 'spinner' : 'sign-out-alt'"
+            :spin="isLoggingOut"
+            class="icon-left"
+          />
+          {{ isLoggingOut ? 'Logging out...' : 'Logout' }}
+        </button>
+      </div>
       <div class="settings-header">
         <h2>{{ sections.find(s => s.id === activeSection)?.name || 'Settings' }}</h2>
       </div>
@@ -423,21 +439,7 @@
         </div>
       </transition>
 
-      <!-- Logout Button -->
-      <div class="action-buttons">
-        <button
-          class="btn-danger"
-          @click="showLogoutConfirmation = true"
-          :disabled="isLoggingOut"
-        >
-          <font-awesome-icon
-            :icon="isLoggingOut ? 'spinner' : 'sign-out-alt'"
-            :spin="isLoggingOut"
-            class="icon-left"
-          />
-          {{ isLoggingOut ? 'Logging out...' : 'Logout' }}
-        </button>
-      </div>
+     
     </main>
 
     <!-- Logout Confirmation Modal -->
@@ -541,7 +543,7 @@ const sections = [
 const setActiveSection = (sectionId) => {
   activeSection.value = sectionId
   if (sectionId === 'tracking' && !subSection.value) {
-    subSection.value = 'keywords'
+    subSection.value = 'objects'
   }
 }
 
@@ -659,7 +661,7 @@ const fetchAvailableUsernames = async () => {
     return
   }
   try {
-    const response = await axios.get('/api/available-usernames')
+    const response = await axios.get('/api/agents')
     availableUsernames.value = response.data
     setCachedData('availableUsernames', response.data)
   } catch (error) {
@@ -1094,17 +1096,17 @@ const completeLogout = () => {
   padding: 0.5rem 0.5rem;
   cursor: pointer;
   font-size: 0.95rem;
-  color: var(--text-color);
+/*  color: var(--text-color);*/
   transition: all 0.3s ease;
   width: 100%;
 }
 
 .submenu-item:hover {
-  color: var(--primary-color);
+/*  color: var(--primary-color);*/
 }
 
 .submenu-item.active {
-  color: var(--primary-color);
+/*  color: var(--primary-color);*/
   font-weight: 600;
 }
 
@@ -1320,38 +1322,164 @@ select {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: rgba(0, 0, 0, 0.6);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
+  backdrop-filter: blur(4px);
 }
 
 .modal-container {
-  background-color: var(--content-bg);
-  padding: 2.5rem;
+  background-color: var(--input-bg);
   border-radius: 12px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
-  max-width: 500px;
   width: 100%;
+  max-width: 450px;
+  padding: 1.5rem;
+  position: relative;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
 }
 
 .modal-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
+  position: relative;
 }
 
 .modal-icon {
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   color: var(--danger-color);
+  margin-right: 0.75rem;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.close-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.close-btn:hover {
+  color: var(--text-color);
+}
+
+.modal-message {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
 }
 
 .modal-actions {
   display: flex;
+  gap: 1rem;
   justify-content: flex-end;
-  gap: 1.5rem;
+}
+
+/* Modal transitions */
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
+
+/* Logout Animation Styles */
+.logout-animation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+[data-theme='light'] .logout-animation-overlay {
+  background-color: rgba(248, 249, 250, 0.9);
+}
+
+[data-theme='dark'] .logout-animation-overlay {
+  background-color: rgba(18, 18, 18, 0.9);
+}
+
+.logout-animation-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
+}
+
+.logout-icon {
+  font-size: 4rem;
+  color: var(--primary-color);
+  margin-bottom: 1.5rem;
+  opacity: 0;
+}
+
+[data-theme='light'] .logout-icon {
+  color: var(--light-primary);
+}
+
+[data-theme='dark'] .logout-icon {
+  color: var(--dark-primary);
+}
+
+.logout-message {
+  font-size: 1.3rem;
+  color: white;
+  text-align: center;
+  margin-bottom: 2rem;
+  opacity: 0;
+}
+
+[data-theme='light'] .logout-message {
+  color: var(--light-text);
+}
+
+[data-theme='dark'] .logout-message {
+  color: var(--dark-text);
+}
+
+.logout-spinner {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+
+.spinner-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--light-primary);
+  transform: translate(-50%, -50%) rotate(calc(var(--i) * 30deg)) translateY(-30px);
+  transform-origin: center;
+  opacity: calc(1 - (var(--i) * 0.08));
+}
+
+[data-theme='dark'] .spinner-circle {
+  background-color: var(--dark-primary);
 }
 
 .section-fade-enter-active, .section-fade-leave-active {
