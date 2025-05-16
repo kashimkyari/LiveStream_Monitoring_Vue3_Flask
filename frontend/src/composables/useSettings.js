@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { useToast } from 'vue-toastification'
 
-const API_BASE_URL = 'http://localhost:5000' // Hardcoded base URL
+const API_BASE_URL = 'https://monitor-backend.jetcamstudio.com:5000' // Hardcoded base URL
 
 export function useSettings(defaultSettings = { emailNotifications: true, pushNotifications: false }) {
   const toast = useToast()

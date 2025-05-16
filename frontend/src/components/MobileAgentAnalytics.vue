@@ -94,7 +94,7 @@ import apexchart from 'vue3-apexcharts'
 import io from 'socket.io-client'
 
 const agentStore = useAgentStore()
-const socket = io('http://localhost:5000/notifications', {
+const socket = io('https://monitor-backend.jetcamstudio.com:5000/notifications', {
   path: '/ws'
 });
 

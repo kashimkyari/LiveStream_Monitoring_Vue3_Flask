@@ -7,7 +7,7 @@ export function useSocket() {
   
   const connect = () => {
     // Replace with your Socket.IO server URL
-    socket.value = io('http://localhost:5000', {
+    socket.value = io('https://monitor-backend.jetcamstudio.com:5000', {
       withCredentials: true,
       autoConnect: true
     })

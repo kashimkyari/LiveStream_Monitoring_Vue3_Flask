@@ -467,7 +467,7 @@ export default {
       }
       
       try {
-        const url = `http://localhost:5000/api/streams/interactive/sse?job_id=${jobId.value}`
+        const url = `https://monitor-backend.jetcamstudio.com:5000/api/streams/interactive/sse?job_id=${jobId.value}`
         eventSource = new EventSource(url)
         connectionStatus.value = 'sse'
         const startTime = Date.now()
@@ -543,7 +543,7 @@ export default {
           lastPollTime = now
 
           const startTime = Date.now()
-          const response = await axios.get(`http://localhost:5000/api/streams/interactive/status?job_id=${jobId.value}`)
+          const response = await axios.get(`https://monitor-backend.jetcamstudio.com:5000/api/streams/interactive/status?job_id=${jobId.value}`)
           
           console.log('Polling response:', response.data)
           latency.value = Date.now() - startTime
@@ -626,7 +626,7 @@ export default {
         assignmentDetails.value = null
         reconnectAttempts = 0
         
-        const response = await axios.post('http://localhost:5000/api/streams/interactive', streamData)
+        const response = await axios.post('https://monitor-backend.jetcamstudio.com:5000/api/streams/interactive', streamData)
         
         if (response.data && response.data.job_id) {
           jobId.value = response.data.job_id
