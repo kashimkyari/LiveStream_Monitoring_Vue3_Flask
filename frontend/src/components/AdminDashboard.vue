@@ -16,6 +16,16 @@
       :class="{ 'sidebar-minimized': sidebarMinimized }"
       ref="mainContent"
     >
+      <button 
+        @click="refreshActiveTab"
+        class="refresh-icon-button"
+        :class="{ 'refreshing': isRefreshing }"
+        :disabled="isRefreshing"
+        :title="isRefreshing ? 'Refreshing...' : 'Refresh'"
+      >
+        <font-awesome-icon icon="sync" />
+      </button>
+
       <div v-if="loading" class="loading-state">
         <div class="loading-spinner"></div>
         <p>Loading...</p>
@@ -423,6 +433,67 @@ export default {
       return allStreams.value.filter(stream => stream.status === 'offline');
     });
 
+    // Add state for refresh button
+    const isRefreshing = ref(false);
+
+    // Method to refresh the active tab
+    const refreshActiveTab = async () => {
+      if (isRefreshing.value) return;
+      
+      isRefreshing.value = true;
+      try {
+        // Create a promise for the current tab's refresh operation
+        const refreshPromise = (async () => {
+          switch (activeTab.value) {
+            case 'dashboard': {
+              const newData = await fetchDashboardData();
+              // Merge new data silently
+              Object.assign(dashboardStats.value, newData);
+              break;
+            }
+            case 'streams': {
+              const response = await axios.get('/api/streams');
+              // Update streams silently
+              allStreams.value = response.data;
+              break;
+            }
+            case 'agents': {
+              const response = await axios.get('/api/agents');
+              // Update agents silently
+              agents.value = response.data;
+              break;
+            }
+            case 'messages': {
+              const component = mainContent.value?.querySelector('.message-component');
+              if (component?.__vueParentComponent?.ctx?.refreshMessages) {
+                await component.__vueParentComponent.ctx.refreshMessages();
+              }
+              break;
+            }
+            case 'notifications': {
+              const component = mainContent.value?.querySelector('.notification-component');
+              if (component?.__vueParentComponent?.ctx?.refreshNotifications) {
+                await component.__vueParentComponent.ctx.refreshNotifications();
+              }
+              break;
+            }
+          }
+        })();
+    
+        // Keep spinner for at least 750ms for visual feedback
+        await Promise.all([
+          refreshPromise,
+          new Promise(resolve => setTimeout(resolve, 750))
+        ]);
+    
+      } catch (error) {
+        console.error('Error refreshing data:', error);
+        toast.error('Failed to refresh data');
+      } finally {
+        isRefreshing.value = false;
+      }
+    };
+
     return {
       // State
       isDarkTheme,
@@ -436,6 +507,7 @@ export default {
       notifications,
       streamCreationState,
       mainContent,
+      isRefreshing, // Add the state
 
       // Data
       dashboardStats,
@@ -473,6 +545,7 @@ export default {
       confirmAction,
       handleSidebarToggle,
       enhanceStreamWithUsername, // Export the function so it's available in templates
+      refreshActiveTab, // Add the method
 
       // Computed properties
       onlineStreams,
@@ -525,7 +598,7 @@ export default {
   background-color: var(--bg-color);
   color: var(--text-color);
   overflow-x: hidden; /* Prevent horizontal scrollbar during animations */  
-  margin-left: 60px;
+  /* margin-left: 60px; */
 }
 
 
@@ -709,6 +782,43 @@ export default {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+.refresh-icon-button {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 100;
+  padding: 0.5rem;
+  border-radius: 50%;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-color);
+  transition: all 0.3s ease;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.refresh-icon-button:hover {
+  background-color: rgba(var(--primary-rgb), 0.1);
+}
+
+.refresh-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.refresh-icon-button.refreshing svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 </style>

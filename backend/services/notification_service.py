@@ -1,7 +1,7 @@
 # services/notification_service.py
 from flask import current_app
 from extensions import db
-from models import User, DetectionLog, ChatMessage
+from models import User, DetectionLog, ChatMessage, Stream, Assignment
 from utils.notifications import emit_notification, emit_message_update
 from datetime import datetime
 from collections import defaultdict
@@ -10,6 +10,7 @@ from email.mime.text import MIMEText
 import logging
 import time
 import threading
+from sqlalchemy.orm import joinedload
 
 class NotificationService:
     # Rate limiting configuration per channel
@@ -87,13 +88,75 @@ class NotificationService:
             logging.error(f"Timestamp cleanup failed: {str(e)}")
 
     @staticmethod
+    def get_stream_assignment(room_url):
+        """Get assignment info for a stream, ensuring correct agent_id."""
+        try:
+            # Find the stream by room_url or M3U8 URL
+            stream = Stream.query.filter_by(room_url=room_url).first()
+            if not stream:
+                from models import ChaturbateStream, StripchatStream
+                cb_stream = ChaturbateStream.query.filter_by(chaturbate_m3u8_url=room_url).first()
+                if cb_stream:
+                    stream = Stream.query.get(cb_stream.id)
+                else:
+                    sc_stream = StripchatStream.query.filter_by(stripchat_m3u8_url=room_url).first()
+                    if sc_stream:
+                        stream = Stream.query.get(sc_stream.id)
+            
+            if not stream:
+                logging.warning(f"No stream found for URL: {room_url}")
+                return None, None
+            
+            # Query assignments for this stream
+            query = Assignment.query.options(
+                joinedload(Assignment.agent),
+                joinedload(Assignment.stream)
+            ).filter_by(stream_id=stream.id, status='active')
+            
+            assignments = query.all()
+            
+            if not assignments:
+                logging.info(f"No active assignments found for stream: {room_url}")
+                return None, None
+            
+            # Select the first active assignment
+            assignment = assignments[0]
+            agent_id = assignment.agent_id
+            # Cache the agent username
+            NotificationService.fetch_agent_username(agent_id)
+            return assignment.id, agent_id
+        except Exception as e:
+            logging.error(f"Error fetching assignment for stream {room_url}: {e}")
+            return None, None
+
+    @staticmethod
+    def fetch_agent_username(agent_id):
+        """Fetch a single agent's username and cache it."""
+        from notifications import agent_cache
+        if agent_id in agent_cache:
+            return agent_cache[agent_id]
+        try:
+            agent = User.query.get(agent_id)
+            if agent:
+                agent_cache[agent_id] = agent.username or f"Agent {agent_id}"
+                return agent_cache[agent_id]
+            else:
+                logging.warning(f"Agent {agent_id} not found")
+                agent_cache[agent_id] = f"Agent {agent_id}"
+                return agent_cache[agent_id]
+        except Exception as e:
+            logging.error(f"Error fetching username for agent {agent_id}: {e}")
+            agent_cache[agent_id] = f"Agent {agent_id}"
+            return agent_cache[agent_id]
+
+    @staticmethod
     def send_user_notification(user, event_type, details, room_url=None, platform=None, streamer=None):
         """Send notifications to a user based on their preferences, with per-channel rate limiting."""
         if not user.receive_updates:
             logging.info(f"Skipping notifications for {user.username} (receive_updates=False)")
             return
 
-        # Clean up timestamps periodically (e.g., every 100 calls)
+        # Clean up timestamps periodically
         if len(NotificationService._notification_timestamps) % 100 == 0:
             NotificationService._cleanup_timestamps()
 
@@ -121,16 +184,27 @@ class NotificationService:
 
     @staticmethod
     def create_in_app_notification(user, event_type, details, room_url=None, platform=None, streamer=None):
-        """Create an in-app notification."""
+        """Create an in-app notification with correct agent assignment."""
         try:
-            # Fetch agent username if assigned_agent is an ID
+            # Get assignment for the stream
+            assignment_id, agent_id = NotificationService.get_stream_assignment(room_url) if room_url else (None, None)
+            
+            # Determine assigned agent username
             assigned_agent_username = None
             if user.role == 'agent':
                 assigned_agent_username = user.username
+                agent_id = user.id
+            elif agent_id:
+                assigned_agent_username = NotificationService.fetch_agent_username(agent_id)
             elif 'assigned_agent' in details and details['assigned_agent']:
-                agent = User.query.filter_by(id=details['assigned_agent'], role="agent").first()
-                assigned_agent_username = agent.username if agent else "Unknown"
+                # Handle case where details contain agent_id
+                try:
+                    agent_id = int(details['assigned_agent'])
+                    assigned_agent_username = NotificationService.fetch_agent_username(agent_id)
+                except (ValueError, TypeError):
+                    assigned_agent_username = details['assigned_agent']  # Assume it's already a username
 
+            # Create notification
             notification = DetectionLog(
                 event_type=event_type,
                 room_url=room_url or details.get('room_url', ''),
@@ -138,11 +212,12 @@ class NotificationService:
                     **details,
                     'platform': platform or details.get('platform', 'Unknown'),
                     'streamer_name': streamer or details.get('streamer_username', 'Unknown'),
-                    'assigned_agent': assigned_agent_username,  # Use username instead of ID
+                    'assigned_agent': assigned_agent_username or 'Unassigned',
                 },
                 timestamp=datetime.utcnow(),
                 read=False,
-                assigned_agent=user.id if user.role == 'agent' else None,  # Keep ID for DB reference
+                assigned_agent=agent_id,
+                assignment_id=assignment_id,
             )
             db.session.add(notification)
             db.session.commit()
@@ -156,7 +231,7 @@ class NotificationService:
                 "room_url": notification.room_url,
                 "streamer": notification.details.get('streamer_name', 'Unknown'),
                 "platform": notification.details.get('platform', 'Unknown'),
-                "assigned_agent": assigned_agent_username or "Unassigned",  # Use username in response
+                "assigned_agent": assigned_agent_username or 'Unassigned',
             }
             emit_notification(notification_data)
         except Exception as e:
@@ -165,19 +240,28 @@ class NotificationService:
 
     @staticmethod
     def send_email_notification(user, event_type, details, platform, streamer):
-        """Send an email notification."""
+        """Send an email notification with correct agent username."""
         try:
-            # Fetch agent username if assigned_agent is present
-            assigned_agent = details.get('assigned_agent', 'Unassigned')
-            if assigned_agent and isinstance(assigned_agent, int):
-                agent = User.query.filter_by(id=assigned_agent, role="agent").first()
-                assigned_agent = agent.username if agent else "Unknown"
+            # Get assignment for the stream
+            room_url = details.get('room_url')
+            _, agent_id = NotificationService.get_stream_assignment(room_url) if room_url else (None, None)
+            
+            # Determine assigned agent username
+            assigned_agent = None
+            if agent_id:
+                assigned_agent = NotificationService.fetch_agent_username(agent_id)
+            elif 'assigned_agent' in details:
+                try:
+                    agent_id = int(details['assigned_agent'])
+                    assigned_agent = NotificationService.fetch_agent_username(agent_id)
+                except (ValueError, TypeError):
+                    assigned_agent = details['assigned_agent']  # Assume it's already a username
 
             msg = MIMEText(
                 f"New {event_type.replace('_', ' ').title()} Alert\n"
                 f"Platform: {platform or 'Unknown'}\n"
                 f"Streamer: {streamer or 'Unknown'}\n"
-                f"Assigned Agent: {assigned_agent}\n"
+                f"Assigned Agent: {assigned_agent or 'Unassigned'}\n"
                 f"Details: {details.get('message', 'No details provided')}\n"
                 f"URL: {details.get('room_url', 'No URL provided')}"
             )
@@ -198,20 +282,29 @@ class NotificationService:
 
     @staticmethod
     def send_telegram_notification(user, event_type, details, platform, streamer):
-        """Send a Telegram notification."""
+        """Send a Telegram notification with correct agent username."""
         try:
             from notifications import send_text_message
-            # Fetch agent username if assigned_agent is present
-            assigned_agent = details.get('assigned_agent', 'Unassigned')
-            if assigned_agent and isinstance(assigned_agent, int):
-                agent = User.query.filter_by(id=assigned_agent, role="agent").first()
-                assigned_agent = agent.username if agent else "Unknown"
+            # Get assignment for the stream
+            room_url = details.get('room_url')
+            _, agent_id = NotificationService.get_stream_assignment(room_url) if room_url else (None, None)
+            
+            # Determine assigned agent username
+            assigned_agent = None
+            if agent_id:
+                assigned_agent = NotificationService.fetch_agent_username(agent_id)
+            elif 'assigned_agent' in details:
+                try:
+                    agent_id = int(details['assigned_agent'])
+                    assigned_agent = NotificationService.fetch_agent_username(agent_id)
+                except (ValueError, TypeError):
+                    assigned_agent = details['assigned_agent']  # Assume it's already a username
 
             message = (
                 f"🚨 New {event_type.replace('_', ' ').title()}\n"
                 f"Platform: {platform or 'Unknown'}\n"
                 f"Streamer: {streamer or 'Unknown'}\n"
-                f"Assigned Agent: {assigned_agent}\n"
+                f"Assigned Agent: {assigned_agent or 'Unassigned'}\n"
                 f"URL: {details.get('room_url', 'No URL provided')}\n"
                 f"Details: {details.get('message', 'No details provided')}"
             )
@@ -224,10 +317,17 @@ class NotificationService:
     def notify_admins(event_type, details, room_url=None, platform=None, streamer=None):
         """Notify all admins with appropriate channels."""
         admins = User.query.filter_by(role='admin', receive_updates=True).all()
-        # Ensure assigned_agent is username in details
-        if 'assigned_agent' in details and details['assigned_agent']:
-            agent = User.query.filter_by(id=details['assigned_agent'], role="agent").first()
-            details['assigned_agent'] = agent.username if agent else "Unknown"
+        # Ensure assigned_agent is username
+        room_url = room_url or details.get('room_url')
+        _, agent_id = NotificationService.get_stream_assignment(room_url) if room_url else (None, None)
+        if agent_id:
+            details['assigned_agent'] = NotificationService.fetch_agent_username(agent_id)
+        elif 'assigned_agent' in details and details['assigned_agent']:
+            try:
+                agent_id = int(details['assigned_agent'])
+                details['assigned_agent'] = NotificationService.fetch_agent_username(agent_id)
+            except (ValueError, TypeError):
+                pass  # Assume it's already a username
         for admin in admins:
             NotificationService.send_user_notification(
                 admin, event_type, details, room_url, platform, streamer
@@ -242,7 +342,7 @@ class NotificationService:
             'streamer_username': stream.streamer_username,
             'platform': stream.type,
             'assigned_by': assigner.username if assigner else 'Admin',
-            'assigned_agent': sys_msg.receiver_id,  # Include agent's username
+            'assigned_agent': agent.username,
             'notes': notes or '',
             'priority': priority,
         }

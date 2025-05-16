@@ -380,7 +380,7 @@ import anime from 'animejs/lib/anime.es.js';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 
 // Configure axios to use the backend URL
-axios.defaults.baseURL = 'https://monitor-backend.jetcamstudio.com:5000';
+axios.defaults.baseURL = 'http://localhost:5000';
 
 export default {
   name: 'AgentMessageComponent',
@@ -525,14 +525,14 @@ export default {
     };
     
     const initSocket = () => {
-      // Connect to the backend athttps://monitor-backend.jetcamstudio.com:5000
-      socket.value = io('https://monitor-backend.jetcamstudio.com:5000/messages', { 
+      // Connect to the backend athttp://localhost:5000
+      socket.value = io('http://localhost:5000/messages', { 
         path: '/ws',
         transports: ['websocket']
       });
       
       socket.value.on('connect', () => {
-        console.log('Connected to WebSocket server athttps://monitor-backend.jetcamstudio.com:5000');
+        console.log('Connected to WebSocket server athttp://localhost:5000');
         isConnected.value = true;
         
         // Send pending messages if any
@@ -1679,6 +1679,7 @@ export default {
   overflow: hidden;
   box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
   position: relative;
+  margin-left: 60px;
 }
 
 /* User panel (sidebar) */

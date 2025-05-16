@@ -436,12 +436,14 @@ export default {
 
 <style scoped>
 .agents-tab {
-  width: 100%;
   box-sizing: border-box;
   animation: fadeIn 0.4s ease;
   position: relative;
   padding-top: 1.5rem;
   flex-wrap: wrap;
+  width: auto;
+  padding-right: 20px;
+  margin-left: 60px;
 }
 
 .tab-header {

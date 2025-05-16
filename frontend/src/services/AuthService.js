@@ -14,7 +14,7 @@ import { useToast } from 'vue-toastification';
 import sessionService from './SessionService';
 
 // Define the API base URL - switched to HTTP for better compatibility
-const API_BASE_URL = 'https://monitor-backend.jetcamstudio.com:5000/api'; // Local development API URL (relative path)
+const API_BASE_URL = 'http://localhost:5000'; // Local development API URL (relative path)
 
 // Create axios instance with the base URL
 const apiClient = axios.create({
@@ -36,7 +36,7 @@ class AuthService {
    */
   async login(username, password) {
     try {
-      const response = await apiClient.post('/login', {
+      const response = await apiClient.post('/api/login', {
         username,
         password
       });
@@ -123,7 +123,7 @@ class AuthService {
    */
   async register(username, email, password) {
     try {
-      const response = await apiClient.post('/register', {
+      const response = await apiClient.post('/api/register', {
         username,
         email,
         password
@@ -181,7 +181,7 @@ class AuthService {
    */
   async forgotPassword(email) {
     try {
-      const response = await apiClient.post('/forgot-password', {
+      const response = await apiClient.post('/api/forgot-password', {
         email
       });
       
@@ -222,7 +222,7 @@ class AuthService {
    */
   async resetPassword(token, password) {
     try {
-      const response = await apiClient.post('/reset-password', {
+      const response = await apiClient.post('/api/reset-password', {
         token,
         password
       });
@@ -267,7 +267,7 @@ class AuthService {
    */
   async verifyResetToken(token) {
     try {
-      const response = await apiClient.post('/verify-reset-token', {
+      const response = await apiClient.post('/api/verify-reset-token', {
         token
       });
       
@@ -308,7 +308,7 @@ class AuthService {
    */
   async changePassword(currentPassword, newPassword) {
     try {
-      const response = await apiClient.post('/change-password', {
+      const response = await apiClient.post('/api/change-password', {
         current_password: currentPassword,
         new_password: newPassword
       });
@@ -353,7 +353,7 @@ class AuthService {
    */
   async checkUsername(username) {
     try {
-      const response = await apiClient.post('/check-username', {
+      const response = await apiClient.post('/api/check-username', {
         username
       });
       
@@ -412,7 +412,7 @@ class AuthService {
    */
   async updateProfile(profileData) {
     try {
-      const response = await apiClient.post('/update-profile', profileData);
+      const response = await apiClient.post('/api/update-profile', profileData);
 
       if (response.data && response.data.success) {
         // Update localStorage with updated user info

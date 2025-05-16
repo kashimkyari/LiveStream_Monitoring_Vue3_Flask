@@ -1,111 +1,102 @@
 <template>
-  <div class="agent-streams" :class="{ 'dark-theme': isDarkTheme }">
-    <div class="stream-dashboard-header">
-      <div class="stream-status-summary">
-        <div class="status-pill" :class="{ 'active': liveStreams.length > 0 }">
-          <span class="status-indicator"></span>
-          <span>{{ liveStreams.length }} Live</span>
-        </div>
-        <div class="status-pill" :class="{ 'active': offlineStreams.length > 0 }">
-          <span class="status-indicator offline"></span>
-          <span>{{ offlineStreams.length }} Offline</span>
-        </div>
+  <section class="agent-streams" :class="{ 'dark-theme': isDarkTheme }">
+    <div class="dashboard-header">
+      <h2>Agent Streams</h2>
+    </div>
+
+    <!-- Stats section -->
+    <div class="stats-section">
+      <StatCard 
+        v-for="stat in stats"
+        :key="stat.label"
+        :value="stat.value"
+        :label="stat.label"
+        :icon="stat.icon"
+      />
+    </div>
+
+    <!-- Search and Controls -->
+    <div class="controls-section">
+      <div class="search-box">
+        <font-awesome-icon icon="search" class="search-icon" />
+        <input v-model="searchQuery" placeholder="Search assigned streams..." class="search-input" />
       </div>
-      <div class="header-actions">
-        <div class="view-toggle-container">
-          <button 
-            class="view-mode-btn" 
-            :class="{ 'active': viewMode === 'grid' }" 
-            @click="setViewMode('grid')"
-            title="Grid View"
-          >
-            <font-awesome-icon :icon="['fas', 'th']" />
-          </button>
-          <button 
-            class="view-mode-btn" 
-            :class="{ 'active': viewMode === 'list' }" 
-            @click="setViewMode('list')"
-            title="List View"
-          >
-            <font-awesome-icon :icon="['fas', 'list']" />
-          </button>
-        </div>
+      <div class="view-controls" style="display: flex; gap: 1rem;">
+        <button 
+          class="view-toggle-btn" 
+          :class="{ 'active': viewMode === 'grid' }" 
+          @click="setViewMode('grid')"
+          title="Grid View"
+        >
+          <font-awesome-icon icon="th" />
+        </button>
+        <button 
+          class="view-toggle-btn" 
+          :class="{ 'active': viewMode === 'list' }" 
+          @click="setViewMode('list')"
+          title="List View"
+        >
+          <font-awesome-icon icon="list" />
+        </button>
+        <button @click="refreshStreams" class="view-toggle-btn refresh-btn">
+          <font-awesome-icon icon="sync-alt" />
+          Refresh All
+        </button>
       </div>
     </div>
 
-    <div class="streams-content" :class="{'list-view': viewMode === 'list'}">
-      <!-- Live Streams Section -->
-      <div class="stream-section live-streams" v-if="liveStreams.length > 0">
-        <div 
-          class="streams-grid" 
-          :class="{
-            'list-layout': viewMode === 'list', 
-            'small': liveStreams.length > 6 && viewMode === 'grid', 
-            'medium': liveStreams.length > 3 && liveStreams.length <= 6 && viewMode === 'grid'
-          }"
-        >
-          <div 
-            v-for="(stream, index) in liveStreams" 
-            :key="stream.id || 'live-' + index"
-            class="stream-card-wrapper"
-            @click="openStreamDetails(stream)"
-            :class="{ 'list-item': viewMode === 'list' }"
-          >
-            <StreamCard 
-              :stream="enhanceStreamWithUsername(stream)" 
-              :index="index"
-              :isLive="true"
-              :detectionCount="getDetectionCount(stream)"
-              :playVideo="playVideo"
-              :totalStreams="totalStreams"
-              class="stream-card"
-              @detection-toggled="handleDetectionToggled"
-            ></StreamCard>
-          </div>
-        </div>
+    <!-- Stream sections -->
+    <div class="streams-section">
+      <!-- Live Streams -->
+      <div class="section-header" @click="toggleLiveCollapse">
+        <h3>Live Streams ({{ liveStreams.length }})</h3>
+        <font-awesome-icon :icon="isLiveCollapsed ? 'chevron-down' : 'chevron-up'" />
+      </div>
+      <div v-show="!isLiveCollapsed" :class="['stream-container', viewMode]">
+        <StreamCard 
+          v-for="(stream, index) in filteredLiveStreams" 
+          :key="stream.id || 'live-' + index"
+          :stream="enhanceStreamWithUsername(stream)" 
+          :index="index"
+          :isLive="true"
+          :detectionCount="getDetectionCount(stream)"
+          :totalStreams="liveStreams.length"
+          @click="openStreamDetails(stream)"
+          @detection-toggled="handleDetectionToggled"
+          @status-change="handleStreamStatusChange"
+        />
       </div>
       
-      <!-- Offline Streams Section -->
-      <div class="stream-section offline-streams" v-if="offlineStreams.length > 0">
-        <div 
-          class="streams-grid" 
-          :class="{
-            'list-layout': viewMode === 'list', 
-            'small': offlineStreams.length > 6 && viewMode === 'grid', 
-            'medium': offlineStreams.length > 3 && offlineStreams.length <= 6 && viewMode === 'grid'
-          }"
-        >
-          <div 
-            v-for="(stream, index) in offlineStreams" 
-            :key="stream.id || 'offline-' + index"
-            class="stream-card-wrapper"
-            @click="openStreamDetails(stream)"
-            :class="{ 'list-item': viewMode === 'list' }"
-          >
-            <StreamCard 
-              :stream="enhanceStreamWithUsername(stream)" 
-              :index="index"
-              :isLive="false"
-              :detectionCount="getDetectionCount(stream)"
-              :playVideo="playVideo"
-              :totalStreams="totalStreams"
-              class="stream-card"
-              @detection-toggled="handleDetectionToggled"
-            ></StreamCard>
-          </div>
-        </div>
+      <!-- Offline Streams -->
+      <div class="section-header offline-section" @click="toggleOfflineCollapse">
+        <h3>Offline Streams ({{ offlineStreams.length }})</h3>
+        <font-awesome-icon :icon="isOfflineCollapsed ? 'chevron-down' : 'chevron-up'" />
+      </div>
+      <div v-show="!isOfflineCollapsed" :class="['stream-container', viewMode]">
+        <StreamCard 
+          v-for="(stream, index) in filteredOfflineStreams" 
+          :key="stream.id || 'offline-' + index"
+          :stream="enhanceStreamWithUsername(stream)" 
+          :index="index"
+          :isLive="false"
+          :detectionCount="getDetectionCount(stream)"
+          :totalStreams="offlineStreams.length"
+          @click="openStreamDetails(stream)"
+          @detection-toggled="handleDetectionToggled"
+          @status-change="handleStreamStatusChange"
+        />
       </div>
       
       <!-- Empty State -->
-      <div class="empty-state" v-if="streams.length === 0 && !isLoading">
-        <font-awesome-icon :icon="['fas', 'video-slash']" class="empty-icon" />
+      <div class="empty-state" v-if="localStreams.length === 0 && !localIsLoading">
+        <font-awesome-icon icon="video-slash" class="empty-icon" />
         <div class="empty-title">No streams assigned</div>
         <div class="empty-description">Streams assigned to you will appear here</div>
       </div>
     </div>
-    
+
     <!-- Loading State -->
-    <div class="loading-overlay" v-if="isLoading">
+    <div class="loading-overlay" v-if="localIsLoading">
       <div class="loader-container">
         <div class="loader-circle"></div>
         <div class="loader-text">Loading streams...</div>
@@ -113,11 +104,11 @@
     </div>
     
     <!-- Error Message -->
-    <div class="error-message" v-if="error && !isLoading">
-      <font-awesome-icon :icon="['fas', 'exclamation-triangle']" class="error-icon" />
-      <div class="error-text">{{ error }}</div>
+    <div class="error-message" v-if="localError && !localIsLoading">
+      <font-awesome-icon icon="exclamation-triangle" class="error-icon" />
+      <div class="error-text">{{ localError }}</div>
       <button class="retry-button" @click="fetchAssignedStreams">
-        <font-awesome-icon :icon="['fas', 'sync']" />
+        <font-awesome-icon icon="sync" />
         <span>Retry</span>
       </button>
     </div>
@@ -131,7 +122,7 @@
       @close="closeModal"
       @refresh="handleStreamRefresh"
     />
-  </div>
+  </section>
 </template>
 
 <script>
@@ -140,23 +131,29 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import StreamCard from './StreamCard.vue'
 import StreamDetailsModal from './StreamDetailsModal.vue'
+import StatCard from './StatCard.vue'
 import axios from 'axios'
 import {
   faSync,
   faVideoSlash,
   faExclamationTriangle,
   faTh,
-  faList
+  faList,
+  faSearch,
+  faSyncAlt,
+  faChevronUp,
+  faChevronDown
 } from '@fortawesome/free-solid-svg-icons'
 
-library.add(faSync, faVideoSlash, faExclamationTriangle, faTh, faList)
+library.add(faSync, faVideoSlash, faExclamationTriangle, faTh, faList, faSearch, faSyncAlt, faChevronUp, faChevronDown)
 
 export default {
   name: 'AgentStreamsComponent',
   components: {
     FontAwesomeIcon,
     StreamCard,
-    StreamDetailsModal
+    StreamDetailsModal,
+    StatCard
   },
   props: {
     agentId: {
@@ -174,10 +171,14 @@ export default {
     error: {
       type: String,
       default: null
+    },
+    detections: {
+      type: Object,
+      default: () => ({})
     }
   },
-  emits: ['refresh-streams', 'update-stream'],
-  setup() {
+  emits: ['refresh-streams', 'update-streams'],
+  setup(props, { emit }) {
     const appTheme = inject('theme', ref(true))
     const isDarkTheme = computed(() => appTheme.value === true)
     
@@ -193,6 +194,10 @@ export default {
     const currentAgentId = ref(null)
     const agentData = ref(null)
     const agents = ref([])
+    const searchQuery = ref('')
+    const isLiveCollapsed = ref(false)
+    const isOfflineCollapsed = ref(true)
+    const notifications = ref([])
 
     // Computed properties
     const liveStreams = computed(() => {
@@ -202,6 +207,35 @@ export default {
     const offlineStreams = computed(() => {
       return localStreams.value.filter(stream => !isStreamLive(stream))
     })
+
+    const filteredLiveStreams = computed(() => 
+      liveStreams.value.filter(s => 
+        s.streamer_username.toLowerCase().includes(searchQuery.value.toLowerCase())
+      )
+    )
+
+    const filteredOfflineStreams = computed(() => 
+      offlineStreams.value.filter(s => 
+        s.streamer_username.toLowerCase().includes(searchQuery.value.toLowerCase())
+      )
+    )
+
+    const stats = computed(() => [{
+      value: liveStreams.value.length,
+      label: 'Assigned Live Streams',
+      icon: 'broadcast-tower'
+    }, {
+      value: offlineStreams.value.length,
+      label: 'Assigned Offline Streams',
+      icon: 'video-slash'
+    }, {
+      value: notifications.value.filter(n => 
+        ['object_detection', 'audio_detection', 'chat_detection'].includes(n.event_type) &&
+        localStreams.value.some(s => s.room_url === n.room_url)
+      ).length,
+      label: 'Detections in Assigned Streams',
+      icon: 'exclamation-triangle'
+    }])
 
     // Core functions
     const fetchCurrentAgent = async () => {
@@ -250,7 +284,7 @@ export default {
         const response = await axios.get('/api/streams')
         localStreams.value = (response.data || []).filter(stream => 
           stream.assignments?.some(assignment => 
-            assignment.agent_id === currentAgentId.value
+            assignment.agent_id === currentAgentId.value && assignment.status === 'active'
           )
         )
       } catch (error) {
@@ -258,6 +292,15 @@ export default {
         localError.value = 'Failed to load streams. Please try again.'
       } finally {
         localIsLoading.value = false
+      }
+    }
+
+    const fetchNotifications = async () => {
+      try {
+        const { data } = await axios.get('/api/notifications')
+        notifications.value = data
+      } catch (error) {
+        console.error('Error fetching notifications:', error)
       }
     }
 
@@ -274,6 +317,12 @@ export default {
             
           return { ...assignment, agent_username: username }
         })
+        enhanced.agent = {
+          username: enhanced.assignments.find(a => a.agent_id === currentAgentId.value)?.agent_username || 'Unassigned',
+          status: enhanced.assignments.find(a => a.agent_id === currentAgentId.value)?.status || 'inactive'
+        }
+      } else {
+        enhanced.agent = { username: 'Unassigned', status: 'inactive' }
       }
       
       return enhanced
@@ -295,7 +344,7 @@ export default {
     
     const openStreamDetails = (stream) => {
       selectedStream.value = stream
-      selectedStreamDetections.value = []
+      selectedStreamDetections.value = props.detections[stream.room_url] || []
       showModal.value = true
     }
     
@@ -315,18 +364,49 @@ export default {
             if (selectedStream.value?.id === streamId) {
               selectedStream.value = response.data.stream
             }
+            emit('update-streams', localStreams.value)
           }
         }
       } catch (error) {
         console.error('Error refreshing stream:', error)
+        localError.value = 'Failed to refresh stream. Please try again.'
       } finally {
         isRefreshingStream.value = false
       }
     }
 
-    const handleDetectionToggled = (data) => {
-      console.log(`Detection ${data.active ? 'started' : 'stopped'} for ${data.stream.streamer_username}`)
+    const refreshStreams = () => {
+      emit('refresh-streams', { all: true })
+      fetchAssignedStreams()
     }
+
+    const toggleLiveCollapse = () => {
+      isLiveCollapsed.value = !isLiveCollapsed.value
+    }
+
+    const toggleOfflineCollapse = () => {
+      isOfflineCollapsed.value = !isOfflineCollapsed.value
+    }
+
+    const handleDetectionToggled = ({ streamId, active }) => {
+      const updatedStreams = localStreams.value.map(s => 
+        s.id === streamId ? { ...s, isDetecting: active } : s
+      )
+      localStreams.value = updatedStreams
+      emit('update-streams', updatedStreams)
+      console.log(`Detection ${active ? 'started' : 'stopped'} for stream ID ${streamId}`)
+    }
+
+    const handleStreamStatusChange = ({ streamId, newStatus }) => {
+      const updatedStreams = localStreams.value.map(s => 
+        s.id === streamId ? { ...s, status: newStatus } : s
+      )
+      localStreams.value = updatedStreams
+      emit('update-streams', updatedStreams)
+    }
+
+    const getDetectionCount = (stream) => 
+      props.detections[stream.room_url]?.length || 0
 
     onMounted(async () => {
       const savedViewMode = localStorage.getItem('streamViewMode')
@@ -335,6 +415,7 @@ export default {
       }
       
       await fetchAssignedStreams()
+      await fetchNotifications()
     })
 
     return {
@@ -346,6 +427,15 @@ export default {
       isRefreshingStream,
       liveStreams,
       offlineStreams,
+      filteredLiveStreams,
+      filteredOfflineStreams,
+      localStreams,
+      localIsLoading,
+      localError,
+      stats,
+      searchQuery,
+      isLiveCollapsed,
+      isOfflineCollapsed,
       fetchAssignedStreams,
       setViewMode,
       openStreamDetails,
@@ -353,7 +443,11 @@ export default {
       handleStreamRefresh,
       enhanceStreamWithUsername,
       handleDetectionToggled,
-      
+      handleStreamStatusChange,
+      getDetectionCount,
+      refreshStreams,
+      toggleLiveCollapse,
+      toggleOfflineCollapse
     }
   }
 }
@@ -361,10 +455,7 @@ export default {
 
 <style scoped>
 .agent-streams {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  min-height: 300px;
+  width: auto;
   padding: 20px;
   background-color: var(--bg-color, #f8f9fa);
   color: var(--text-color, #212529);
@@ -380,137 +471,94 @@ export default {
   --hover-color: #2c2c35;
 }
 
-.stream-dashboard-header {
+.dashboard-header h2 {
+  margin: 0 0 2rem;
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.stats-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.controls-section {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid var(--border-color, #dee2e6);
+  margin-bottom: 1.5rem;
+  gap: 1rem;
 }
 
-.stream-status-summary {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  flex-wrap: wrap;
+.search-box {
+  position: relative;
+  flex: 1;
+  max-width: 400px;
 }
 
-.status-pill {
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.6;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 12px 8px 35px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--input-bg, #fff);
+  color: var(--text-color);
+}
+
+.view-toggle-btn, .refresh-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--primary-color, #9147FF);
+  color: white;
+  cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
-  border-radius: 20px;
-  background-color: rgba(0, 0, 0, 0.05);
-  font-size: 0.9rem;
-  font-weight: 500;
 }
 
-.dark-theme .status-pill {
-  background-color: rgba(255, 255, 255, 0.07);
-}
-
-.status-pill.active {
-  background-color: rgba(31, 157, 85, 0.15);
-}
-
-.dark-theme .status-pill.active {
-  background-color: rgba(31, 157, 85, 0.25);
-}
-
-.status-indicator {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background-color: #1F9D55;
-}
-
-.status-indicator.offline {
-  background-color: #718096;
-}
-
-.header-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.view-toggle-container {
-  display: flex;
-  background-color: var(--hover-color, rgba(0, 0, 0, 0.05));
-  border-radius: 6px;
-  padding: 2px;
-  overflow: hidden;
-}
-
-.view-mode-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: none;
-  color: var(--text-color, rgba(33, 37, 41, 0.7));
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.view-mode-btn.active {
+.view-toggle-btn.active {
   background-color: var(--accent-color, #9147FF);
-  color: white;
 }
 
-.view-mode-btn:hover:not(.active) {
+.view-toggle-btn:hover:not(.active) {
   background-color: var(--hover-color, rgba(0, 0, 0, 0.1));
 }
 
-.streams-content {
+.section-header {
   display: flex;
-  flex-direction: column;
-  gap: 30px;
-}
-
-.stream-section {
-  width: 100%;
-}
-
-.streams-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
-}
-
-.streams-grid.medium {
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-}
-
-.streams-grid.small {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-}
-
-.list-layout {
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-
-.stream-card-wrapper {
-  border-radius: 8px;
-  overflow: hidden;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0 1rem;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
-.stream-card-wrapper:hover {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);
+.section-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
 }
 
-.stream-card-wrapper.list-item {
-  height: 100px;
+.stream-container {
+  display: grid;
+  gap: 1rem;
 }
 
-.stream-card-wrapper:not(.list-item) {
-  height: 240px;
+.stream-container.grid {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.stream-container.list {
+  grid-template-columns: 1fr;
 }
 
 .empty-state {
@@ -631,13 +679,26 @@ export default {
     padding: 15px 10px;
   }
   
-  .stream-dashboard-header {
+  .controls-section {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 15px;
   }
   
-  .streams-grid {
+  .search-box {
+    max-width: 100%;
+  }
+  
+  .view-controls {
+    width: 100%;
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .view-toggle-btn, .refresh-btn {
+    flex: 1;
+    justify-content: center;
+  }
+  
+  .stream-container.grid {
     grid-template-columns: 1fr;
   }
 }

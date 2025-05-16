@@ -977,7 +977,7 @@ const completeLogout = () => {
       showLogoutAnimation.value = false
       emit('logout')
       localStorage.removeItem('userSettings')
-      window.location.href = '/dashboard'
+      window.location.href = '/login'
     }
   })
 }
@@ -1010,6 +1010,7 @@ const completeLogout = () => {
   background-color: var(--bg-color);
   color: var(--text-color);
   font-family: 'Inter', sans-serif;
+  margin-left: 60px;
 }
 
 [data-theme="light"] {

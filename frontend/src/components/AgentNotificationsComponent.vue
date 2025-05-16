@@ -1,5 +1,5 @@
 <template>
-  <div class="notifications-page" :class="{ 'dark-mode': isDarkMode }">
+  <div class="notifications-page" :data-theme="isDarkMode ? 'dark' : 'light'">
     <!-- Top navigation bar with filters and actions -->
     <div class="top-bar">
       <div class="filter-tabs">
@@ -11,32 +11,35 @@
           @click="handleMainFilterChange(tab)"
         >
           {{ tab }}
-          <span v-if="tab === 'Unread'" class="badge">{{ unreadCount }}</span>
+          <span v-if="tab === 'Unread' && unreadCount > 0" class="badge">{{ unreadCount }}</span>
         </button>
       </div>
       
       <div class="action-buttons">
         <button class="icon-btn refresh-btn" @click="fetchNotifications" title="Refresh">
-          <span class="icon">↻</span>
+          <font-awesome-icon icon="sync" class="icon" />
         </button>
-        <button class="icon-btn menu-btn" @click="isMenuOpen = !isMenuOpen" title="More Actions">
-          <span class="icon">⋮</span>
+        <button class="icon-btn menu-btn" @click="toggleMenu" title="More Actions">
+          <font-awesome-icon icon="ellipsis-v" class="icon" />
         </button>
       </div>
       
       <!-- Dropdown menu -->
       <div v-if="isMenuOpen" class="dropdown-menu">
-        <button @click="prepareCreateForm">Create Notification</button>
         <button 
           @click="markAllAsRead"
-          :disabled="filteredNotifications.filter(n => !n.read).length === 0"
+          :disabled="unreadCount === 0 || markingAllRead"
+          :class="{ 'disabled': unreadCount === 0 || markingAllRead }"
         >
+          <font-awesome-icon v-if="markingAllRead" icon="spinner" spin class="icon" />
           Mark All as Read
         </button>
         <button 
-          @click="isDeleteModalOpen = true"
-          :disabled="notifications.length === 0"
+          @click="confirmDeleteAll"
+          :disabled="notifications.length === 0 || deletingAll"
+          :class="{ 'disabled': notifications.length === 0 || deletingAll }"
         >
+          <font-awesome-icon v-if="deletingAll" icon="spinner" spin class="icon" />
           Delete All
         </button>
         <button @click="toggleSound">
@@ -73,10 +76,12 @@
         </div>
         <div v-else-if="error" class="error-state">
           <p>{{ error }}</p>
-          <button @click="fetchNotifications">Try Again</button>
+          <button class="refresh-button" @click="fetchNotifications">
+            <font-awesome-icon icon="sync" class="icon" /> Try Again
+          </button>
         </div>
         <div v-else-if="filteredNotifications.length === 0" class="empty-state">
-          <div class="empty-icon">🔔</div>
+          <font-awesome-icon icon="bell-slash" class="empty-icon" />
           <p>No notifications to display</p>
         </div>
         
@@ -90,8 +95,9 @@
               :class="{ 
                 'read': notification.read, 
                 'unread': !notification.read, 
-                'selected': selectedNotification && selectedNotification.id === notification.id,
-                'new-notification': newNotificationIds.includes(notification.id)
+                'selected': selectedNotification?.id === notification.id,
+                'new-notification': newNotificationIds.includes(notification.id),
+                'low-priority': notification.details?.priority === 'low'
               }"
               @click="handleNotificationClick(notification)"
             >
@@ -116,8 +122,7 @@
                     {{ notification.details?.streamer_name || 'Unknown' }}
                   </span>
                   <span 
-                    v-if="notification.event_type === 'object_detection' && 
-                         notification.details?.detections?.length" 
+                    v-if="notification.event_type === 'object_detection' && notification.details?.detections?.length" 
                     class="notification-confidence"
                   >
                     {{ formatConfidence(notification.details.detections[0].confidence) }}
@@ -132,14 +137,14 @@
                   @click.stop="markAsRead(notification.id)"
                   title="Mark as Read"
                 >
-                  ✓
+                  <font-awesome-icon icon="check" />
                 </button>
                 <button 
                   class="action-btn delete-btn" 
-                  @click.stop="deleteNotification(notification.id)"
+                  @click.stop="confirmDelete(notification.id)"
                   title="Delete"
                 >
-                  ×
+                  <font-awesome-icon icon="trash" />
                 </button>
               </div>
             </div>
@@ -150,14 +155,14 @@
       <!-- Right panel: Notification details -->
       <div class="details-panel" v-if="selectedNotification || isMobile">
         <div v-if="!selectedNotification && isMobile" class="empty-detail">
-          <div class="empty-icon">📋</div>
+          <font-awesome-icon icon="clipboard" class="empty-icon" />
           <p>Select a notification to view details</p>
         </div>
         
         <div v-else-if="selectedNotification" class="detail-content">
           <div class="detail-header">
             <button v-if="isMobile" class="back-btn" @click="selectedNotification = null">
-              &larr; Back
+              <font-awesome-icon icon="arrow-left" />
             </button>
             <h2>{{ getNotificationDetailTitle() }}</h2>
             
@@ -170,24 +175,10 @@
                 Mark as Read
               </button>
               <button 
-                class="action-btn" 
-                @click="prepareEditForm"
-              >
-                Edit
-              </button>
-              <button 
                 class="action-btn delete-btn" 
-                @click="isDeleteModalOpen = true"
+                @click="confirmDelete(selectedNotification.id)"
               >
                 Delete
-              </button>
-              
-              <button 
-                v-if="user && user.role === 'admin'" 
-                class="action-btn forward-btn" 
-                @click="isAgentDropdownOpen = true"
-              >
-                Forward
               </button>
             </div>
           </div>
@@ -199,15 +190,21 @@
               <span>{{ selectedNotification.event_type }}</span>
             </div>
             <div class="detail-field">
+              <label>Priority:</label>
+              <span>{{ selectedNotification.details?.priority?.toUpperCase() || 'NORMAL' }}</span>
+            </div>
+            <div class="detail-field">
               <label>Stream URL:</label>
               <a 
                 :href="selectedNotification.room_url" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 class="url-link"
+                v-if="selectedNotification.room_url"
               >
                 {{ truncateUrl(selectedNotification.room_url) }}
               </a>
+              <span v-else>N/A</span>
             </div>
             <div class="detail-field">
               <label>Timestamp:</label>
@@ -290,46 +287,16 @@
               </div>
             </div>
             
-            <!-- Raw JSON (admin only) -->
-            <div v-if="user && user.role === 'admin'" class="raw-json">
-              <h3>Raw Data</h3>
-              <div class="json-toggle" @click="showRawJson = !showRawJson">
-                {{ showRawJson ? 'Hide' : 'Show' }} Raw JSON
+            <div v-if="selectedNotification.event_type === 'stream_status_updated'" class="type-details stream-details">
+              <h3>Stream Status Details</h3>
+              <div class="stream-message">
+                <p>{{ selectedNotification.details?.message || 'No status message' }}</p>
               </div>
-              <pre v-if="showRawJson">{{ JSON.stringify(selectedNotification.details, null, 2) }}</pre>
             </div>
           </div>
         </div>
       </div>
     </div>
-    
-    <!-- Forward to agent modal -->
-    <Teleport to="body">
-      <div v-if="isAgentDropdownOpen" class="modal-overlay" @click="isAgentDropdownOpen = false">
-        <div class="modal-container" @click.stop>
-          <div class="modal-header">
-            <h3>Forward to Agent</h3>
-            <button class="close-btn" @click="isAgentDropdownOpen = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <div class="agent-list">
-              <div 
-                v-for="agent in agents" 
-                :key="agent.id" 
-                class="agent-item"
-                @click="forwardNotification(agent.id)"
-              >
-                <div :class="['status-indicator', agent.online ? 'online' : 'offline']"></div>
-                <div class="agent-info">
-                  <div class="agent-name">{{ agent.username }}</div>
-                  <div class="agent-email">{{ agent.email || 'No email' }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Teleport>
     
     <!-- Delete confirmation modal -->
     <Teleport to="body">
@@ -337,91 +304,23 @@
         <div class="modal-container delete-modal" @click.stop>
           <div class="modal-header">
             <h3>Confirm Deletion</h3>
-            <button class="close-btn" @click="isDeleteModalOpen = false">&times;</button>
+            <button class="close-btn" @click="isDeleteModalOpen = false">
+              <font-awesome-icon icon="times" />
+            </button>
           </div>
           <div class="modal-body">
-            <p>Are you sure you want to delete {{ selectedNotification ? 'this notification' : 'all notifications' }}?</p>
+            <p>Are you sure you want to delete {{ deleteAll ? 'all notifications' : 'this notification' }}?</p>
             <p class="warning">This action cannot be undone.</p>
           </div>
           <div class="modal-footer">
             <button class="cancel-btn" @click="isDeleteModalOpen = false">Cancel</button>
             <button 
               class="confirm-btn" 
-              @click="selectedNotification ? deleteNotification(selectedNotification.id) : deleteAllNotifications()"
+              @click="deleteAll ? deleteAllNotifications() : deleteNotification(deleteId)"
+              :disabled="deletingAll || deletingSingle"
             >
+              <font-awesome-icon v-if="deletingAll || deletingSingle" icon="spinner" spin class="icon" />
               Delete
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
-    
-    <!-- Create/Edit notification modal -->
-    <Teleport to="body">
-      <div v-if="isFormModalOpen" class="modal-overlay" @click="isFormModalOpen = false">
-        <div class="modal-container form-modal" @click.stop>
-          <div class="modal-header">
-            <h3>{{ isEditMode ? 'Edit' : 'Create' }} Notification</h3>
-            <button class="close-btn" @click="isFormModalOpen = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <form @submit.prevent="submitNotificationForm">
-              <div class="form-group">
-                <label for="event_type">Event Type</label>
-                <select id="event_type" v-model="notificationForm.event_type" required>
-                  <option value="object_detection">Object Detection</option>
-                  <option value="audio_detection">Audio Detection</option>
-                  <option value="chat_detection">Chat Detection</option>
-                  <option value="general">General</option>
-                </select>
-              </div>
-              
-              <div class="form-group">
-                <label for="room_url">Stream URL</label>
-                <input 
-                  type="text" 
-                  id="room_url" 
-                  v-model="notificationForm.room_url" 
-                  placeholder="https://example.com/stream"
-                  required
-                />
-              </div>
-              
-              <div class="form-group">
-                <label for="streamer_name">Streamer Name</label>
-                <input 
-                  type="text" 
-                  id="streamer_name" 
-                  v-model="notificationForm.details.streamer_name" 
-                  placeholder="Streamer name"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label for="platform">Platform</label>
-                <input 
-                  type="text" 
-                  id="platform" 
-                  v-model="notificationForm.details.platform" 
-                  placeholder="Platform name"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label for="message">Message</label>
-                <textarea 
-                  id="message" 
-                  v-model="notificationForm.details.message" 
-                  placeholder="Notification message"
-                  rows="3"
-                ></textarea>
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button class="cancel-btn" @click="isFormModalOpen = false">Cancel</button>
-            <button class="confirm-btn" @click="submitNotificationForm">
-              {{ isEditMode ? 'Update' : 'Create' }}
             </button>
           </div>
         </div>
@@ -432,7 +331,9 @@
     <Teleport to="body">
       <div v-if="imageModalSrc" class="modal-overlay" @click="imageModalSrc = null">
         <div class="image-modal" @click.stop>
-          <button class="close-btn" @click="imageModalSrc = null">&times;</button>
+          <button class="close-btn" @click="imageModalSrc = null">
+            <font-awesome-icon icon="times" />
+          </button>
           <img :src="`data:image/png;base64,${imageModalSrc}`" alt="Full size image" />
         </div>
       </div>
@@ -459,9 +360,15 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import axios from 'axios'
 import { io } from 'socket.io-client'
 import { formatDistanceToNow, parseISO } from 'date-fns'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { library } from '@fortawesome/fontawesome-svg-core'
+import { faSync, faEllipsisV, faBellSlash, faClipboard, faArrowLeft, faCheck, faTrash, faTimes, faSpinner } from '@fortawesome/free-solid-svg-icons'
+
+library.add(faSync, faEllipsisV, faBellSlash, faClipboard, faArrowLeft, faCheck, faTrash, faTimes, faSpinner)
 
 export default {
   name: 'AgentNotificationsComponent',
+  components: { FontAwesomeIcon },
   setup() {
     // State
     const notifications = ref([])
@@ -472,35 +379,26 @@ export default {
     const error = ref(null)
     const isMenuOpen = ref(false)
     const isDeleteModalOpen = ref(false)
-    const isAgentDropdownOpen = ref(false)
-    const isFormModalOpen = ref(false)
-    const isEditMode = ref(false)
-    const notificationForm = ref({
-      event_type: 'general',
-      room_url: '',
-      details: {
-        streamer_name: '',
-        platform: '',
-        message: ''
-      }
-    })
-    const agents = ref([])
+    const deleteAll = ref(false)
+    const deleteId = ref(null)
+    const markingAllRead = ref(false)
+    const deletingAll = ref(false)
+    const deletingSingle = ref(false)
     const user = ref(null)
     const socket = ref(null)
     const socketInitialized = ref(false)
     const soundEnabled = ref(localStorage.getItem('notificationSound') !== 'false')
-    const isDarkMode = ref(localStorage.getItem('darkMode') === 'true')
+    const isDarkMode = ref(localStorage.getItem('darkMode') === 'true' || window.matchMedia('(prefers-color-scheme: dark)').matches)
     const isMobile = ref(window.innerWidth < 768)
-    const showRawJson = ref(false)
-    const imageModalSrc = ref(null)
     const newNotificationIds = ref([])
     const toasts = ref([])
+    const imageModalSrc = ref(null)
     let toastCounter = 0
     let reconnectAttempts = 0
     const maxReconnectAttempts = 3
-    const reconnectDelayMs = 2000 // Initial delay 2s
+    const reconnectDelayMs = 2000
     let lastReconnectTime = 0
-    const minReconnectInterval = 5000 // Minimum 5s between attempts
+    const minReconnectInterval = 5000
 
     // Computed
     const filteredNotifications = computed(() => {
@@ -515,14 +413,20 @@ export default {
           return false
         })
       }
-      return filtered
+      return filtered.sort((a, b) => {
+        // Prioritize unread and high-priority notifications
+        if (!a.read && b.read) return -1
+        if (a.read && !b.read) return 1
+        if (a.details?.priority === 'normal' && b.details?.priority === 'low') return -1
+        if (a.details?.priority === 'low' && b.details?.priority === 'normal') return 1
+        return new Date(b.timestamp) - new Date(a.timestamp)
+      })
     })
 
     const unreadCount = computed(() => notifications.value.filter(n => !n.read).length)
 
-    // Socket setup and handlers
+    // Socket setup
     const setupSocketConnection = () => {
-      // Rate limiting check
       const now = Date.now()
       if (now - lastReconnectTime < minReconnectInterval) {
         console.log('Rate limited: Too many connection attempts')
@@ -530,7 +434,6 @@ export default {
       }
       lastReconnectTime = now
 
-      // Max attempts check
       if (reconnectAttempts >= maxReconnectAttempts) {
         console.log('Max reconnection attempts reached')
         showToast('Unable to connect to notification server', 'error')
@@ -538,17 +441,17 @@ export default {
       }
 
       try {
-        socket.value = io('https://monitor-backend.jetcamstudio.com:5000/notifications', {
+        socket.value = io('http://localhost:5000/notifications', {
           path: '/ws',
           transports: ['websocket', 'polling'],
-          reconnection: false, // We'll handle reconnection manually
+          reconnection: false,
           withCredentials: true,
           autoConnect: true
         })
 
         socket.value.on('connect', () => {
           socketInitialized.value = true
-          reconnectAttempts = 0 // Reset attempts on successful connection
+          reconnectAttempts = 0
           console.log('Socket connected')
           showToast('Connected to notification server', 'success')
         })
@@ -557,7 +460,7 @@ export default {
           console.error('Connection error:', err)
           reconnectAttempts++
           if (reconnectAttempts < maxReconnectAttempts) {
-            const delay = reconnectDelayMs * Math.pow(2, reconnectAttempts - 1) // Exponential backoff
+            const delay = reconnectDelayMs * Math.pow(2, reconnectAttempts - 1)
             setTimeout(setupSocketConnection, delay)
           } else {
             showToast('Failed to connect to notification server', 'error')
@@ -567,7 +470,6 @@ export default {
         socket.value.on('disconnect', () => {
           console.log('Socket disconnected')
           socketInitialized.value = false
-          // Only attempt reconnect if we haven't reached max attempts
           if (reconnectAttempts < maxReconnectAttempts) {
             const delay = reconnectDelayMs * Math.pow(2, reconnectAttempts)
             setTimeout(setupSocketConnection, delay)
@@ -586,7 +488,6 @@ export default {
       }
     }
 
-    // Modified safeSocketEmit to check connection state
     const safeSocketEmit = (event, data) => {
       if (!socket.value || !socket.value.connected) {
         console.warn('Socket not connected, event dropped:', event)
@@ -602,14 +503,21 @@ export default {
     }
 
     const handleNewNotification = (data) => {
-      if (!notifications.value.some(n => n.id === data.id)) {
-        notifications.value.unshift(data)
-        newNotificationIds.value.push(data.id)
-        setTimeout(() => {
-          newNotificationIds.value = newNotificationIds.value.filter(id => id !== data.id)
-        }, 5000)
-        if (soundEnabled.value) playNotificationSound()
-        showToast('New notification received', 'info')
+      if (!user.value) return
+      // Only add if assigned to the current agent or unassigned and relevant
+      if (data.assigned_agent === user.value.username || 
+          (!data.assigned_agent && ['object_detection', 'audio_detection', 'chat_detection', 'stream_status_updated'].includes(data.event_type))) {
+        if (!notifications.value.some(n => n.id === data.id)) {
+          notifications.value.unshift(data)
+          newNotificationIds.value.push(data.id)
+          setTimeout(() => {
+            newNotificationIds.value = newNotificationIds.value.filter(id => id !== data.id)
+          }, 5000)
+          if (soundEnabled.value && data.details?.priority !== 'low') {
+            playNotificationSound()
+          }
+          showToast('New notification received', 'info')
+        }
       }
     }
 
@@ -625,10 +533,13 @@ export default {
 
     // Core methods
     const fetchNotifications = async () => {
+      if (!user.value) return
       loading.value = true
       error.value = null
       try {
-        const res = await axios.get('/api/notifications')
+        const res = await axios.get('/api/notifications', {
+          params: { assigned_agent: user.value.username }
+        })
         notifications.value = res.data
       } catch (err) {
         console.error('Error fetching notifications:', err)
@@ -638,21 +549,13 @@ export default {
       }
     }
 
-    const fetchAgents = async () => {
-      try {
-        const res = await axios.get('/api/agents')
-        agents.value = res.data
-      } catch {
-        showToast('Failed to load agents', 'error')
-      }
-    }
-
     const fetchCurrentUser = async () => {
       try {
         const res = await axios.get('/api/session')
         user.value = res.data
+        fetchNotifications()
       } catch {
-        /* ignore */
+        error.value = 'Failed to load user session.'
       }
     }
 
@@ -662,16 +565,18 @@ export default {
     }
 
     const getNotificationColor = (n) => {
-      if (n.event_type === 'object_detection') return '#e74c3c'
-      if (n.event_type === 'audio_detection') return '#3498db'
-      if (n.event_type === 'chat_detection') return '#f39c12'
-      return '#2ecc71'
+      if (n.event_type === 'object_detection') return 'rgb(var(--danger-rgb))'
+      if (n.event_type === 'audio_detection') return 'rgb(var(--info-rgb))'
+      if (n.event_type === 'chat_detection') return 'rgb(var(--warning-rgb))'
+      if (n.event_type === 'stream_status_updated') return 'rgb(var(--secondary-rgb))'
+      return 'rgb(var(--success-rgb))'
     }
 
     const getNotificationType = (n) => {
       if (n.event_type === 'object_detection') return 'Visual'
       if (n.event_type === 'audio_detection') return 'Audio'
       if (n.event_type === 'chat_detection') return 'Chat'
+      if (n.event_type === 'stream_status_updated') return 'Stream Status'
       return 'General'
     }
 
@@ -681,10 +586,13 @@ export default {
         return det.length ? `Detected: ${det.map(d => d.class).join(', ')}` : 'Object detected'
       }
       if (n.event_type === 'audio_detection') {
-        return n.details?.transcript?.substring(0,100) || 'Audio detected'
+        return n.details?.transcript?.substring(0, 100) || 'Audio detected'
       }
       if (n.event_type === 'chat_detection') {
-        return n.details?.message?.substring(0,100) || 'Chat message detected'
+        return n.details?.message?.substring(0, 100) || 'Chat message detected'
+      }
+      if (n.event_type === 'stream_status_updated') {
+        return n.details?.message || 'Stream status updated'
       }
       return n.details?.message || 'Notification received'
     }
@@ -695,6 +603,7 @@ export default {
       if (n.event_type === 'object_detection') return 'Visual Detection'
       if (n.event_type === 'audio_detection') return 'Audio Detection'
       if (n.event_type === 'chat_detection') return 'Chat Detection'
+      if (n.event_type === 'stream_status_updated') return 'Stream Status Update'
       return 'Notification Details'
     }
 
@@ -715,7 +624,8 @@ export default {
     }
 
     const formatConfidence = (c) => typeof c === 'number' ? `${Math.round(c * 100)}%` : 'N/A'
-    const truncateUrl = (u) => u?.length > 40 ? u.slice(0,37) + '...' : u || ''
+
+    const truncateUrl = (u) => u?.length > 40 ? u.slice(0, 37) + '...' : u || 'N/A'
 
     const handleNotificationClick = (n) => {
       selectedNotification.value = n
@@ -731,7 +641,10 @@ export default {
       try {
         await axios.put(`/api/notifications/${id}/read`)
         const n = notifications.value.find(x => x.id === id)
-        if (n) n.read = true
+        if (n) {
+          n.read = true
+          safeSocketEmit('notification_update', { id, type: 'read' })
+        }
         showToast('Notification marked as read', 'success')
       } catch {
         showToast('Failed to mark as read', 'error')
@@ -739,97 +652,71 @@ export default {
     }
 
     const markAllAsRead = async () => {
+      if (markingAllRead.value) return
+      markingAllRead.value = true
       try {
-        await axios.put('/api/notifications/read-all')
-        notifications.value.forEach(x => x.read = true)
+        await axios.put('/api/notifications/read-all', {}, {
+          params: { assigned_agent: user.value.username }
+        })
+        notifications.value.forEach(n => {
+          if (!n.read) {
+            n.read = true
+            safeSocketEmit('notification_update', { id: n.id, type: 'read' })
+          }
+        })
         showToast('All notifications marked as read', 'success')
       } catch {
         showToast('Failed to mark all as read', 'error')
+      } finally {
+        markingAllRead.value = false
       }
     }
 
+    const confirmDelete = (id) => {
+      deleteId.value = id
+      deleteAll.value = false
+      isDeleteModalOpen.value = true
+    }
+
+    const confirmDeleteAll = () => {
+      deleteAll.value = true
+      isDeleteModalOpen.value = true
+    }
+
     const deleteNotification = async (id) => {
+      if (deletingSingle.value) return
+      deletingSingle.value = true
       try {
         await axios.delete(`/api/notifications/${id}`)
         notifications.value = notifications.value.filter(x => x.id !== id)
         if (selectedNotification.value?.id === id) selectedNotification.value = null
-        isDeleteModalOpen.value = false
+        safeSocketEmit('notification_update', { id, type: 'deleted' })
         showToast('Notification deleted', 'success')
       } catch {
-        isDeleteModalOpen.value = false
         showToast('Failed to delete notification', 'error')
+      } finally {
+        deletingSingle.value = false
+        isDeleteModalOpen.value = false
       }
     }
 
     const deleteAllNotifications = async () => {
+      if (deletingAll.value) return
+      deletingAll.value = true
       try {
-        await axios.delete('/api/notifications')
+        await axios.delete('/api/notifications', {
+          params: { assigned_agent: user.value.username }
+        })
+        const deletedIds = notifications.value.map(n => n.id)
         notifications.value = []
         selectedNotification.value = null
-        isDeleteModalOpen.value = false
+        deletedIds.forEach(id => safeSocketEmit('notification_update', { id, type: 'deleted' }))
         showToast('All notifications deleted', 'success')
       } catch {
-        isDeleteModalOpen.value = false
         showToast('Failed to delete all notifications', 'error')
-      }
-    }
-
-    const prepareCreateForm = () => {
-      isEditMode.value = false
-      notificationForm.value = {
-        event_type: 'general',
-        room_url: '',
-        details: { streamer_name: '', platform: '', message: '' }
-      }
-      isFormModalOpen.value = true
-      isMenuOpen.value = false
-    }
-
-    const prepareEditForm = () => {
-      if (!selectedNotification.value) return
-      isEditMode.value = true
-      notificationForm.value = {
-        event_type: selectedNotification.value.event_type,
-        room_url: selectedNotification.value.room_url,
-        details: { ...selectedNotification.value.details }
-      }
-      isFormModalOpen.value = true
-    }
-
-    const submitNotificationForm = async () => {
-      try {
-        if (isEditMode.value) {
-          await axios.put(`/api/notifications/${selectedNotification.value.id}`, notificationForm.value)
-          const idx = notifications.value.findIndex(x => x.id === selectedNotification.value.id)
-          if (idx !== -1) {
-            notifications.value[idx] = { ...notifications.value[idx], ...notificationForm.value }
-            selectedNotification.value = notifications.value[idx]
-          }
-          showToast('Notification updated', 'success')
-        } else {
-          const res = await axios.post('/api/notifications', notificationForm.value)
-          notifications.value.unshift(res.data.notification)
-          showToast('Notification created', 'success')
-        }
-        isFormModalOpen.value = false
-      } catch {
-        showToast('Failed to save notification', 'error')
-      }
-    }
-
-    const forwardNotification = async (agentId) => {
-      if (!selectedNotification.value) return
-      try {
-        await axios.post(`/api/notifications/${selectedNotification.value.id}/assign`, { agent_id: agentId })
-        const agent = agents.value.find(a => a.id === agentId)
-        selectedNotification.value.assigned_agent = agent?.username
-        const n = notifications.value.find(x => x.id === selectedNotification.value.id)
-        if (n) n.assigned_agent = agent?.username
-        isAgentDropdownOpen.value = false
-        showToast(`Forwarded to ${agent?.username || 'agent'}`, 'success')
-      } catch {
-        isAgentDropdownOpen.value = false
-        showToast('Failed to forward notification', 'error')
+      } finally {
+        deletingAll.value = false
+        isDeleteModalOpen.value = false
       }
     }
 
@@ -838,6 +725,10 @@ export default {
       localStorage.setItem('notificationSound', soundEnabled.value)
       showToast(`Sound ${soundEnabled.value ? 'enabled' : 'disabled'}`, 'info')
       isMenuOpen.value = false
+    }
+
+    const toggleMenu = () => {
+      isMenuOpen.value = !isMenuOpen.value
     }
 
     const openImageModal = (src) => {
@@ -863,23 +754,10 @@ export default {
 
     // Lifecycle
     onMounted(() => {
-      fetchNotifications()
-      fetchAgents()
       fetchCurrentUser()
       setupSocketConnection()
       window.addEventListener('resize', handleResize)
       window.addEventListener('online', setupSocketConnection)
-      // Set dark mode based on system preference
-      isDarkMode.value = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-    })
-
-    onBeforeUnmount(() => {
-      if (socket.value) {
-        socket.value.off('notification', handleNewNotification)
-        socket.value.off('notification_update', handleNotificationUpdate)
-        socket.value.disconnect()
-      }
-      window.removeEventListener('resize', handleResize)
     })
 
     onBeforeUnmount(() => {
@@ -903,17 +781,15 @@ export default {
       unreadCount,
       isMenuOpen,
       isDeleteModalOpen,
-      isAgentDropdownOpen,
-      isFormModalOpen,
-      isEditMode,
-      notificationForm,
-      agents,
+      deleteAll,
+      deleteId,
+      markingAllRead,
+      deletingAll,
+      deletingSingle,
       user,
       soundEnabled,
       isDarkMode,
       isMobile,
-      showRawJson,
-      imageModalSrc,
       newNotificationIds,
       toasts,
       fetchNotifications,
@@ -928,88 +804,62 @@ export default {
       handleNotificationClick,
       markAsRead,
       markAllAsRead,
+      confirmDelete,
+      confirmDeleteAll,
       deleteNotification,
       deleteAllNotifications,
-      prepareCreateForm,
-      prepareEditForm,
-      submitNotificationForm,
-      forwardNotification,
       toggleSound,
+      toggleMenu,
       openImageModal,
       showToast,
-      safeSocketEmit
+      safeSocketEmit,
     }
   }
 }
 </script>
 
-
 <style scoped>
+/* CSS Variables for consistency with AdminNotificationsPage.vue */
+:root {
+  --primary-rgb: 59, 130, 246;
+  --secondary-rgb: 156, 163, 175;
+  --success-rgb: 16, 185, 129;
+  --danger-rgb: 239, 68, 68;
+  --warning-rgb: 245, 158, 11;
+  --info-rgb: 14, 165, 233;
+  --bg-color: #f8fafc;
+  --text-color: #1e293b;
+  --input-bg: #ffffff;
+  --input-border: #e2e8f0;
+  --hover-bg: #f1f5f9;
+  --error-bg: #fef2f2;
+  --error-border: #fecaca;
+}
+
+[data-theme="dark"] {
+  --primary-rgb: 96, 165, 250;
+  --secondary-rgb: 156, 163, 175;
+  --success-rgb: 34, 197, 94;
+  --danger-rgb: 248, 113, 113;
+  --warning-rgb: 251, 191, 36;
+  --info-rgb: 56, 189, 248;
+  --bg-color: #121212;
+  --text-color: #f0f0f0;
+  --input-bg: #1e1e1e;
+  --input-border: #333;
+  --hover-bg: #333;
+  --error-bg: #4c1d24;
+  --error-border: #f87171;
+}
+
 .notifications-page {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: var(--background-color);
+  background-color: var(--bg-color);
   color: var(--text-color);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-/* Dark Mode */
-.dark-mode {
-  background-color: #121212;
-  color: #f0f0f0;
-}
-
-.dark-mode .top-bar,
-.dark-mode .sub-filters,
-.dark-mode .notifications-panel,
-.dark-mode .details-panel,
-.dark-mode .modal-container {
-  background-color: #1e1e1e;
-  border-color: #333;
-}
-
-.dark-mode .dropdown-menu {
-  background-color: #2a2a2a;
-  border-color: #444;
-}
-
-.dark-mode .notification-card {
-  background-color: #2a2a2a;
-  border-color: #444;
-}
-
-.dark-mode .notification-card.selected {
-  background-color: #333;
-}
-
-.dark-mode .notification-card.unread {
-  background-color: #252835;
-}
-
-.dark-mode .notification-card:hover {
-  background-color: #333;
-}
-
-.dark-mode .empty-state,
-.dark-mode .empty-detail,
-.dark-mode .error-state,
-.dark-mode .state-container {
-  background-color: #2a2a2a;
-  color: #ddd;
-}
-
-.dark-mode .detection-item,
-.dark-mode .keyword-tag {
-  background-color: #333;
-}
-
-.dark-mode a {
-  color: #6ab0f3;
-}
-
-.dark-mode .modal-overlay {
-  background-color: rgba(0, 0, 0, 0.7);
+  margin-left: 60px;
 }
 
 /* Top Navigation Bar */
@@ -1043,29 +893,20 @@ export default {
 }
 
 .tab-btn:hover {
-  background-color: rgba(var(--primary-rgb), 0.1);
-  color: var(--primary-color);
+  background-color: var(--hover-bg);
+  color: rgb(var(--primary-rgb));
 }
 
 .tab-btn.active {
   background-color: rgba(var(--primary-rgb), 0.1);
-  color: var(--primary-color);
-}
-
-.dark-mode .tab-btn:hover {
-  background-color: #333;
-}
-
-.dark-mode .tab-btn.active {
-  background-color: #1a365d;
-  color: #4dabf7;
+  color: rgb(var(--primary-rgb));
 }
 
 .badge {
   position: absolute;
   top: -6px;
   right: -8px;
-  background-color: #e74c3c;
+  background-color: rgb(var(--danger-rgb));
   color: white;
   border-radius: 12px;
   padding: 0 6px;
@@ -1097,12 +938,8 @@ export default {
 }
 
 .icon-btn:hover {
-  background-color: rgba(var(--primary-rgb), 0.1);
-  color: var(--primary-color);
-}
-
-.dark-mode .icon-btn:hover {
-  background-color: #333;
+  background-color: var(--hover-bg);
+  color: rgb(var(--primary-rgb));
 }
 
 .icon {
@@ -1113,8 +950,8 @@ export default {
   position: absolute;
   right: 20px;
   top: 60px;
-  background-color: white;
-  border: 1px solid #e1e4e8;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   width: 180px;
@@ -1122,7 +959,9 @@ export default {
 }
 
 .dropdown-menu button {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
   padding: 10px 16px;
@@ -1130,62 +969,48 @@ export default {
   border: none;
   cursor: pointer;
   font-size: 14px;
+  color: var(--text-color);
   transition: background-color 0.2s ease;
 }
 
 .dropdown-menu button:hover {
-  background-color: #f6f8fa;
+  background-color: var(--hover-bg);
 }
 
-.dropdown-menu button:disabled {
-  color: #a0a0a0;
+.dropdown-menu button:disabled, .dropdown-menu button.disabled {
+  color: rgb(var(--secondary-rgb));
   cursor: not-allowed;
-}
-
-.dark-mode .dropdown-menu button:hover {
-  background-color: #333;
+  opacity: 0.6;
 }
 
 /* Sub-filters */
 .sub-filters {
   display: flex;
   padding: 8px 20px;
-  background-color: #fff;
-  border-bottom: 1px solid #e1e4e8;
+  background-color: var(--input-bg);
+  border-bottom: 1px solid var(--input-border);
   gap: 8px;
 }
 
 .sub-filter-btn {
   padding: 4px 10px;
-  border: 1px solid #e1e4e8;
+  border: 1px solid var(--input-border);
   background: none;
   border-radius: 4px;
   font-size: 13px;
   cursor: pointer;
+  color: var(--text-color);
   transition: all 0.2s ease;
 }
 
 .sub-filter-btn:hover {
-  background-color: #f6f8fa;
+  background-color: var(--hover-bg);
 }
 
 .sub-filter-btn.active {
-  background-color: #0366d6;
+  background-color: rgb(var(--primary-rgb));
   color: white;
-  border-color: #0366d6;
-}
-
-.dark-mode .sub-filter-btn {
-  border-color: #444;
-}
-
-.dark-mode .sub-filter-btn:hover {
-  background-color: #333;
-}
-
-.dark-mode .sub-filter-btn.active {
-  background-color: #1a365d;
-  border-color: #1a365d;
+  border-color: rgb(var(--primary-rgb));
 }
 
 /* Content Area */
@@ -1200,21 +1025,20 @@ export default {
   min-width: 300px;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #e1e4e8;
-  background-color: #fff;
-  position: relative;
+  border-right: 1px solid var(--input-border);
+  background-color: var(--input-bg);
 }
 
 .details-panel {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
-  background-color: #fff;
+  background-color: var(--input-bg);
 }
 
 .panel-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #e1e4e8;
+  border-bottom: 1px solid var(--input-border);
 }
 
 .panel-header h2 {
@@ -1226,7 +1050,7 @@ export default {
 }
 
 .panel-header .count {
-  color: #888;
+  color: rgb(var(--secondary-rgb));
   margin-left: 4px;
   font-weight: normal;
 }
@@ -1248,45 +1072,46 @@ export default {
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
-  animation: fadeIn 0.3s ease;
 }
 
 .notification-card:hover {
   background-color: var(--hover-bg);
   transform: translateY(-1px);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-  animation: pulse 0.5s ease-in-out;
 }
 
 .notification-card.selected {
   background-color: rgba(var(--primary-rgb), 0.1);
-  border-color: var(--primary-color);
+  border-color: rgb(var(--primary-rgb));
 }
 
 .notification-card.unread {
-  background-color: #f0f7ff;
-  border-left-width: 3px;
+  background-color: rgba(var(--primary-rgb), 0.05);
+  border-left: 3px solid rgb(var(--primary-rgb));
 }
 
 .notification-card.read {
   opacity: 0.85;
 }
 
-.dark-mode .notification-card.selected {
-  background-color: #1a365d;
-  border-color: #4dabf7;
+.notification-card.low-priority {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.notification-card.low-priority .notification-message {
+  color: rgb(var(--secondary-rgb));
 }
 
 .notification-indicator {
   width: 4px;
   border-radius: 2px;
   margin-right: 12px;
-  background-color: #0366d6;
 }
 
 .notification-content {
   flex: 1;
-  min-width: 0; /* For proper text truncation */
+  min-width: 0;
 }
 
 .notification-header {
@@ -1298,12 +1123,12 @@ export default {
 .notification-type {
   font-size: 13px;
   font-weight: 600;
-  color: #0366d6;
+  color: rgb(var(--primary-rgb));
 }
 
 .notification-time {
   font-size: 13px;
-  color: #888;
+  color: rgb(var(--secondary-rgb));
 }
 
 .notification-message {
@@ -1313,13 +1138,14 @@ export default {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text-color);
 }
 
 .notification-meta {
   display: flex;
   justify-content: space-between;
   font-size: 13px;
-  color: #888;
+  color: rgb(var(--secondary-rgb));
 }
 
 .notification-source {
@@ -1329,7 +1155,7 @@ export default {
 }
 
 .notification-confidence {
-  color: #2ecc71;
+  color: rgb(var(--success-rgb));
   font-weight: 500;
 }
 
@@ -1360,35 +1186,21 @@ export default {
 }
 
 .action-btn:hover {
-  background-color: #f0f0f0;
+  background-color: var(--hover-bg);
 }
 
 .action-btn.read-btn:hover {
-  background-color: #d4edda;
-  color: #28a745;
+  background-color: rgba(var(--success-rgb), 0.1);
+  color: rgb(var(--success-rgb));
 }
 
 .action-btn.delete-btn:hover {
-  background-color: #f8d7da;
-  color: #dc3545;
+  background-color: rgba(var(--danger-rgb), 0.1);
+  color: rgb(var(--danger-rgb));
 }
 
-.dark-mode .action-btn {
+[data-theme="dark"] .action-btn {
   background-color: rgba(30, 30, 30, 0.8);
-}
-
-.dark-mode .action-btn:hover {
-  background-color: #333;
-}
-
-.dark-mode .action-btn.read-btn:hover {
-  background-color: #1e4620;
-  color: #4ade80;
-}
-
-.dark-mode .action-btn.delete-btn:hover {
-  background-color: #4c1d24;
-  color: #f87171;
 }
 
 /* New notification animation */
@@ -1397,12 +1209,12 @@ export default {
 }
 
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(66, 153, 225, 0.5); }
-  70% { box-shadow: 0 0 0 10px rgba(66, 153, 225, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(66, 153, 225, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.5); }
+  70% { box-shadow: 0 0 0 10px rgba(var(--primary-rgb), 0); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0); }
 }
 
-/* Empty/Error States */
+/* States */
 .state-container,
 .empty-state,
 .empty-detail,
@@ -1414,7 +1226,7 @@ export default {
   padding: 40px 20px;
   text-align: center;
   height: 100%;
-  color: #888;
+  color: rgb(var(--secondary-rgb));
   font-size: 15px;
 }
 
@@ -1425,38 +1237,42 @@ export default {
 }
 
 .error-state {
-  color: #dc3545;
+  background-color: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: 8px;
 }
 
-.error-state button {
-  margin-top: 12px;
-  padding: 6px 12px;
-  background-color: #f8d7da;
-  color: #dc3545;
-  border: 1px solid #dc3545;
-  border-radius: 4px;
+.error-state p {
+  color: rgb(var(--danger-rgb));
+}
+
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background-color: rgb(var(--primary-rgb));
+  color: white;
+  font-weight: 500;
   cursor: pointer;
+  border: none;
+  font-size: 14px;
+  transition: all 0.2s ease;
 }
 
-.dark-mode .error-state button {
-  background-color: #4c1d24;
-  color: #f87171;
-  border-color: #f87171;
+.refresh-button:hover {
+  opacity: 0.9;
 }
 
 .loading-spinner {
   width: 30px;
   height: 30px;
-  border: 3px solid rgba(0, 0, 0, 0.1);
+  border: 3px solid rgba(var(--primary-rgb), 0.1);
   border-radius: 50%;
-  border-top-color: #0366d6;
+  border-top-color: rgb(var(--primary-rgb));
   animation: spin 1s ease-in-out infinite;
   margin-bottom: 12px;
-}
-
-.dark-mode .loading-spinner {
-  border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: #4dabf7;
 }
 
 @keyframes spin {
@@ -1473,7 +1289,7 @@ export default {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-  border-bottom: 1px solid #e1e4e8;
+  border-bottom: 1px solid var(--input-border);
   padding-bottom: 12px;
 }
 
@@ -1486,11 +1302,11 @@ export default {
 .detail-header .back-btn {
   padding: 6px 12px;
   background: none;
-  border: 1px solid #e1e4e8;
+  border: 1px solid var(--input-border);
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
-  margin-right: 12px;
+  color: var(--text-color);
 }
 
 .detail-actions {
@@ -1505,8 +1321,8 @@ export default {
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: all 0.2s ease;
   color: var(--text-color);
+  transition: all 0.2s ease;
 }
 
 .detail-actions button:hover {
@@ -1514,48 +1330,12 @@ export default {
 }
 
 .detail-actions .delete-btn {
-  color: #dc3545;
-  border-color: #dc3545;
+  color: rgb(var(--danger-rgb));
+  border-color: rgb(var(--danger-rgb));
 }
 
 .detail-actions .delete-btn:hover {
-  background-color: #f8d7da;
-}
-
-.detail-actions .forward-btn {
-  color: #0366d6;
-  border-color: #0366d6;
-}
-
-.detail-actions .forward-btn:hover {
-  background-color: #f0f7ff;
-}
-
-.dark-mode .detail-header .back-btn,
-.dark-mode .detail-actions button {
-  border-color: #444;
-}
-
-.dark-mode .detail-actions button:hover {
-  background-color: #333;
-}
-
-.dark-mode .detail-actions .delete-btn {
-  color: #f87171;
-  border-color: #f87171;
-}
-
-.dark-mode .detail-actions .delete-btn:hover {
-  background-color: #4c1d24;
-}
-
-.dark-mode .detail-actions .forward-btn {
-  color: #4dabf7;
-  border-color: #4dabf7;
-}
-
-.dark-mode .detail-actions .forward-btn:hover {
-  background-color: #1a365d;
+  background-color: rgba(var(--danger-rgb), 0.1);
 }
 
 .detail-body {
@@ -1572,16 +1352,12 @@ export default {
 .detail-field label {
   width: 100px;
   font-weight: 500;
-  color: #666;
+  color: rgb(var(--secondary-rgb));
   font-size: 15px;
 }
 
-.dark-mode .detail-field label {
-  color: #bbb;
-}
-
 .url-link {
-  color: #0366d6;
+  color: rgb(var(--primary-rgb));
   text-decoration: none;
   font-size: 15px;
 }
@@ -1593,7 +1369,7 @@ export default {
 .type-details {
   margin-top: 24px;
   padding-top: 16px;
-  border-top: 1px solid #e1e4e8;
+  border-top: 1px solid var(--input-border);
 }
 
 .type-details h3 {
@@ -1608,11 +1384,7 @@ export default {
   font-weight: 500;
   margin-top: 12px;
   margin-bottom: 8px;
-  color: #666;
-}
-
-.dark-mode .type-details h4 {
-  color: #bbb;
+  color: rgb(var(--secondary-rgb));
 }
 
 .detections-grid {
@@ -1625,7 +1397,7 @@ export default {
 .detection-item {
   padding: 8px;
   border-radius: 4px;
-  background-color: #f6f8fa;
+  background-color: var(--hover-bg);
   font-size: 14px;
   display: flex;
   flex-direction: column;
@@ -1633,10 +1405,11 @@ export default {
 
 .detection-class {
   font-weight: 500;
+  color: var(--text-color);
 }
 
 .detection-confidence {
-  color: #2ecc71;
+  color: rgb(var(--success-rgb));
   font-size: 13px;
   margin-top: 4px;
 }
@@ -1660,18 +1433,15 @@ export default {
 }
 
 .audio-transcript p,
-.chat-message p {
-  background-color: #f6f8fa;
+.chat-message p,
+.stream-message p {
+  background-color: var(--hover-bg);
   padding: 12px;
   border-radius: 4px;
   margin: 0;
   font-size: 15px;
   line-height: 1.6;
-}
-
-.dark-mode .audio-transcript p,
-.dark-mode .chat-message p {
-  background-color: #2a2a2a;
+  color: var(--text-color);
 }
 
 .keywords {
@@ -1682,54 +1452,11 @@ export default {
 }
 
 .keyword-tag {
-  background-color: #e1e4e8;
+  background-color: rgba(var(--warning-rgb), 0.2);
   padding: 4px 8px;
   border-radius: 12px;
   font-size: 13px;
-  display: inline-block;
-}
-
-.raw-json {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid #e1e4e8;
-}
-
-.raw-json h3 {
-  font-size: 16px;
-  font-weight: 600;
-  margin-top: 0;
-  margin-bottom: 12px;
-}
-
-.json-toggle {
-  display: inline-block;
-  padding: 4px 8px;
-  background-color: #f6f8fa;
-  border: 1px solid #e1e4e8;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-  margin-bottom: 8px;
-}
-
-.dark-mode .json-toggle {
-  background-color: #2a2a2a;
-  border-color: #444;
-}
-
-.raw-json pre {
-  background-color: #f6f8fa;
-  padding: 12px;
-  border-radius: 4px;
-  overflow-x: auto;
-  font-size: 13px;
-  line-height: 1.5;
-  max-height: 300px;
-}
-
-.dark-mode .raw-json pre {
-  background-color: #2a2a2a;
+  color: rgb(var(--warning-rgb));
 }
 
 /* Modals */
@@ -1747,7 +1474,7 @@ export default {
 }
 
 .modal-container {
-  background-color: white;
+  background-color: var(--input-bg);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   width: 400px;
@@ -1761,13 +1488,14 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid #e1e4e8;
+  border-bottom: 1px solid var(--input-border);
 }
 
 .modal-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  color: var(--text-color);
 }
 
 .modal-body {
@@ -1779,7 +1507,7 @@ export default {
   justify-content: flex-end;
   gap: 8px;
   padding: 16px 20px;
-  border-top: 1px solid #e1e4e8;
+  border-top: 1px solid var(--input-border);
 }
 
 .close-btn {
@@ -1787,7 +1515,7 @@ export default {
   border: none;
   font-size: 20px;
   cursor: pointer;
-  color: #666;
+  color: rgb(var(--secondary-rgb));
 }
 
 .cancel-btn,
@@ -1796,127 +1524,46 @@ export default {
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
-  border: 1px solid #e1e4e8;
+  border: 1px solid var(--input-border);
 }
 
 .cancel-btn {
-  background-color: white;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+}
+
+.cancel-btn:hover {
+  background-color: var(--hover-bg);
 }
 
 .confirm-btn {
-  background-color: var(--primary-color);
+  background-color: rgb(var(--primary-rgb));
   color: white;
-  border-color: var(--primary-color);
+  border-color: rgb(var(--primary-rgb));
+}
+
+.confirm-btn:hover {
+  opacity: 0.9;
+}
+
+.confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .delete-modal .confirm-btn {
-  background-color: #dc3545;
-  border-color: #dc3545;
+  background-color: rgb(var(--danger-rgb));
+  border-color: rgb(var(--danger-rgb));
+}
+
+.delete-modal .confirm-btn:hover {
+  opacity: 0.9;
 }
 
 .warning {
-  color: #dc3545;
+  color: rgb(var(--danger-rgb));
   font-weight: 500;
   font-size: 14px;
-}
-
-.dark-mode .modal-container {
-  background-color: #1e1e1e;
-}
-
-.dark-mode .cancel-btn {
-  background-color: #2a2a2a;
-}
-
-.dark-mode .confirm-btn {
-  background-color: #0f4c81;
-}
-
-.dark-mode .delete-modal .confirm-btn {
-  background-color: #a02f3e;
-}
-
-/* Form styling */
-.form-group {
-  margin-bottom: 16px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 6px;
-  font-weight: 500;
-  font-size: 15px;
-}
-
-.form-group input,
-.form-group select,
-.form-group textarea {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #e1e4e8;
-  border-radius: 4px;
-  font-size: 15px;
-}
-
-.dark-mode .form-group input,
-.dark-mode .form-group select,
-.dark-mode .form-group textarea {
-  background-color: #2a2a2a;
-  color: #f0f0f0;
-  border-color: #444;
-}
-
-/* Agent list in forward modal */
-.agent-list {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.agent-item {
-  display: flex;
-  align-items: center;
-  padding: 10px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  border-radius: 4px;
-}
-
-.agent-item:hover {
-  background-color: #f6f8fa;
-}
-
-.dark-mode .agent-item:hover {
-  background-color: #333;
-}
-
-.status-indicator {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  margin-right: 10px;
-  background-color: #ccc;
-}
-
-.status-indicator.online {
-  background-color: #2ecc71;
-}
-
-.status-indicator.offline {
-  background-color: #e74c3c;
-}
-
-.agent-info {
-  flex: 1;
-}
-
-.agent-name {
-  font-weight: 500;
-  font-size: 15px;
-}
-
-.agent-email {
-  font-size: 13px;
-  color: #888;
 }
 
 /* Image modal */
@@ -1970,19 +1617,19 @@ export default {
 }
 
 .toast.success {
-  background-color: #2ecc71;
+  background-color: rgb(var(--success-rgb));
 }
 
 .toast.error {
-  background-color: #e74c3c;
+  background-color: rgb(var(--danger-rgb));
 }
 
 .toast.info {
-  background-color: #3498db;
+  background-color: rgb(var(--info-rgb));
 }
 
 .toast.warning {
-  background-color: #f39c12;
+  background-color: rgb(var(--warning-rgb));
 }
 
 /* Animations */
@@ -2018,6 +1665,10 @@ export default {
 
 /* Responsive Design */
 @media (max-width: 768px) {
+  .notifications-page {
+    margin-left: 0;
+  }
+  
   .content-area {
     flex-direction: column;
   }
@@ -2025,7 +1676,7 @@ export default {
   .notifications-panel {
     width: 100%;
     border-right: none;
-    border-bottom: 1px solid #e1e4e8;
+    border-bottom: 1px solid var(--input-border);
     max-height: 50vh;
   }
   

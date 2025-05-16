@@ -669,12 +669,14 @@ export default {
 
 <style scoped>
 .streams-tab {
-  width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
   animation: fadeIn 0.4s ease;
   position: relative;
   padding-top: 1.5rem;
+  width: auto;
+  padding-right: 20px;
+  margin-left: 60px;
 }
 
 .tab-header {
