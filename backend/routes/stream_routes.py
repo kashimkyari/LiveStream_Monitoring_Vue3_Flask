@@ -5,8 +5,9 @@ from flask import Blueprint, request, jsonify, session, current_app
 from extensions import db
 from models import Stream, ChaturbateStream, StripchatStream, DetectionLog, User, Assignment
 from utils import login_required
-from scraping import scrape_chaturbate_data, scrape_stripchat_data, stream_creation_jobs, run_stream_creation_job
+from scraping import scrape_chaturbate_data, scrape_stripchat_data, stream_creation_jobs, run_stream_creation_job, refresh_chaturbate_stream, refresh_stripchat_stream
 import uuid
+from monitoring import refresh_and_monitor_streams
 import threading
 from sqlalchemy.orm import joinedload
 import logging
@@ -637,3 +638,19 @@ def cleanup_jobs_route():
         "message": f"Cleaned up old jobs",
         "remaining_jobs": len(stream_creation_jobs),
     })
+
+
+@stream_bp.route('/api/streams/refresh_selected', methods=['POST'])
+@login_required(role="admin")
+def refresh_selected_streams():
+    data = request.get_json()
+    stream_ids = data.get('stream_ids', [])
+    if not stream_ids:
+        return jsonify({'error': 'No stream IDs provided'}), 400
+    try:
+        success = refresh_and_monitor_streams(stream_ids)
+        if success:
+            return jsonify({'message': 'Streams refreshed and monitoring started'})
+        return jsonify({'error': 'Failed to refresh some or all streams'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

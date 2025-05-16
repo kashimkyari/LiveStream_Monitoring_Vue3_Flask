@@ -49,6 +49,47 @@
           {{ isLoggingOut ? 'Logging out...' : 'Logout' }}
         </button>
       </div>
+       <!-- Logout Confirmation Modal -->
+    <transition name="modal-fade">
+      <div v-if="showLogoutConfirmation" class="modal-overlay" @click="showLogoutConfirmation = false">
+        <div class="modal-container" @click.stop>
+          <div class="modal-header">
+            <font-awesome-icon icon="sign-out-alt" class="modal-icon" />
+            <h3>Confirm Logout</h3>
+            <button class="close-btn" @click="showLogoutConfirmation = false">
+              <font-awesome-icon icon="times" />
+            </button>
+          </div>
+          <p>Are you sure you want to log out?</p>
+          <div class="modal-actions">
+            <button
+              class="btn-danger"
+              @click="handleLogout(playLogoutAnimation)"
+              :disabled="isLoggingOut"
+            >
+              <font-awesome-icon
+                :icon="isLoggingOut ? 'spinner' : 'sign-out-alt'"
+                :spin="isLoggingOut"
+                class="icon-left"
+              />
+              {{ isLoggingOut ? 'Logging out...' : 'Logout' }}
+            </button>
+            <button class="btn-outline" @click="showLogoutConfirmation = false">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Logout Animation -->
+    <div v-if="showLogoutAnimation" class="logout-animation-overlay">
+      <div class="logout-animation-container" ref="logoutAnimationContainer">
+        <font-awesome-icon icon="sign-out-alt" class="logout-icon" ref="logoutIcon" />
+        <div class="logout-message" ref="logoutMessage">Logging out...</div>
+        <div class="logout-spinner" ref="logoutSpinner">
+          <div class="spinner-circle" v-for="n in 12" :key="n" :style="`--i: ${n}`"></div>
+        </div>
+      </div>
+    </div>
       <div class="settings-header">
         <h2>{{ sections.find(s => s.id === activeSection)?.name || 'Settings' }}</h2>
       </div>
@@ -83,8 +124,7 @@
                 <div v-if="telegramConnected" class="status-connected">
                   <font-awesome-icon :icon="['fab', 'telegram']" class="telegram-icon" />
                   <div class="status-details">
-                    <span>Connected to Telegram</span>
-                    <span>@{{ telegramUsername }}</span>
+                    <span>Connected to Telegram {{ telegramUsername }}</span>
                   </div>
                   <button class="btn-outline" @click="showTelegramModal = true">Change</button>
                 </div>
@@ -442,47 +482,7 @@
      
     </main>
 
-    <!-- Logout Confirmation Modal -->
-    <transition name="modal-fade">
-      <div v-if="showLogoutConfirmation" class="modal-overlay" @click="showLogoutConfirmation = false">
-        <div class="modal-container" @click.stop>
-          <div class="modal-header">
-            <font-awesome-icon icon="sign-out-alt" class="modal-icon" />
-            <h3>Confirm Logout</h3>
-            <button class="close-btn" @click="showLogoutConfirmation = false">
-              <font-awesome-icon icon="times" />
-            </button>
-          </div>
-          <p>Are you sure you want to log out?</p>
-          <div class="modal-actions">
-            <button
-              class="btn-danger"
-              @click="handleLogout(playLogoutAnimation)"
-              :disabled="isLoggingOut"
-            >
-              <font-awesome-icon
-                :icon="isLoggingOut ? 'spinner' : 'sign-out-alt'"
-                :spin="isLoggingOut"
-                class="icon-left"
-              />
-              {{ isLoggingOut ? 'Logging out...' : 'Logout' }}
-            </button>
-            <button class="btn-outline" @click="showLogoutConfirmation = false">Cancel</button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- Logout Animation -->
-    <div v-if="showLogoutAnimation" class="logout-animation-overlay">
-      <div class="logout-animation-container" ref="logoutAnimationContainer">
-        <font-awesome-icon icon="sign-out-alt" class="logout-icon" ref="logoutIcon" />
-        <div class="logout-message" ref="logoutMessage">Logging out...</div>
-        <div class="logout-spinner" ref="logoutSpinner">
-          <div class="spinner-circle" v-for="n in 12" :key="n" :style="`--i: ${n}`"></div>
-        </div>
-      </div>
-    </div>
+   
 
     <!-- Telegram Onboarding -->
     <TelegramOnboarding
@@ -1102,9 +1102,7 @@ const completeLogout = () => {
   width: 100%;
 }
 
-.submenu-item:hover {
-/*  color: var(--primary-color);*/
-}
+
 
 .submenu-item.active {
 /*  color: var(--primary-color);*/

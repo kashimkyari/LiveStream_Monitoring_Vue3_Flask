@@ -73,10 +73,12 @@ def load_whisper_model():
         if _whisper_model is None:
             try:
                 logger.info(f"Loading Whisper model: {WHISPER_MODEL_SIZE}")
+                # Ensure using openai-whisper package
+                import whisper
                 _whisper_model = whisper.load_model(WHISPER_MODEL_SIZE)
                 logger.info(f"Whisper model '{WHISPER_MODEL_SIZE}' loaded successfully")
-            except Exception as e:
-                logger.error(f"Error loading Whisper model: {e}")
+            except AttributeError as e:
+                logger.error(f"Whisper attribute error: {e}. Ensure 'openai-whisper' is installed correctly.")
                 try:
                     logger.info("Attempting to load fallback 'base' model")
                     _whisper_model = whisper.load_model("base")
@@ -84,6 +86,11 @@ def load_whisper_model():
                 except Exception as e2:
                     logger.error(f"Error loading fallback model: {e2}")
                     _whisper_model = None
+            except Exception as e:
+                logger.error(f"Error loading Whisper model: {e}")
+                _whisper_model = None
+    if _whisper_model is None:
+        logger.warning("Whisper model unavailable; audio processing will be skipped.")
     return _whisper_model
 
 def load_yolo_model():
@@ -240,7 +247,7 @@ def process_combined_detection(app, stream_url, cancel_event):
                             frame_duration = frame.samples / sample_rate
                             audio_buffer.append(audio_data)
                             total_audio_duration += frame_duration
-                            if total_audio_duration >= 10:
+                            if total_audio_duration >= AUDIO_SAMPLE_DURATION:
                                 combined_audio = np.concatenate(audio_buffer)
                                 detections = process_audio_segment(combined_audio, sample_rate, stream_url)
                                 for detection in detections:
@@ -254,14 +261,14 @@ def process_combined_detection(app, stream_url, cancel_event):
 
 def process_audio_segment(audio_data, original_sample_rate, stream_url):
     """Process an audio segment for transcription and analysis"""
+    model = load_whisper_model()
+    if model is None:
+        logger.warning(f"Skipping audio processing for {stream_url} due to unavailable Whisper model")
+        return []
     try:
         target_sr = 16000
         if original_sample_rate != target_sr:
             audio_data = librosa.resample(audio_data, orig_sr=original_sample_rate, target_sr=target_sr)
-        model = load_whisper_model()
-        if model is None:
-            logger.error("Whisper model not loaded")
-            return []
         logger.info(f"Transcribing audio for {stream_url}")
         result = model.transcribe(audio_data, fp16=False)
         transcript = result.get("text", "").strip()
@@ -417,9 +424,9 @@ def fetch_chat_messages(stream_url):
     """Fetch chat messages based on platform"""
     platform, streamer = get_stream_info(stream_url)
     try:
-        if (platform == "chaturbate"):
+        if platform == "chaturbate":
             return fetch_chaturbate_chat(stream_url, streamer)
-        elif (platform == "stripchat"):
+        elif platform == "stripchat":
             return fetch_stripchat_chat(stream_url, streamer)
         else:
             logger.warning(f"Unsupported platform {platform}")
@@ -560,6 +567,7 @@ def start_monitoring(stream):
             return True
         stream.is_monitored = True
         db.session.commit()
+    # Use the latest m3u8_url from the database
     if stream.type.lower() == 'chaturbate' and hasattr(stream, 'chaturbate_m3u8_url'):
         stream_url = stream.chaturbate_m3u8_url
     elif stream.type.lower() == 'stripchat' and hasattr(stream, 'stripchat_m3u8_url'):
@@ -615,6 +623,47 @@ def stop_monitoring(stream):
         'type': stream.type
     })
 
+def refresh_and_monitor_streams(stream_ids):
+    """Refresh and monitor selected streams"""
+    with current_app.app_context():
+        streams = Stream.query.filter(Stream.id.in_(stream_ids)).all()
+        if not streams:
+            logger.warning("No streams found for provided IDs")
+            return False
+        for stream in streams:
+            try:
+                # Stop existing monitoring if active
+                if stream.is_monitored:
+                    stop_monitoring(stream)
+                # Refresh stream via platform-specific endpoint
+                if stream.type.lower() == 'chaturbate':
+                    endpoint = '/api/streams/refresh/chaturbate'
+                    payload = {'room_slug': stream.streamer_username}
+                elif stream.type.lower() == 'stripchat':
+                    endpoint = '/api/streams/refresh/stripchat'
+                    payload = {'room_url': stream.room_url}
+                else:
+                    logger.warning(f"Unsupported platform {stream.type} for stream {stream.id}")
+                    continue
+                logger.info(f"Refreshing stream {stream.id} ({stream.type})")
+                response = requests.post(
+                    f"{current_app.config['BASE_URL']}{endpoint}",
+                    json=payload,
+                    timeout=10
+                )
+                if response.status_code == 200 and response.json().get('m3u8_url'):
+                    # Update stream in database (handled by endpoint, but verify)
+                    db.session.refresh(stream)
+                    # Start monitoring with updated URL
+                    start_monitoring(stream)
+                    logger.info(f"Successfully refreshed and started monitoring stream {stream.id}")
+                else:
+                    logger.error(f"Failed to refresh stream {stream.id}: {response.text}")
+            except Exception as e:
+                logger.error(f"Error processing stream {stream.id}: {e}")
+                continue
+        return True
+
 def start_notification_monitor():
     """Initialize background tasks for notifications monitoring"""
     logger.info("Starting notification monitor")
@@ -635,7 +684,8 @@ __all__ = [
     'process_audio_segment',
     'process_video_frame',
     'process_chat_messages',
-    'start_notification_monitor'  # Added to exports
+    'start_notification_monitor',
+    'refresh_and_monitor_streams'
 ]
 
 if __name__ == "__main__":

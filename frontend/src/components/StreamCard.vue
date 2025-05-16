@@ -18,7 +18,6 @@
       <video ref="videoPlayer" class="video-player"></video>
       <DetectionBadge v-if="detectionCount > 0" :count="detectionCount" />
       
-      <!-- Viewer count overlay for Stripchat streams only -->
       <div v-if="isStripchatStream" class="viewer-count-overlay">
         <span class="viewer-count">
           <font-awesome-icon icon="eye" />
@@ -33,12 +32,10 @@
         </button>
       </div>
       
-      <!-- Offline watermark -->
       <div v-if="!isOnline" class="offline-watermark">
         <span>OFFLINE</span>
       </div>
       
-      <!-- Detection toggle button -->
       <div class="detection-controls">
         <button 
           class="detection-toggle" 
@@ -137,7 +134,6 @@ export default {
     const isLoading = ref(true)
     const streamStatus = ref(props.stream.status || 'unknown')
     
-    // Detection state variables
     const isDetecting = ref(false)
     const isDetectionLoading = ref(false)
     const detectionError = ref(null)
@@ -153,6 +149,9 @@ export default {
     const agentCache = ref({})
     const allAgentsFetched = ref(false)
     
+    const lastStatusUpdate = ref({})
+    const debounceDelay = 30000
+
     const isCompactView = computed(() => {
       return props.totalStreams > 5
     })
@@ -208,6 +207,24 @@ export default {
       if (detectionError.value) return `Detection error: ${detectionError.value}`
       return isDetecting.value ? 'Stop detection' : 'Start detection'
     })
+
+    const debounce = (func, wait) => {
+      let timeout
+      return (...args) => {
+        clearTimeout(timeout)
+        timeout = setTimeout(() => func(...args), wait)
+      }
+    }
+
+    const updateStreamStatus = debounce(async (streamId, status) => {
+      try {
+        await axios.post(`/api/streams/${streamId}/status`, { status })
+        lastStatusUpdate.value[streamId] = Date.now()
+        console.log(`Updated stream ${streamId} status to ${status}`)
+      } catch (error) {
+        console.error('Failed to update stream status:', error)
+      }
+    }, debounceDelay)
 
     const fetchAllAgents = async () => {
       if (allAgentsFetched.value) return
@@ -282,6 +299,7 @@ export default {
         isOnline.value = false
         streamStatus.value = 'offline'
         isLoading.value = false
+        updateStreamStatus(props.stream.id, 'offline')
         return
       }
       
@@ -302,9 +320,7 @@ export default {
           isOnline.value = true
           streamStatus.value = 'online'
           isLoading.value = false
-          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
-            .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
-            .catch(error => console.error('Failed to update stream status:', error))
+          updateStreamStatus(props.stream.id, 'online')
         })
         hls.on(Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
@@ -343,17 +359,13 @@ export default {
           isOnline.value = true
           streamStatus.value = 'online'
           isLoading.value = false
-          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
-            .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
-            .catch(error => console.error('Failed to update stream status:', error))
+          updateStreamStatus(props.stream.id, 'online')
         })
         videoPlayer.value.addEventListener('error', () => {
           isOnline.value = false
           streamStatus.value = 'offline'
           isLoading.value = false
-          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'offline' })
-            .then(() => console.log(`Updated stream ${props.stream.id} status to offline`))
-            .catch(error => console.error('Failed to update stream status:', error))
+          updateStreamStatus(props.stream.id, 'offline')
         })
       }
     }
@@ -375,7 +387,7 @@ export default {
         isOnline.value = streamStatus.value === 'online'
         isLoading.value = false
         if (isPlaying.value && streamStatus.value !== 'online') {
-          await axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
+          updateStreamStatus(props.stream.id, 'online')
           streamStatus.value = 'online'
           isOnline.value = true
         }
@@ -571,9 +583,7 @@ export default {
           isPlaying.value = true
           isOnline.value = true
           streamStatus.value = 'online'
-          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'online' })
-            .then(() => console.log(`Updated stream ${props.stream.id} status to online`))
-            .catch(error => console.error('Failed to update stream status:', error))
+          updateStreamStatus(props.stream.id, 'online')
         }
         videoElement.onpause = () => {
           isPlaying.value = false
@@ -585,9 +595,7 @@ export default {
           isOnline.value = false
           streamStatus.value = 'offline'
           isLoading.value = false
-          axios.post(`/api/streams/${props.stream.id}/status`, { status: 'offline' })
-            .then(() => console.log(`Updated stream ${props.stream.id} status to offline`))
-            .catch(error => console.error('Failed to update stream status:', error))
+          updateStreamStatus(props.stream.id, 'offline')
         }
       }
     }
@@ -606,7 +614,7 @@ export default {
       initializeVideo()
       addEntranceAnimation()
       checkDetectionStatus()
-      detectionStatusInterval.value = setInterval(checkDetectionStatus, 15000) // Check every 15 seconds
+      detectionStatusInterval.value = setInterval(checkDetectionStatus, 15000)
       streamStatusCheckInterval.value = setInterval(checkDetectionStatus, 120000)
       setupViewerCountRefresh()
       fetchAllAgents()
@@ -646,14 +654,9 @@ export default {
     })
 
     const reportStreamOffline = async (streamId) => {
-      try {
-        await axios.post(`/api/streams/${streamId}/status`, { status: 'offline' })
-        streamStatus.value = 'offline'
-        isOnline.value = false
-        console.log(`Reported stream ${streamId} as offline`)
-      } catch (error) {
-        console.error('Failed to report stream offline:', error)
-      }
+      updateStreamStatus(streamId, 'offline')
+      streamStatus.value = 'offline'
+      isOnline.value = false
     }
 
     const handleCardClick = () => {

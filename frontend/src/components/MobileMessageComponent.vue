@@ -414,13 +414,13 @@ export default {
     
     // Methods
     const initSocket = () => {
-      // Connect to the backend athttps://monitor-backend.jetcamstudio.com:5000
-      socket.value = io('https://monitor-backend.jetcamstudio.com:5000/messages', { 
+      // Connect to the backend at http://localhost:5000
+      socket.value = io(' http://localhost:5000/messages', { 
         path: '/ws',
         transports: ['websocket']
       });
       
-      const socketUrl = `https://monitor-backend.jetcamstudio.com:5000/messages`;
+      const socketUrl = ` http://localhost:5000/messages`;
       
       console.log('Connecting to WebSocket server:', socketUrl);
       socket.value = io(socketUrl, {

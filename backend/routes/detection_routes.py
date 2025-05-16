@@ -1,13 +1,26 @@
 # routes/detection_routes.py
 from flask import Blueprint, request, jsonify, send_from_directory, session, current_app
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from models import Stream
 from utils import login_required
+from extensions import db
 import requests
 import m3u8
 import numpy as np
 from monitoring import start_monitoring, stop_monitoring, stream_processors
 
 detection_bp = Blueprint('detection', __name__)
+
+# Initialize rate limiter
+limiter = Limiter(
+    key_func=lambda: f"{request.view_args.get('stream_id')}",
+    default_limits=["10 per minute"]
+)
+
+@detection_bp.record
+def setup_limiter(state):
+    limiter.init_app(state.app)
 
 # Helper function to get stream URL
 def get_stream_url(stream):
@@ -185,3 +198,34 @@ def detection_status(stream_id):
         "isDetectionLoading": False,  # Assume no loading state unless triggered
         "detectionError": None  # No error unless explicitly set
     })
+
+@detection_bp.route("/api/streams/<int:stream_id>/status", methods=["POST"])
+@login_required()
+@limiter.limit("10 per minute")
+def update_stream_status(stream_id):
+    """Update the status of a stream."""
+    data = request.get_json()
+    if not data or "status" not in data:
+        return jsonify({"error": "Missing status in request body"}), 400
+
+    status = data.get("status")
+    if status not in ["online", "offline", "monitoring"]:
+        return jsonify({"error": "Invalid status value"}), 400
+
+    stream = Stream.query.get(stream_id)
+    if not stream:
+        return jsonify({"error": "Stream not found"}), 404
+
+    try:
+        stream.status = status
+        db.session.commit()
+        current_app.logger.info(f"Stream {stream_id} status updated to {status}")
+        return jsonify({
+            "message": "Stream status updated successfully",
+            "stream_id": stream_id,
+            "status": stream.status
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error updating stream {stream_id} status: {str(e)}")
+        return jsonify({"error": f"Failed to update stream status: {str(e)}"}), 500

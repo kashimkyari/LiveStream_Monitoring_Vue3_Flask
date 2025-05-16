@@ -1,5 +1,5 @@
 <template>
-  <section class="agent-streams" :class="{ 'dark-theme': isDarkTheme }">
+  <section class="agent-streams">
     <div class="dashboard-header">
       <h2>Agent Streams</h2>
     </div>
@@ -23,42 +23,43 @@
       </div>
       <div class="view-controls" style="display: flex; gap: 1rem;">
         <button 
-          class="view-toggle-btn" 
-          :class="{ 'active': viewMode === 'grid' }" 
-          @click="setViewMode('grid')"
-          title="Grid View"
+          @click="refreshStreams" 
+          class="view-toggle-btn refresh-btn"
+          :disabled="refreshing"
+          v-tooltip="'Refreshes one stream at a time to avoid crashing'"
         >
-          <font-awesome-icon icon="th" />
+          <font-awesome-icon 
+            :icon="refreshing ? 'spinner' : 'sync-alt'" 
+            :spin="refreshing"
+          />
+          {{ refreshing ? 'Refreshing...' : 'Refresh All' }}
         </button>
-        <button 
-          class="view-toggle-btn" 
-          :class="{ 'active': viewMode === 'list' }" 
-          @click="setViewMode('list')"
-          title="List View"
-        >
-          <font-awesome-icon icon="list" />
-        </button>
-        <button @click="refreshStreams" class="view-toggle-btn refresh-btn">
-          <font-awesome-icon icon="sync-alt" />
-          Refresh All
-        </button>
+      </div>
+    </div>
+
+    <!-- Refresh Feedback -->
+    <div v-if="refreshMessages.length" class="refresh-messages">
+      <div 
+        v-for="(message, index) in refreshMessages" 
+        :key="index"
+        :class="['refresh-message', message.type]"
+      >
+        {{ message.text }}
       </div>
     </div>
 
     <!-- Stream sections -->
     <div class="streams-section">
-      <!-- Live Streams -->
+      <!-- Online Streams -->
       <div class="section-header" @click="toggleLiveCollapse">
-        <h3>Live Streams ({{ liveStreams.length }})</h3>
+        <h3>Online Streams ({{ liveStreams.length }})</h3>
         <font-awesome-icon :icon="isLiveCollapsed ? 'chevron-down' : 'chevron-up'" />
       </div>
       <div v-show="!isLiveCollapsed" :class="['stream-container', viewMode]">
         <StreamCard 
-          v-for="(stream, index) in filteredLiveStreams" 
-          :key="stream.id || 'live-' + index"
+          v-for="stream in filteredLiveStreams" 
+          :key="stream.id"
           :stream="enhanceStreamWithUsername(stream)" 
-          :index="index"
-          :isLive="true"
           :detectionCount="getDetectionCount(stream)"
           :totalStreams="liveStreams.length"
           @click="openStreamDetails(stream)"
@@ -74,11 +75,9 @@
       </div>
       <div v-show="!isOfflineCollapsed" :class="['stream-container', viewMode]">
         <StreamCard 
-          v-for="(stream, index) in filteredOfflineStreams" 
-          :key="stream.id || 'offline-' + index"
+          v-for="stream in filteredOfflineStreams" 
+          :key="stream.id"
           :stream="enhanceStreamWithUsername(stream)" 
-          :index="index"
-          :isLive="false"
           :detectionCount="getDetectionCount(stream)"
           :totalStreams="offlineStreams.length"
           @click="openStreamDetails(stream)"
@@ -126,7 +125,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, inject } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import StreamCard from './StreamCard.vue'
@@ -137,15 +136,14 @@ import {
   faSync,
   faVideoSlash,
   faExclamationTriangle,
-  faTh,
-  faList,
   faSearch,
   faSyncAlt,
   faChevronUp,
-  faChevronDown
+  faChevronDown,
+  faSpinner
 } from '@fortawesome/free-solid-svg-icons'
 
-library.add(faSync, faVideoSlash, faExclamationTriangle, faTh, faList, faSearch, faSyncAlt, faChevronUp, faChevronDown)
+library.add(faSync, faVideoSlash, faExclamationTriangle, faSearch, faSyncAlt, faChevronUp, faChevronDown, faSpinner)
 
 export default {
   name: 'AgentStreamsComponent',
@@ -177,17 +175,14 @@ export default {
       default: () => ({})
     }
   },
-  emits: ['refresh-streams', 'update-streams'],
+  emits: ['open-stream', 'refresh-streams', 'update-streams'],
   setup(props, { emit }) {
-    const appTheme = inject('theme', ref(true))
-    const isDarkTheme = computed(() => appTheme.value === true)
-    
     // Core state
     const showModal = ref(false)
     const selectedStream = ref(null)
     const selectedStreamDetections = ref([])
     const isRefreshingStream = ref(false)
-    const viewMode = ref(window.innerWidth <= 768 ? 'list' : 'grid')
+    const viewMode = ref('grid')
     const localStreams = ref([])
     const localIsLoading = ref(false)
     const localError = ref(null)
@@ -198,6 +193,8 @@ export default {
     const isLiveCollapsed = ref(false)
     const isOfflineCollapsed = ref(true)
     const notifications = ref([])
+    const refreshing = ref(false)
+    const refreshMessages = ref([])
 
     // Computed properties
     const liveStreams = computed(() => {
@@ -225,16 +222,16 @@ export default {
       label: 'Assigned Live Streams',
       icon: 'broadcast-tower'
     }, {
-      value: offlineStreams.value.length,
-      label: 'Assigned Offline Streams',
-      icon: 'video-slash'
-    }, {
       value: notifications.value.filter(n => 
         ['object_detection', 'audio_detection', 'chat_detection'].includes(n.event_type) &&
         localStreams.value.some(s => s.room_url === n.room_url)
       ).length,
       label: 'Detections in Assigned Streams',
       icon: 'exclamation-triangle'
+    }, {
+      value: agents.value.filter(a => a.id === currentAgentId.value && a.status === 'active').length,
+      label: 'Agent Status',
+      icon: 'user-shield'
     }])
 
     // Core functions
@@ -336,16 +333,11 @@ export default {
              false
     }
     
-    const setViewMode = (mode) => {
-      if (viewMode.value === mode) return
-      viewMode.value = mode
-      localStorage.setItem('streamViewMode', mode)
-    }
-    
     const openStreamDetails = (stream) => {
       selectedStream.value = stream
       selectedStreamDetections.value = props.detections[stream.room_url] || []
       showModal.value = true
+      emit('open-stream', stream)
     }
     
     const closeModal = () => {
@@ -375,9 +367,59 @@ export default {
       }
     }
 
-    const refreshStreams = () => {
-      emit('refresh-streams', { all: true })
-      fetchAssignedStreams()
+    const addRefreshMessage = (text, type = 'info') => {
+      refreshMessages.value.push({ text, type })
+      setTimeout(() => {
+        refreshMessages.value.shift()
+      }, 5000)
+    }
+
+    const refreshStreams = async () => {
+      if (refreshing.value) return
+      refreshing.value = true
+      refreshMessages.value = []
+
+      try {
+        for (const stream of liveStreams.value) {
+          try {
+            let endpoint, payload
+            if (stream.platform === 'chaturbate') {
+              endpoint = '/api/streams/refresh/chaturbate'
+              payload = { room_slug: stream.streamer_username }
+            } else if (stream.platform === 'stripchat') {
+              endpoint = '/api/streams/refresh/stripchat'
+              payload = { room_url: stream.room_url }
+            } else {
+              addRefreshMessage(`Unsupported platform for ${stream.streamer_username}`, 'error')
+              continue
+            }
+
+            addRefreshMessage(`Refreshing ${stream.streamer_username}...`, 'info')
+            const response = await axios.post(endpoint, payload)
+            if (response.data.m3u8_url) {
+              const updatedStreams = localStreams.value.map(s => 
+                s.id === stream.id 
+                  ? { 
+                      ...s, 
+                      [stream.platform === 'chaturbate' ? 'chaturbate_m3u8_url' : 'stripchat_m3u8_url']: response.data.m3u8_url 
+                    } 
+                  : s
+              )
+              localStreams.value = updatedStreams
+              emit('update-streams', updatedStreams)
+              addRefreshMessage(`Refreshed ${stream.streamer_username} successfully`, 'success')
+            } else {
+              addRefreshMessage(`Failed to refresh ${stream.streamer_username}`, 'error')
+            }
+          } catch (error) {
+            console.error(`Error refreshing ${stream.streamer_username}:`, error)
+            addRefreshMessage(`Error refreshing ${stream.streamer_username}: ${error.response?.data?.message || error.message}`, 'error')
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+      } finally {
+        refreshing.value = false
+      }
     }
 
     const toggleLiveCollapse = () => {
@@ -394,7 +436,6 @@ export default {
       )
       localStreams.value = updatedStreams
       emit('update-streams', updatedStreams)
-      console.log(`Detection ${active ? 'started' : 'stopped'} for stream ID ${streamId}`)
     }
 
     const handleStreamStatusChange = ({ streamId, newStatus }) => {
@@ -409,17 +450,11 @@ export default {
       props.detections[stream.room_url]?.length || 0
 
     onMounted(async () => {
-      const savedViewMode = localStorage.getItem('streamViewMode')
-      if (savedViewMode && ['grid', 'list'].includes(savedViewMode)) {
-        viewMode.value = savedViewMode
-      }
-      
       await fetchAssignedStreams()
       await fetchNotifications()
     })
 
     return {
-      isDarkTheme,
       viewMode,
       showModal,
       selectedStream,
@@ -437,7 +472,6 @@ export default {
       isLiveCollapsed,
       isOfflineCollapsed,
       fetchAssignedStreams,
-      setViewMode,
       openStreamDetails,
       closeModal,
       handleStreamRefresh,
@@ -447,7 +481,9 @@ export default {
       getDetectionCount,
       refreshStreams,
       toggleLiveCollapse,
-      toggleOfflineCollapse
+      toggleOfflineCollapse,
+      refreshing,
+      refreshMessages
     }
   }
 }
@@ -456,19 +492,8 @@ export default {
 <style scoped>
 .agent-streams {
   width: auto;
-  padding: 20px;
-  background-color: var(--bg-color, #f8f9fa);
-  color: var(--text-color, #212529);
-  border-radius: 8px;
-}
-
-.dark-theme {
-  --bg-color: #18181B;
-  --text-color: #EFEFF1;
-  --border-color: #3a3a3d;
-  --accent-color: #9147FF;
-  --active-color: #1F9D55;
-  --hover-color: #2c2c35;
+  padding-right: 20px;
+  margin-left: 60px;
 }
 
 .dashboard-header h2 {
@@ -511,7 +536,7 @@ export default {
   padding: 8px 12px 8px 35px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  background: var(--input-bg, #fff);
+  background: var(--input-bg);
   color: var(--text-color);
 }
 
@@ -519,7 +544,7 @@ export default {
   padding: 8px 16px;
   border: none;
   border-radius: 6px;
-  background: var(--primary-color, #9147FF);
+  background: var(--primary-color);
   color: white;
   cursor: pointer;
   display: flex;
@@ -527,12 +552,35 @@ export default {
   gap: 8px;
 }
 
-.view-toggle-btn.active {
-  background-color: var(--accent-color, #9147FF);
+.view-toggle-btn:disabled, .refresh-btn:disabled {
+  background: var(--disabled-color);
+  cursor: not-allowed;
 }
 
-.view-toggle-btn:hover:not(.active) {
-  background-color: var(--hover-color, rgba(0, 0, 0, 0.1));
+.refresh-messages {
+  margin-bottom: 1rem;
+}
+
+.refresh-message {
+  padding: 8px 12px;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.refresh-message.info {
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
+.refresh-message.success {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.refresh-message.error {
+  background: var(--error-bg);
+  color: var(--error-text);
 }
 
 .section-header {
@@ -559,6 +607,9 @@ export default {
 
 .stream-container.list {
   grid-template-columns: 1fr;
+  width: 100%;
+  height: 20%;
+  display: flex;  
 }
 
 .empty-state {
@@ -568,14 +619,14 @@ export default {
   justify-content: center;
   padding: 40px 20px;
   text-align: center;
-  background-color: var(--hover-color, rgba(0, 0, 0, 0.02));
+  background-color: var(--hover-color);
   border-radius: 8px;
   margin: 30px 0;
 }
 
 .empty-icon {
   font-size: 2.5rem;
-  color: var(--border-color, #dee2e6);
+  color: var(--border-color);
   margin-bottom: 15px;
 }
 
@@ -586,7 +637,7 @@ export default {
 }
 
 .empty-description {
-  color: var(--text-color, rgba(33, 37, 41, 0.7));
+  color: var(--text-color);
   margin-bottom: 20px;
 }
 
@@ -608,7 +659,7 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background-color: var(--bg-color, white);
+  background-color: var(--bg-color);
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.19);
@@ -618,7 +669,7 @@ export default {
   width: 40px;
   height: 40px;
   border: 4px solid rgba(0, 0, 0, 0.1);
-  border-top-color: var(--accent-color, #9147FF);
+  border-top-color: var(--accent-color);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 15px;
@@ -656,29 +707,21 @@ export default {
   padding: 6px 12px;
   border: none;
   border-radius: 4px;
-  background-color: var(--accent-color, #9147FF);
+  background-color: var(--accent-color);
   color: white;
   cursor: pointer;
 }
 
 .retry-button:hover {
-  background-color: var(--accent-color, #7e32e6);
+  background-color: var(--hover-color);
 }
 
 @keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 @media (max-width: 768px) {
-  .agent-streams {
-    padding: 15px 10px;
-  }
-  
   .controls-section {
     flex-direction: column;
   }
@@ -696,10 +739,6 @@ export default {
   .view-toggle-btn, .refresh-btn {
     flex: 1;
     justify-content: center;
-  }
-  
-  .stream-container.grid {
-    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -3,8 +3,6 @@ import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { useToast } from 'vue-toastification'
 
-const API_BASE_URL = 'https://monitor-backend.jetcamstudio.com:5000' // Hardcoded base URL
-
 export function useSettings(defaultSettings = { emailNotifications: true, pushNotifications: false }) {
   const toast = useToast()
   
@@ -22,7 +20,7 @@ export function useSettings(defaultSettings = { emailNotifications: true, pushNo
   // Fetch settings on mount
   onMounted(async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/user/telegram`, { withCredentials: true })
+      const response = await axios.get('/api/user/telegram', { withCredentials: true })
       telegramConnected.value = !!(response.data.telegram_username && response.data.chat_id)
       telegramUsername.value = response.data.telegram_username || ''
       telegramChatId.value = response.data.chat_id || ''
@@ -36,7 +34,7 @@ export function useSettings(defaultSettings = { emailNotifications: true, pushNo
   // Save settings to backend
   const saveSettings = async () => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/user/telegram`, {
+      const response = await axios.post('/api/user/telegram', {
         telegram_username: telegramUsername.value,
         chat_id: telegramChatId.value,
         receive_updates: settings.value.pushNotifications
@@ -80,7 +78,7 @@ export function useSettings(defaultSettings = { emailNotifications: true, pushNo
     try {
       isLoggingOut.value = true
       showLogoutConfirmation.value = false
-      const response = await axios.post(`${API_BASE_URL}/api/logout`, {}, { withCredentials: true })
+      const response = await axios.post('/api/logout', {}, { withCredentials: true })
       if (response.status === 200) {
         playAnimation()
       }

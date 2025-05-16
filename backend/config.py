@@ -13,7 +13,7 @@ class Config:
     """Base configuration for all environments."""
     # ─── Secret & Security ───────────────────────────────────────────────
     SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'please-set-a-secure-key')
-    SESSION_COOKIE_SECURE = False            # Allow cookies over HTTP
+    SESSION_COOKIE_SECURE = False            # Allow cookies over HTTP?
     REMEMBER_COOKIE_SECURE = False           # Allow cookies over HTTP
 
     # ─── Database ────────────────────────────────────────────────────────

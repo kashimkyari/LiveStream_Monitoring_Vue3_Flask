@@ -584,7 +584,7 @@ export default {
       }
 
       try {
-        socket.value = io('https://monitor-backend.jetcamstudio.com:5000/notifications', {
+        socket.value = io(' http://localhost:5000/notifications', {
           path: '/ws',
           transports: ['websocket', 'polling'],
           reconnection: false,
@@ -835,7 +835,7 @@ export default {
       if (deletingAll.value) return
       deletingAll.value = true
       try {
-        await axios.delete('/api/notifications')
+        await axios.delete('/api/notifications/delete-all')
         const deletedIds = notifications.value.map(n => n.id)
         notifications.value = []
         selectedNotification.value = null

@@ -2106,10 +2106,7 @@ export default {
     height: 90%;
   }
   
-  .main-content.sidebar-minimized {
-    
-  }
-
+  
   .dashboard-header {
     padding: 12px 16px;
   }
