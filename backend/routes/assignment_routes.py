@@ -5,6 +5,7 @@ from models import Assignment, Stream, User
 from utils import login_required
 from sqlalchemy.orm import joinedload
 from utils.notifications import emit_assignment_update
+from services.assignment_service import AssignmentService  # Import AssignmentService
 
 assignment_bp = Blueprint('assignment', __name__)
 
@@ -15,38 +16,44 @@ assignment_bp = Blueprint('assignment', __name__)
 @login_required(role="admin")
 def assign_agent_to_stream():
     data = request.get_json()
-    assignment_data = {
-        "id": assignment.id,
-        "agent_id": assignment.agent_id,
-        "stream_id": assignment.stream_id,
-        "action": "assigned"
-    }
     agent_id = data.get("agent_id")
     stream_id = data.get("stream_id")
+    notes = data.get("notes")  # Optional notes field
+    priority = data.get("priority", "normal")  # Optional priority field
+
     if not agent_id or not stream_id:
         return jsonify({"message": "Both agent_id and stream_id are required."}), 400
-    
-    # Validate the agent and stream exist
-    agent = User.query.get(agent_id)
-    stream = Stream.query.get(stream_id)
-    
-    if not agent:
-        return jsonify({"message": "Agent not found"}), 404
-    if not stream:
-        return jsonify({"message": "Stream not found"}), 404
-    
-    # Check if assignment already exists to avoid duplicates
-    existing = Assignment.query.filter_by(agent_id=agent_id, stream_id=stream_id).first()
-    if existing:
-        return jsonify({"message": "Assignment already exists", "assignment": existing.serialize()}), 200
-        
+
     try:
-        assignment = Assignment(agent_id=agent_id, stream_id=stream_id)
-        db.session.add(assignment)
-        db.session.commit()
+        # Use AssignmentService to handle assignment creation and notifications
+        assignment, created = AssignmentService.assign_stream_to_agent(
+            stream_id=stream_id,
+            agent_id=agent_id,
+            assigner_id=request.session.get("user_id"),  # Pass the current user's ID as assigner
+            notes=notes,
+            priority=priority,
+            metadata={"source": "manual_assignment"}
+        )
+
+        if not created:
+            return jsonify({
+                "message": "Assignment already exists",
+                "assignment": assignment.serialize()
+            }), 200
+
+        # Create assignment_data after assignment is created
+        assignment_data = {
+            "id": assignment.id,
+            "agent_id": assignment.agent_id,
+            "stream_id": assignment.stream_id,
+            "action": "assigned"
+        }
         emit_assignment_update(assignment_data)
-        
-        return jsonify({"message": "Assignment created successfully.", "assignment": assignment.serialize()}), 201
+
+        return jsonify({
+            "message": "Assignment created successfully.",
+            "assignment": assignment.serialize()
+        }), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({"message": "Assignment creation failed", "error": str(e)}), 500

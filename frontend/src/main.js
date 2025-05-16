@@ -38,7 +38,9 @@ import {
   faSatelliteDish,
   faUserPlus, 
   faUserClock,
-  faUserCircle
+  faUserCircle,
+  faTags,
+  faTasks
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import Toast from 'vue-toastification';
@@ -86,7 +88,10 @@ library.add(
   faSatelliteDish,
   faUserPlus,
   faUserClock,
-  faUserCircle
+  faUserCircle,
+  faTags,
+  faTasks
+ 
   
 );
 

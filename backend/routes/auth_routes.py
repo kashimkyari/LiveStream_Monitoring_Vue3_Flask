@@ -109,13 +109,14 @@ def login():
 
 @auth_bp.route("/api/logout", methods=["POST"])
 def logout():
+    current_app.logger.info(f"Logout attempt from: {request.remote_addr}, Session: {dict(session)}")
     session.clear()
     response = jsonify({"message": "Logged out successfully"})
-    
     session_cookie_name = current_app.config.get('SESSION_COOKIE_NAME', 'session')
-    response.set_cookie(session_cookie_name, '', expires=0)
-    response.set_cookie('session_active', '', expires=0)
-        
+    response.set_cookie(session_cookie_name, '', expires=0, httponly=True, secure=True, samesite='None')
+    response.set_cookie('session_active', '', expires=0, httponly=True, secure=True, samesite='None')
+    response.set_cookie('user_role', '', expires=0, httponly=False, secure=True, samesite='None')
+    current_app.logger.info("Session cleared and cookies expired")
     return response
 
 @auth_bp.route('/api/session', methods=['GET'])

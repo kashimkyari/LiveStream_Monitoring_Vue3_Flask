@@ -276,6 +276,9 @@ export default {
     let eventSource = null
     let pollingInterval = null
     let lastPollTime = 0
+    let reconnectAttempts = 0
+    const maxReconnectAttempts = 5
+    const baseReconnectDelay = 1000
     
     // Progress steps (aligned with backend phases)
     const progressSteps = [
@@ -456,22 +459,29 @@ export default {
     // SSE Implementation
     const setupSSEConnection = () => {
       cleanupConnections()
+      if (reconnectAttempts >= maxReconnectAttempts) {
+        console.warn('Max SSE reconnect attempts reached, switching to polling')
+        connectionStatus.value = 'polling'
+        setupPolling()
+        return
+      }
       
       try {
-        const url = `/api/streams/interactive/sse?job_id=${jobId.value}`
+        const url = `https://monitor-backend.jetcamstudio.com:5000/api/streams/interactive/sse?job_id=${jobId.value}`
         eventSource = new EventSource(url)
         connectionStatus.value = 'sse'
-        
         const startTime = Date.now()
         
         eventSource.onopen = () => {
-          console.log('SSE connection established')
+          console.log(`SSE connection established for job ${jobId.value}`)
+          reconnectAttempts = 0
+          latency.value = Date.now() - startTime
         }
         
         eventSource.onmessage = (event) => {
           try {
-            latency.value = Date.now() - startTime
             const data = JSON.parse(event.data)
+            console.log('SSE message received:', data)
             
             if (data.progress !== undefined) {
               progressPercentage.value = Math.min(data.progress, 100)
@@ -487,13 +497,15 @@ export default {
             }
             
             if (data.error) {
+              console.error('SSE error event:', data.error)
               emit('error', data.error)
               toast.error(`Stream creation failed: ${data.error}`)
               cleanupConnections()
               isCreating.value = false
             }
             
-            if (data.stream) {
+            if (event.event === 'completed' || (data.stream && data.progress >= 100)) {
+              console.log('SSE completion event:', data)
               assignmentDetails.value = data.assignment
               emit('streamCreated', data.stream)
               toast.success('Stream created successfully!')
@@ -501,19 +513,20 @@ export default {
               isCreating.value = false
             }
           } catch (e) {
-            console.error('Error parsing SSE message:', e)
+            console.error('Error parsing SSE message:', e, event.data)
           }
         }
         
         eventSource.onerror = () => {
-          console.warn('SSE connection failed, falling back to polling')
+          console.warn(`SSE connection failed for job ${jobId.value}, attempt ${reconnectAttempts + 1}`)
           eventSource.close()
           eventSource = null
-          connectionStatus.value = 'polling'
-          setupPolling()
+          reconnectAttempts++
+          const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts)
+          setTimeout(setupSSEConnection, delay)
         }
       } catch (e) {
-        console.warn('SSE not supported, falling back to polling')
+        console.warn('SSE not supported or failed to initialize, falling back to polling:', e)
         connectionStatus.value = 'polling'
         setupPolling()
       }
@@ -526,12 +539,13 @@ export default {
       pollingInterval = setInterval(async () => {
         try {
           const now = Date.now()
-          if (now - lastPollTime < 500) return
+          if (now - lastPollTime < 1000) return
           lastPollTime = now
 
           const startTime = Date.now()
-          const response = await axios.get(`/api/streams/interactive/status?job_id=${jobId.value}`)
-
+          const response = await axios.get(`https://monitor-backend.jetcamstudio.com:5000/api/streams/interactive/status?job_id=${jobId.value}`)
+          
+          console.log('Polling response:', response.data)
           latency.value = Date.now() - startTime
 
           if (!response.data) return
@@ -550,13 +564,15 @@ export default {
           }
 
           if (response.data.error) {
+            console.error('Polling error:', response.data.error)
             emit('error', response.data.error)
             toast.error(`Stream creation failed: ${response.data.error}`)
             cleanupConnections()
             isCreating.value = false
           }
 
-          if (response.data.stream) {
+          if (response.data.stream && response.data.progress >= 100) {
+            console.log('Polling completion:', response.data)
             assignmentDetails.value = response.data.assignment
             emit('streamCreated', response.data.stream)
             toast.success('Stream created successfully!')
@@ -566,13 +582,14 @@ export default {
         } catch (e) {
           console.error('Polling error:', e)
           if (e.response?.status === 404) {
-            emit('error', 'Job not found')
+            console.error('Job not found, stopping polling')
+            emit('error', 'Stream creation job not found')
             toast.error('Stream creation job not found')
             cleanupConnections()
             isCreating.value = false
           }
         }
-      }, 500)
+      }, 1000)
     }
     
     // Cleanup connections
@@ -586,6 +603,8 @@ export default {
         clearInterval(pollingInterval)
         pollingInterval = null
       }
+      connectionStatus.value = 'none'
+      latency.value = null
     }
     
     // Form submission
@@ -605,11 +624,13 @@ export default {
         progressPercentage.value = 0
         progressMessage.value = 'Initializing stream creation...'
         assignmentDetails.value = null
+        reconnectAttempts = 0
         
-        const response = await axios.post('/api/streams/interactive', streamData)
+        const response = await axios.post('https://monitor-backend.jetcamstudio.com:5000/api/streams/interactive', streamData)
         
         if (response.data && response.data.job_id) {
           jobId.value = response.data.job_id
+          console.log('Starting SSE for job:', jobId.value)
           setupSSEConnection()
           toast.info(`Creating ${form.value.platform} stream...`, {
             timeout: 3000
@@ -629,6 +650,7 @@ export default {
             errorMessage += ` (Stream ID: ${error.response.data.existing_id})`
           }
         }
+        console.error('Submit error:', errorMessage)
         emit('error', errorMessage)
         toast.error(errorMessage)
       }

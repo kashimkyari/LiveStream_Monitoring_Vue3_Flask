@@ -1,7 +1,7 @@
 # routes/dashboard_routes.py
 from flask import Blueprint, jsonify, session, current_app
 from extensions import db
-from models import Stream, Assignment
+from models import Stream, Assignment, User
 from utils import login_required
 from sqlalchemy.orm import joinedload
 
@@ -14,13 +14,32 @@ dashboard_bp = Blueprint('dashboard', __name__)
 @login_required
 def get_dashboard():
     try:
-        streams = Stream.query.options(joinedload(Stream.assignments).joinedload(Assignment.agent)).all()
+        # Fetch streams with their assignments and agents eagerly loaded
+        streams = Stream.query.options(
+            joinedload(Stream.assignments).joinedload(Assignment.agent)
+        ).all()
         data = []
         for stream in streams:
             assignment = stream.assignments[0] if stream.assignments else None
+            agent_data = None
+            if assignment and assignment.agent:
+                # Fetch the User object to get the username
+                agent = User.query.filter_by(id=assignment.agent_id, role="agent").first()
+                if agent:
+                    # Serialize only the relevant agent data (username)
+                    agent_data = {
+                        "id": agent.id,
+                        "username": agent.username,
+                        "role": agent.role,
+                        "online": agent.online
+                    }
+                else:
+                    current_app.logger.warning(f"Agent with ID {assignment.agent_id} not found for stream {stream.id}")
+                    agent_data = None
+
             stream_data = {
                 **stream.serialize(),
-                "agent": assignment.agent.serialize() if assignment and assignment.agent else None,
+                "agent": agent_data,  # Include username instead of just agent_id
                 "confidence": 0.8
             }
             data.append(stream_data)

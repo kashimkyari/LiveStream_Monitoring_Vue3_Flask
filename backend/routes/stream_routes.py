@@ -52,7 +52,35 @@ def get_streams():
     if streamer and not platform:
         query = query.filter(Stream.streamer_username.ilike(f"%{streamer}%"))
     streams = query.all()
-    return jsonify([stream.serialize() for stream in streams])
+    
+    streams_data = []
+    for stream in streams:
+        assignments_data = []
+        for assignment in stream.assignments:
+            agent_data = None
+            if assignment and assignment.agent:
+                agent = User.query.filter_by(id=assignment.agent_id, role="agent").first()
+                if agent:
+                    agent_data = {
+                        "id": agent.id,
+                        "username": agent.username,
+                        "role": agent.role,
+                        "online": agent.online
+                    }
+                else:
+                    current_app.logger.warning(f"Agent with ID {assignment.agent_id} not found for stream {stream.id}")
+                    agent_data = None
+            assignments_data.append({
+                **assignment.serialize(),
+                "agent": agent_data
+            })
+        stream_data = {
+            **stream.serialize(),
+            "assignments": assignments_data
+        }
+        streams_data.append(stream_data)
+    
+    return jsonify(streams_data)
 
 @stream_bp.route("/api/streams", methods=["POST"])
 @login_required(role="admin")

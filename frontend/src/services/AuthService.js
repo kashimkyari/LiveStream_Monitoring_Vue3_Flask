@@ -93,7 +93,7 @@ class AuthService {
       };
     }
   }
-  
+   
   /**
    * Log out the current user
    * @returns {Promise<boolean>} - Success status
@@ -101,7 +101,7 @@ class AuthService {
   async logout() {
     try {
       // First try to notify the server
-      await apiClient.post('/logout');
+      await apiClient.post('/api/logout');
       
     } catch (error) {
       console.error('Logout error on server:', error);

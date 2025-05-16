@@ -9,8 +9,6 @@ const api = axios.create({
   }
 })
 
-// services/api.js - Add these methods to your existing API service
-
 // Request password reset (sends email with token)
 export const requestPasswordReset = (email) => {
   return api.post('/api/forgot-password', { email });

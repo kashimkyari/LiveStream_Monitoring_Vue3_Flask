@@ -1,105 +1,446 @@
 <template>
   <div class="admin-settings-container" :data-theme="isDarkTheme ? 'dark' : 'light'">
     <div class="settings-sidebar">
-      <h3 class="sidebar-title">Settings</h3>
+      <h3 class="sidebar-title">Admin Settings</h3>
       <ul class="settings-menu">
-        <li class="menu-item active">
-          <font-awesome-icon icon="cog" class="menu-icon" />
-          <span>General Settings</span>
+        <li
+          v-for="section in sections"
+          :key="section.id"
+          class="menu-item"
+          :class="{ active: activeSection === section.id }"
+          @click="setActiveSection(section.id)"
+          :title="section.tooltip"
+          :aria-expanded="activeSection === section.id && section.id === 'tracking'"
+        >
+          <div class="menu-item-content">
+            <font-awesome-icon :icon="section.icon" class="menu-icon" />
+            <span>{{ section.name }}</span>
+          </div>
+          <!-- Nested submenu for Tracking -->
+          <ul v-if="activeSection === section.id && section.id === 'tracking'" class="submenu">
+            <li
+              v-for="sub in ['keywords', 'objects']"
+              :key="sub"
+              class="submenu-item"
+              :class="{ active: subSection === sub }"
+              @click="setSubSection(sub)"
+            >
+              {{ sub.charAt(0).toUpperCase() + sub.slice(1) }}
+            </li>
+          </ul>
         </li>
       </ul>
     </div>
 
     <main class="settings-content">
       <div class="settings-header">
-        <h2>General Settings</h2>
+        <h2>{{ sections.find(s => s.id === activeSection)?.name || 'Settings' }}</h2>
       </div>
 
-      <div class="settings-body">
-        <section class="settings-section">
-          <h3>Notifications</h3>
-          <div class="settings-options">
-            <div class="option">
-              <span>Email Notifications</span>
-              <div 
-                class="toggle-switch" 
-                :class="{ active: settings.emailNotifications }" 
-                @click="toggleEmailNotifications"
-              >
-                <div class="toggle-handle"></div>
-              </div>
-            </div>
-
-            <div class="option">
-              <span>Push Notifications</span>
-              <div 
-                class="toggle-switch" 
-                :class="{ active: settings.pushNotifications }" 
-                @click="togglePushNotifications"
-              >
-                <div class="toggle-handle"></div>
-              </div>
-            </div>
-
-            <div class="telegram-status" v-if="settings.pushNotifications">
-              <div v-if="telegramConnected" class="status-connected">
-                <font-awesome-icon :icon="['fab', 'telegram']" class="telegram-icon" />
-                <div class="status-details">
-                  <span>Connected to Telegram</span>
-                  <span>@{{ telegramUsername }}</span>
+      <transition name="section-fade">
+        <div class="settings-body" :key="activeSection + subSection">
+          <!-- General Settings -->
+          <section v-if="activeSection === 'general'" class="settings-section">
+            <h3>Notifications</h3>
+            <div class="settings-options">
+              <div class="option">
+                <span title="Receive alerts via email">Email Alerts</span>
+                <div
+                  class="toggle-switch"
+                  :class="{ active: settings.emailNotifications }"
+                  @click="toggleEmailNotifications"
+                >
+                  <div class="toggle-handle"></div>
                 </div>
-                <button class="btn-outline" @click="showTelegramModal = true">Change</button>
               </div>
-              <div v-else class="status-disconnected" @click="showTelegramModal = true">
-                <font-awesome-icon :icon="['fab', 'telegram']" class="telegram-icon" />
-                <span>Connect to Telegram</span>
+              <div class="option">
+                <span title="Receive alerts on your device">App Alerts</span>
+                <div
+                  class="toggle-switch"
+                  :class="{ active: settings.pushNotifications }"
+                  @click="togglePushNotifications"
+                >
+                  <div class="toggle-handle"></div>
+                </div>
+              </div>
+              <div class="telegram-status" v-if="settings.pushNotifications">
+                <div v-if="telegramConnected" class="status-connected">
+                  <font-awesome-icon :icon="['fab', 'telegram']" class="telegram-icon" />
+                  <div class="status-details">
+                    <span>Connected to Telegram</span>
+                    <span>@{{ telegramUsername }}</span>
+                  </div>
+                  <button class="btn-outline" @click="showTelegramModal = true">Change</button>
+                </div>
+                <div v-else class="status-disconnected" @click="showTelegramModal = true">
+                  <font-awesome-icon :icon="['fab', 'telegram']" class="telegram-icon" />
+                  <span>Connect to Telegram</span>
+                </div>
               </div>
             </div>
-          </div>
-        </section>
 
-        <section class="settings-section">
-          <h3>Appearance</h3>
-          <div class="theme-options">
-            <div 
-              class="theme-option" 
-              :class="{ selected: isDarkTheme }" 
-              @click="$emit('set-theme', true)"
-            >
-              <font-awesome-icon icon="moon" class="theme-icon" />
-              <span>Dark Mode</span>
+            <h3>Appearance</h3>
+            <div class="theme-options">
+              <div
+                class="theme-option"
+                :class="{ selected: isDarkTheme }"
+                @click="toggleTheme(true)"
+                title="Switch to dark mode for better visibility in low light"
+              >
+                <font-awesome-icon icon="moon" class="theme-icon" />
+                <span>Dark Mode</span>
+              </div>
+              <div
+                class="theme-option"
+                :class="{ selected: !isDarkTheme }"
+                @click="toggleTheme(false)"
+                title="Switch to light mode for a brighter interface"
+              >
+                <font-awesome-icon icon="sun" class="theme-icon" />
+                <span>Light Mode</span>
+              </div>
             </div>
-            <div 
-              class="theme-option" 
-              :class="{ selected: !isDarkTheme }" 
-              @click="$emit('set-theme', false)"
-            >
-              <font-awesome-icon icon="sun" class="theme-icon" />
-              <span>Light Mode</span>
-            </div>
-          </div>
-        </section>
+          </section>
 
-        <div class="action-buttons">
-          <button class="btn-primary" @click="saveSettings">
-            <font-awesome-icon icon="save" class="icon-left" /> Save Changes
-         -Y</button>
-          <button 
-            class="btn-danger" 
-            @click="showLogoutConfirmation = true" 
-            :disabled="isLoggingOut"
-          >
-            <font-awesome-icon 
-              :icon="isLoggingOut ? 'spinner' : 'sign-out-alt'" 
-              :spin="isLoggingOut" 
-              class="icon-left"
-            />
-            {{ isLoggingOut ? 'Logging out...' : 'Logout' }}
-          </button>
+          <!-- Agent Management -->
+          <section v-if="activeSection === 'agents'" class="settings-section">
+            <h3>Manage Agents</h3>
+            <div class="form-group">
+              <h4>Add New Agent</h4>
+              <form @submit.prevent="addAgent">
+                <input v-model="newAgent.username" placeholder="Enter Username" required :disabled="isAddingAgent" />
+                <input v-model="newAgent.password" type="password" placeholder="Enter Password" required :disabled="isAddingAgent" />
+                <button type="submit" class="btn-primary" :disabled="isAddingAgent">
+                  <font-awesome-icon v-if="isAddingAgent" icon="spinner" spin />
+                  Add Agent
+                </button>
+              </form>
+            </div>
+            <div class="form-group">
+              <h4>Update Agent</h4>
+              <form @submit.prevent="updateAgent">
+                <select v-model="updateAgentData.id" required :disabled="isUpdatingAgent" aria-label="Select an agent to update">
+                  <option value="" disabled>Select an Agent</option>
+                  <option v-for="agent in agents" :key="agent.id" :value="agent.id">{{ agent.username }}</option>
+                </select>
+                <input v-model="updateAgentData.password" type="password" placeholder="New Password (optional)" :disabled="isUpdatingAgent" />
+                <label>
+                  <input v-model="updateAgentData.online" type="checkbox" :disabled="isUpdatingAgent" />
+                  Set as Online
+                </label>
+                <button type="submit" class="btn-primary" :disabled="isUpdatingAgent">
+                  <font-awesome-icon v-if="isUpdatingAgent" icon="spinner" spin />
+                  Update Agent
+                </button>
+              </form>
+            </div>
+            <div class="form-group">
+              <h4>Remove Agent</h4>
+              <form @submit.prevent="removeAgent">
+                <select v-model="deleteAgentId" required :disabled="isRemovingAgent" aria-label="Select an agent to remove">
+                  <option value="" disabled>Select an Agent</option>
+                  <option v-for="agent in agents" :key="agent.id" :value="agent.id">{{ agent.username }}</option>
+                </select>
+                <button type="submit" class="btn-danger" :disabled="isRemovingAgent">
+                  <font-awesome-icon v-if="isRemovingAgent" icon="spinner" spin />
+                  Remove Agent
+                </button>
+              </form>
+            </div>
+          </section>
+
+          <!-- Assignment Management -->
+          <section v-if="activeSection === 'assignments'" class="settings-section">
+            <h3>Manage Assignments</h3>
+            <div class="form-group">
+              <h4>Assign Agent to Stream</h4>
+              <form @submit.prevent="assignAgentToStream">
+                <select v-model="newAssignment.agent_id" required :disabled="isAddingAssignment" aria-label="Select an agent to assign">
+                  <option value="" disabled>Select an Agent</option>
+                  <option v-for="agent in agents" :key="agent.id" :value="agent.id">{{ agent.username }}</option>
+                </select>
+                <select v-model="newAssignment.stream_id" required :disabled="isAddingAssignment" aria-label="Select a stream to assign">
+                  <option value="" disabled>Select a Stream</option>
+                  <option v-for="stream in streams" :key="stream.id" :value="stream.id">{{ stream.room_url }}</option>
+                </select>
+                <button type="submit" class="btn-primary" :disabled="isAddingAssignment">
+                  <font-awesome-icon v-if="isAddingAssignment" icon="spinner" spin />
+                  Assign
+                </button>
+              </form>
+            </div>
+            <div class="form-group">
+              <h4>Remove Assignment</h4>
+              <form @submit.prevent="removeAssignment">
+                <select v-model="deleteAssignmentId" required :disabled="isRemovingAssignment" aria-label="Select an assignment to remove">
+                  <option value="" disabled>Select an Assignment</option>
+                  <option v-for="assignment in assignments" :key="assignment.id" :value="assignment.id">
+                    {{ assignment.agent_username }} - {{ assignment.stream_url }}
+                  </option>
+                </select>
+                <button type="submit" class="btn-danger" :disabled="isRemovingAssignment">
+                  <font-awesome-icon v-if="isRemovingAssignment" icon="spinner" spin />
+                  Remove Assignment
+                </button>
+              </form>
+            </div>
+          </section>
+
+          <!-- Stream Management -->
+          <section v-if="activeSection === 'streams'" class="settings-section">
+            <h3>Manage Streams</h3>
+            <div class="form-group">
+              <h4>Add New Stream</h4>
+              <form @submit.prevent="addStream">
+                <select v-model="newStream.platform" required :disabled="isAddingStream" aria-label="Select a platform">
+                  <option value="" disabled>Select Platform</option>
+                  <option value="chaturbate">Chaturbate</option>
+                  <option value="stripchat">Stripchat</option>
+                </select>
+                <input v-model="newStream.room_url" placeholder="Enter Stream URL" required :disabled="isAddingStream" />
+                <select v-model="newStream.priority" :disabled="isAddingStream" aria-label="Select priority">
+                  <option value="normal">Normal Priority</option>
+                  <option value="high">High Priority</option>
+                  <option value="low">Low Priority</option>
+                </select>
+                <button type="submit" class="btn-primary" :disabled="isAddingStream">
+                  <font-awesome-icon v-if="isAddingStream" icon="spinner" spin />
+                  Add Stream
+                </button>
+              </form>
+            </div>
+            <div class="form-group">
+              <h4>Update Stream</h4>
+              <form @submit.prevent="updateStream">
+                <select v-model="updateStreamData.id" required :disabled="isUpdatingStream" aria-label="Select a stream to update">
+                  <option value="" disabled>Select a Stream</option>
+                  <option v-for="stream in streams" :key="stream.id" :value="stream.id">{{ stream.room_url }}</option>
+                </select>
+                <input v-model="updateStreamData.room_url" placeholder="New Stream URL (optional)" :disabled="isUpdatingStream" />
+                <select v-model="updateStreamData.priority" :disabled="isUpdatingStream" aria-label="Select priority">
+                  <option value="normal">Normal Priority</option>
+                  <option value="high">High Priority</option>
+                  <option value="low">Low Priority</option>
+                </select>
+                <button type="submit" class="btn-primary" :disabled="isUpdatingStream">
+                  <font-awesome-icon v-if="isUpdatingStream" icon="spinner" spin />
+                  Update Stream
+                </button>
+              </form>
+            </div>
+            <div class="form-group">
+              <h4>Remove Stream</h4>
+              <form @submit.prevent="removeStream">
+                <select v-model="deleteStreamId" required :disabled="isRemovingStream" aria-label="Select a stream to remove">
+                  <option value="" disabled>Select a Stream</option>
+                  <option v-for="stream in streams" :key="stream.id" :value="stream.id">{{ stream.room_url }}</option>
+                </select>
+                <button type="submit" class="btn-danger" :disabled="isRemovingStream">
+                  <font-awesome-icon v-if="isRemovingStream" icon="spinner" spin />
+                  Remove Stream
+                </button>
+              </form>
+            </div>
+            <div class="form-group">
+              <h4>Update Stream Status</h4>
+              <form @submit.prevent="updateStreamStatus">
+                <select v-model="streamStatus.id" required :disabled="isUpdatingStreamStatus" aria-label="Select a stream to update status">
+                  <option value="" disabled>Select a Stream</option>
+                  <option v-for="stream in streams" :key="stream.id" :value="stream.id">{{ stream.room_url }}</option>
+                </select>
+                <select v-model="streamStatus.status" required :disabled="isUpdatingStreamStatus" aria-label="Select status">
+                  <option value="online">Online</option>
+                  <option value="offline">Offline</option>
+                </select>
+                <button type="submit" class="btn-primary" :disabled="isUpdatingStreamStatus">
+                  <font-awesome-icon v-if="isUpdatingStreamStatus" icon="spinner" spin />
+                  Update Status
+                </button>
+              </form>
+            </div>
+          </section>
+
+          <!-- Notification Management -->
+          <section v-if="activeSection === 'notifications'" class="settings-section">
+            <h3>Manage Alerts</h3>
+            <div class="form-group">
+              <h4>Create Alert</h4>
+              <form @submit.prevent="createNotification">
+                <select v-model="newNotification.event_type" required :disabled="isCreatingNotification" aria-label="Select alert type">
+                  <option value="" disabled>Select Alert Type</option>
+                  <option value="stream_online">Stream Online</option>
+                  <option value="stream_offline">Stream Offline</option>
+                  <option value="keyword_detected">Keyword Detected</option>
+                </select>
+                <select v-model="newNotification.stream_id" required :disabled="isCreatingNotification" aria-label="Select a stream">
+                  <option value="" disabled>Select a Stream</option>
+                  <option v-for="stream in streams" :key="stream.id" :value="stream.id">{{ stream.room_url }}</option>
+                </select>
+                <input v-model="newNotification.message" placeholder="Alert Message" required :disabled="isCreatingNotification" />
+                <button type="submit" class="btn-primary" :disabled="isCreatingNotification">
+                  <font-awesome-icon v-if="isCreatingNotification" icon="spinner" spin />
+                  Create Alert
+                </button>
+              </form>
+            </div>
+            <div class="form-group">
+              <h4>Mark Alert as Read</h4>
+              <form @submit.prevent="markNotificationRead">
+                <select v-model="updateNotificationId" required :disabled="isMarkingNotificationRead" aria-label="Select an alert to mark as read">
+                  <option value="" disabled>Select an Alert</option>
+                  <option v-for="notification in notifications" :key="notification.id" :value="notification.id">
+                    {{ notification.message }} ({{ notification.event_type }})
+                  </option>
+                </select>
+                <button type="submit" class="btn-primary" :disabled="isMarkingNotificationRead">
+                  <font-awesome-icon v-if="isMarkingNotificationRead" icon="spinner" spin />
+                  Mark as Read
+                </button>
+              </form>
+            </div>
+            <div class="form-group">
+              <h4>Remove Alert</h4>
+              <form @submit.prevent="removeNotification">
+                <select v-model="deleteNotificationId" required :disabled="isRemovingNotification" aria-label="Select an alert to remove">
+                  <option value="" disabled>Select an Alert</option>
+                  <option v-for="notification in notifications" :key="notification.id" :value="notification.id">
+                    {{ notification.message }} ({{ notification.event_type }})
+                  </option>
+                </select>
+                <button type="submit" class="btn-danger" :disabled="isRemovingNotification">
+                  <font-awesome-icon v-if="isRemovingNotification" icon="spinner" spin />
+                  Remove Alert
+                </button>
+              </form>
+            </div>
+          </section>
+
+          <!-- Tracking: Keywords -->
+          <section v-if="activeSection === 'tracking' && subSection === 'keywords'" class="settings-section">
+            <h3>Manage Keywords</h3>
+            <div class="form-group">
+              <h4>Add Keyword</h4>
+              <form @submit.prevent="addKeyword">
+                <input v-model="newKeyword.keyword" placeholder="Enter Keyword" required :disabled="isAddingKeyword" />
+                <button type="submit" class="btn-primary" :disabled="isAddingKeyword">
+                  <font-awesome-icon v-if="isAddingKeyword" icon="spinner" spin />
+                  Add Keyword
+                </button>
+              </form>
+            </div>
+            <div class="form-group">
+              <h4>Update Keyword</h4>
+              <form @submit.prevent="updateKeyword">
+                <select v-model="updateKeywordData.id" required :disabled="isUpdatingKeyword" aria-label="Select a keyword to update">
+                  <option value="" disabled>Select a Keyword</option>
+                  <option v-for="keyword in keywords" :key="keyword.id" :value="keyword.id">{{ keyword.keyword }}</option>
+                </select>
+                <input v-model="updateKeywordData.keyword" placeholder="New Keyword" required :disabled="isUpdatingKeyword" />
+                <button type="submit" class="btn-primary" :disabled="isUpdatingKeyword">
+                  <font-awesome-icon v-if="isUpdatingKeyword" icon="spinner" spin />
+                  Update Keyword
+                </button>
+              </form>
+            </div>
+            <div class="form-group">
+              <h4>Remove Keyword</h4>
+              <form @submit.prevent="removeKeyword">
+                <select v-model="deleteKeywordId" required :disabled="isRemovingKeyword" aria-label="Select a keyword to remove">
+                  <option value="" disabled>Select a Keyword</option>
+                  <option v-for="keyword in keywords" :key="keyword.id" :value="keyword.id">{{ keyword.keyword }}</option>
+                </select>
+                <button type="submit" class="btn-danger" :disabled="isRemovingKeyword">
+                  <font-awesome-icon v-if="isRemovingKeyword" icon="spinner" spin />
+                  Remove Keyword
+                </button>
+              </form>
+            </div>
+          </section>
+
+          <!-- Tracking: Objects -->
+          <section v-if="activeSection === 'tracking' && subSection === 'objects'" class="settings-section">
+            <h3>Manage Objects</h3>
+            <div class="form-group">
+              <h4>Add Object</h4>
+              <form @submit.prevent="addObject">
+                <input v-model="newObject.object_name" placeholder="Enter Object Name" required :disabled="isAddingObject" />
+                <button type="submit" class="btn-primary" :disabled="isAddingObject">
+                  <font-awesome-icon v-if="isAddingObject" icon="spinner" spin />
+                  Add Object
+                </button>
+              </form>
+            </div>
+            <div class="form-group">
+              <h4>Update Object</h4>
+              <form @submit.prevent="updateObject">
+                <select v-model="updateObjectData.id" required :disabled="isUpdatingObject" aria-label="Select an object to update">
+                  <option value="" disabled>Select an Object</option>
+                  <option v-for="obj in objects" :key="obj.id" :value="obj.id">{{ obj.object_name }}</option>
+                </select>
+                <input v-model="updateObjectData.object_name" placeholder="New Object Name" required :disabled="isUpdatingObject" />
+                <button type="submit" class="btn-primary" :disabled="isUpdatingObject">
+                  <font-awesome-icon v-if="isUpdatingObject" icon="spinner" spin />
+                  Update Object
+                </button>
+              </form>
+            </div>
+            <div class="form-group">
+              <h4>Remove Object</h4>
+              <form @submit.prevent="removeObject">
+                <select v-model="deleteObjectId" required :disabled="isRemovingObject" aria-label="Select an object to remove">
+                  <option value="" disabled>Select an Object</option>
+                  <option v-for="obj in objects" :key="obj.id" :value="obj.id">{{ obj.object_name }}</option>
+                </select>
+                <button type="submit" class="btn-danger" :disabled="isRemovingObject">
+                  <font-awesome-icon v-if="isRemovingObject" icon="spinner" spin />
+                  Remove Object
+                </button>
+              </form>
+            </div>
+          </section>
+
+          <!-- Detection -->
+          <section v-if="activeSection === 'detection'" class="settings-section">
+            <h3>Manage Detection</h3>
+            <div class="form-group">
+              <h4>Control Detection</h4>
+              <form @submit.prevent="controlDetection">
+                <select v-model="detectionData.stream_id" required :disabled="isControllingDetection" aria-label="Select a stream for detection">
+                  <option value="" disabled>Select a Stream</option>
+                  <option v-for="stream in streams" :key="stream.id" :value="stream.id">{{ stream.room_url }}</option>
+                </select>
+                <select v-model="detectionData.stop" required :disabled="isControllingDetection" aria-label="Control detection state">
+                  <option value="false">Start Detection</option>
+                  <option value="true">Stop Detection</option>
+                </select>
+                <button type="submit" class="btn-primary" :disabled="isControllingDetection">
+                  <font-awesome-icon v-if="isControllingDetection" icon="spinner" spin />
+                  {{ detectionData.stop === 'true' ? 'Stop Detection' : 'Start Detection' }}
+                </button>
+              </form>
+            </div>
+          </section>
         </div>
+      </transition>
+
+      <!-- Logout Button -->
+      <div class="action-buttons">
+        <button
+          class="btn-danger"
+          @click="showLogoutConfirmation = true"
+          :disabled="isLoggingOut"
+        >
+          <font-awesome-icon
+            :icon="isLoggingOut ? 'spinner' : 'sign-out-alt'"
+            :spin="isLoggingOut"
+            class="icon-left"
+          />
+          {{ isLoggingOut ? 'Logging out...' : 'Logout' }}
+        </button>
       </div>
     </main>
 
+    <!-- Logout Confirmation Modal -->
     <transition name="modal-fade">
       <div v-if="showLogoutConfirmation" class="modal-overlay" @click="showLogoutConfirmation = false">
         <div class="modal-container" @click.stop>
@@ -112,10 +453,14 @@
           </div>
           <p>Are you sure you want to log out?</p>
           <div class="modal-actions">
-            <button class="btn-danger" @click="handleLogout(playLogoutAnimation)" :disabled="isLoggingOut">
-              <font-awesome-icon 
-                :icon="isLoggingOut ? 'spinner' : 'sign-out-alt'" 
-                :spin="isLoggingOut" 
+            <button
+              class="btn-danger"
+              @click="handleLogout(playLogoutAnimation)"
+              :disabled="isLoggingOut"
+            >
+              <font-awesome-icon
+                :icon="isLoggingOut ? 'spinner' : 'sign-out-alt'"
+                :spin="isLoggingOut"
                 class="icon-left"
               />
               {{ isLoggingOut ? 'Logging out...' : 'Logout' }}
@@ -126,6 +471,7 @@
       </div>
     </transition>
 
+    <!-- Logout Animation -->
     <div v-if="showLogoutAnimation" class="logout-animation-overlay">
       <div class="logout-animation-container" ref="logoutAnimationContainer">
         <font-awesome-icon icon="sign-out-alt" class="logout-icon" ref="logoutIcon" />
@@ -136,6 +482,7 @@
       </div>
     </div>
 
+    <!-- Telegram Onboarding -->
     <TelegramOnboarding
       :is-visible="showTelegramModal"
       :existing-username="telegramUsername"
@@ -147,10 +494,14 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits, ref, nextTick } from 'vue'
+import { defineProps, defineEmits, ref, onMounted, nextTick, watch } from 'vue'
 import anime from 'animejs/lib/anime.es.js'
 import TelegramOnboarding from './TelegramOnboarding.vue'
 import { useSettings } from '../composables/useSettings'
+import axios from 'axios'
+import { useToast } from 'vue-toastification'
+
+const toast = useToast()
 
 defineProps({
   isDarkTheme: {
@@ -159,7 +510,7 @@ defineProps({
   }
 })
 
-const emit = defineEmits(['fetch-settings', 'set-theme', 'logout'])
+const emit = defineEmits(['set-theme', 'logout'])
 
 const {
   settings,
@@ -172,11 +523,377 @@ const {
   toggleEmailNotifications,
   togglePushNotifications,
   handleTelegramConnected,
-  handleLogout,
-  saveSettings
+  handleLogout
 } = useSettings()
 
-// Logout animation
+const activeSection = ref('general')
+const subSection = ref('keywords')
+const sections = [
+  { id: 'general', name: 'General Settings', icon: 'cog', tooltip: 'Manage notifications and appearance' },
+  { id: 'agents', name: 'Agents', icon: 'user-shield', tooltip: 'Add, update, or remove team members' },
+  { id: 'assignments', name: 'Assignments', icon: 'tasks', tooltip: 'Assign agents to streams' },
+  { id: 'streams', name: 'Streams', icon: 'video', tooltip: 'Manage live streams' },
+  { id: 'notifications', name: 'Alerts', icon: 'bell', tooltip: 'Create or manage alerts' },
+  { id: 'tracking', name: 'Tracking', icon: 'tags', tooltip: 'Set up keywords and objects to track' },
+  { id: 'detection', name: 'Detection', icon: 'search', tooltip: 'Control stream detection' }
+]
+
+const setActiveSection = (sectionId) => {
+  activeSection.value = sectionId
+  if (sectionId === 'tracking' && !subSection.value) {
+    subSection.value = 'keywords'
+  }
+}
+
+const setSubSection = (sub) => {
+  subSection.value = sub
+}
+
+const isDarkTheme = ref(localStorage.getItem('theme') === 'dark' || true)
+
+const toggleTheme = (dark) => {
+  isDarkTheme.value = dark
+  localStorage.setItem('theme', dark ? 'dark' : 'light')
+  emit('set-theme', dark)
+}
+
+watch(isDarkTheme, (newValue) => {
+  document.documentElement.setAttribute('data-theme', newValue ? 'dark' : 'light')
+})
+
+onMounted(() => {
+  document.documentElement.setAttribute('data-theme', isDarkTheme.value ? 'dark' : 'light')
+})
+
+const agents = ref([])
+const availableUsernames = ref([])
+const streams = ref([])
+const assignments = ref([])
+const notifications = ref([])
+const keywords = ref([])
+const objects = ref([])
+
+const isAddingAgent = ref(false)
+const isUpdatingAgent = ref(false)
+const isRemovingAgent = ref(false)
+const isAddingAssignment = ref(false)
+const isRemovingAssignment = ref(false)
+const isAddingStream = ref(false)
+const isUpdatingStream = ref(false)
+const isRemovingStream = ref(false)
+const isUpdatingStreamStatus = ref(false)
+const isCreatingNotification = ref(false)
+const isMarkingNotificationRead = ref(false)
+const isRemovingNotification = ref(false)
+const isAddingKeyword = ref(false)
+const isUpdatingKeyword = ref(false)
+const isRemovingKeyword = ref(false)
+const isAddingObject = ref(false)
+const isUpdatingObject = ref(false)
+const isRemovingObject = ref(false)
+const isControllingDetection = ref(false)
+
+const newAgent = ref({ username: '', password: '' })
+const updateAgentData = ref({ id: '', password: '', online: false })
+const deleteAgentId = ref('')
+const newAssignment = ref({ agent_id: '', stream_id: '' })
+const deleteAssignmentId = ref('')
+const newStream = ref({ platform: '', room_url: '', priority: 'normal' })
+const updateStreamData = ref({ id: '', room_url: '', priority: 'normal' })
+const deleteStreamId = ref('')
+const streamStatus = ref({ id: '', status: 'online' })
+const newNotification = ref({ event_type: '', stream_id: '', message: '' })
+const updateNotificationId = ref('')
+const deleteNotificationId = ref('')
+const newKeyword = ref({ keyword: '' })
+const updateKeywordData = ref({ id: '', keyword: '' })
+const deleteKeywordId = ref('')
+const newObject = ref({ object_name: '' })
+const updateObjectData = ref({ id: '', object_name: '' })
+const deleteObjectId = ref('')
+const detectionData = ref({ stream_id: '', stop: 'false' })
+
+const getCachedData = (key) => {
+  const data = localStorage.getItem(key)
+  return data ? JSON.parse(data) : null
+}
+
+const setCachedData = (key, data) => {
+  localStorage.setItem(key, JSON.stringify(data))
+}
+
+const apiCall = async (method, url, data = null, loadingState = null) => {
+  if (loadingState) loadingState.value = true
+  try {
+    const response = await axios({ method, url, data })
+    toast.success(response.data.message || 'Success!')
+    return response.data
+  } catch (error) {
+    toast.error(error.response?.data?.message || 'Something went wrong')
+    throw error
+  } finally {
+    if (loadingState) loadingState.value = false
+  }
+}
+
+const fetchAgents = async () => {
+  const cached = getCachedData('agents')
+  if (cached) {
+    agents.value = cached
+    return
+  }
+  try {
+    const response = await axios.get('/api/agents')
+    agents.value = response.data
+    setCachedData('agents', response.data)
+  } catch (error) {
+    toast.error('Failed to load agents')
+    agents.value = []
+  }
+}
+
+const fetchAvailableUsernames = async () => {
+  const cached = getCachedData('availableUsernames')
+  if (cached) {
+    availableUsernames.value = cached
+    return
+  }
+  try {
+    const response = await axios.get('/api/available-usernames')
+    availableUsernames.value = response.data
+    setCachedData('availableUsernames', response.data)
+  } catch (error) {
+    toast.error('Failed to load available usernames')
+    availableUsernames.value = []
+  }
+}
+
+const fetchStreams = async () => {
+  const cached = getCachedData('streams')
+  if (cached) {
+    streams.value = cached
+    return
+  }
+  try {
+    const response = await axios.get('/api/streams')
+    streams.value = response.data
+    setCachedData('streams', response.data)
+  } catch (error) {
+    toast.error('Failed to load streams')
+    streams.value = []
+  }
+}
+
+const fetchAssignments = async () => {
+  const cached = getCachedData('assignments')
+  if (cached) {
+    assignments.value = cached
+    return
+  }
+  try {
+    const response = await axios.get('/api/assignments')
+    assignments.value = response.data
+    setCachedData('assignments', response.data)
+  } catch (error) {
+    toast.error('Failed to load assignments')
+    assignments.value = []
+  }
+}
+
+const fetchNotifications = async () => {
+  const cached = getCachedData('notifications')
+  if (cached) {
+    notifications.value = cached
+    return
+  }
+  try {
+    const response = await axios.get('/api/notifications')
+    notifications.value = response.data
+    setCachedData('notifications', response.data)
+  } catch (error) {
+    toast.error('Failed to load notifications')
+    notifications.value = []
+  }
+}
+
+const fetchKeywords = async () => {
+  const cached = getCachedData('keywords')
+  if (cached) {
+    keywords.value = cached
+    return
+  }
+  try {
+    const response = await axios.get('/api/keywords')
+    keywords.value = response.data
+    setCachedData('keywords', response.data)
+  } catch (error) {
+    toast.error('Failed to load keywords')
+    keywords.value = []
+  }
+}
+
+const fetchObjects = async () => {
+  const cached = getCachedData('objects')
+  if (cached) {
+    objects.value = cached
+    return
+  }
+  try {
+    const response = await axios.get('/api/objects')
+    objects.value = response.data
+    setCachedData('objects', response.data)
+  } catch (error) {
+    toast.error('Failed to load objects')
+    objects.value = []
+  }
+}
+
+const fetchAllData = async () => {
+  await Promise.all([
+    fetchAgents(),
+    fetchAvailableUsernames(),
+    fetchStreams(),
+    fetchAssignments(),
+    fetchNotifications(),
+    fetchKeywords(),
+    fetchObjects()
+  ])
+}
+
+onMounted(fetchAllData)
+
+window.addEventListener('beforeunload', () => {
+  localStorage.removeItem('agents')
+  localStorage.removeItem('availableUsernames')
+  localStorage.removeItem('streams')
+  localStorage.removeItem('assignments')
+  localStorage.removeItem('notifications')
+  localStorage.removeItem('keywords')
+  localStorage.removeItem('objects')
+})
+
+const addAgent = async () => {
+  await apiCall('post', '/api/agents', newAgent.value, isAddingAgent)
+  newAgent.value = { username: '', password: '' }
+  await Promise.all([fetchAgents(), fetchAvailableUsernames()])
+}
+
+const updateAgent = async () => {
+  const data = { ...updateAgentData.value }
+  if (!data.password) delete data.password
+  await apiCall('put', `/api/agents/${data.id}`, data, isUpdatingAgent)
+  updateAgentData.value = { id: '', password: '', online: false }
+  await fetchAgents()
+}
+
+const removeAgent = async () => {
+  await apiCall('delete', `/api/agents/${deleteAgentId.value}`, null, isRemovingAgent)
+  deleteAgentId.value = ''
+  await Promise.all([fetchAgents(), fetchAvailableUsernames()])
+}
+
+const assignAgentToStream = async () => {
+  await apiCall('post', '/api/assign', newAssignment.value, isAddingAssignment)
+  newAssignment.value = { agent_id: '', stream_id: '' }
+  await fetchAssignments()
+}
+
+const removeAssignment = async () => {
+  await apiCall('delete', `/api/assignments/${deleteAssignmentId.value}`, null, isRemovingAssignment)
+  deleteAssignmentId.value = ''
+  await fetchAssignments()
+}
+
+const addStream = async () => {
+  await apiCall('post', '/api/streams', newStream.value, isAddingStream)
+  newStream.value = { platform: '', room_url: '', priority: 'normal' }
+  await fetchStreams()
+}
+
+const updateStream = async () => {
+  const data = { ...updateStreamData.value }
+  if (!data.room_url) delete data.room_url
+  await apiCall('put', `/api/streams/${data.id}`, data, isUpdatingStream)
+  updateStreamData.value = { id: '', room_url: '', priority: 'normal' }
+  await fetchStreams()
+}
+
+const removeStream = async () => {
+  await apiCall('delete', `/api/streams/${deleteStreamId.value}`, null, isRemovingStream)
+  deleteStreamId.value = ''
+  await fetchStreams()
+}
+
+const updateStreamStatus = async () => {
+  await apiCall('post', `/api/streams/${streamStatus.value.id}/status`, { status: streamStatus.value.status }, isUpdatingStreamStatus)
+  streamStatus.value = { id: '', status: 'online' }
+  await fetchStreams()
+}
+
+const createNotification = async () => {
+  const data = { ...newNotification.value }
+  data.room_url = streams.value.find(s => s.id === data.stream_id)?.room_url || ''
+  delete data.stream_id
+  await apiCall('post', '/api/notifications', data, isCreatingNotification)
+  newNotification.value = { event_type: '', stream_id: '', message: '' }
+  await fetchNotifications()
+}
+
+const markNotificationRead = async () => {
+  await apiCall('put', `/api/notifications/${updateNotificationId.value}/read`, null, isMarkingNotificationRead)
+  updateNotificationId.value = ''
+  await fetchNotifications()
+}
+
+const removeNotification = async () => {
+  await apiCall('delete', `/api/notifications/${deleteNotificationId.value}`, null, isRemovingNotification)
+  deleteNotificationId.value = ''
+  await fetchNotifications()
+}
+
+const addKeyword = async () => {
+  await apiCall('post', '/api/keywords', newKeyword.value, isAddingKeyword)
+  newKeyword.value = { keyword: '' }
+  await fetchKeywords()
+}
+
+const updateKeyword = async () => {
+  await apiCall('put', `/api/keywords/${updateKeywordData.value.id}`, updateKeywordData.value, isUpdatingKeyword)
+  updateKeywordData.value = { id: '', keyword: '' }
+  await fetchKeywords()
+}
+
+const removeKeyword = async () => {
+  await apiCall('delete', `/api/keywords/${deleteKeywordId.value}`, null, isRemovingKeyword)
+  deleteKeywordId.value = ''
+  await fetchKeywords()
+}
+
+const addObject = async () => {
+  await apiCall('post', '/api/objects', newObject.value, isAddingObject)
+  newObject.value = { object_name: '' }
+  await fetchObjects()
+}
+
+const updateObject = async () => {
+  await apiCall('put', `/api/objects/${updateObjectData.value.id}`, updateObjectData.value, isUpdatingObject)
+  updateObjectData.value = { id: '', object_name: '' }
+  await fetchObjects()
+}
+
+const removeObject = async () => {
+  await apiCall('delete', `/api/objects/${deleteObjectId.value}`, null, isRemovingObject)
+  deleteObjectId.value = ''
+  await fetchObjects()
+}
+
+const controlDetection = async () => {
+  const data = { ...detectionData.value, stop: detectionData.value.stop === 'true' }
+  await apiCall('post', '/api/trigger-detection', data, isControllingDetection)
+  detectionData.value = { stream_id: '', stop: 'false' }
+  await fetchStreams()
+}
+
 const showLogoutAnimation = ref(false)
 const logoutAnimationContainer = ref(null)
 const logoutIcon = ref(null)
@@ -185,7 +902,7 @@ const logoutSpinner = ref(null)
 
 const playLogoutAnimation = () => {
   showLogoutAnimation.value = true
-  
+
   nextTick(() => {
     if (logoutAnimationContainer.value) {
       anime({
@@ -196,7 +913,7 @@ const playLogoutAnimation = () => {
         easing: 'easeOutCubic'
       })
     }
-    
+
     if (logoutIcon.value) {
       anime({
         targets: logoutIcon.value,
@@ -206,7 +923,7 @@ const playLogoutAnimation = () => {
         easing: 'easeOutBack'
       })
     }
-    
+
     if (logoutMessage.value) {
       anime({
         targets: logoutMessage.value,
@@ -217,7 +934,7 @@ const playLogoutAnimation = () => {
         easing: 'easeOutQuad'
       })
     }
-    
+
     if (logoutSpinner.value) {
       const spinnerCircles = logoutSpinner.value.querySelectorAll('.spinner-circle')
       anime({
@@ -240,7 +957,7 @@ const playLogoutAnimation = () => {
         }
       })
     }
-    
+
     setTimeout(() => {
       completeLogout()
     }, 2000)
@@ -264,41 +981,94 @@ const completeLogout = () => {
 }
 </script>
 
-
 <style scoped>
 @import '../styles/shared.css';
+
+:root {
+  --primary-color: #4A90E2;
+  --secondary-color: #50C878;
+  --danger-color: #E74C3C;
+  --bg-color-light: #F4F7FA;
+  --bg-color-dark: #2C3E50;
+  --sidebar-bg-light: #FFFFFF;
+  --sidebar-bg-dark: #34495E;
+  --content-bg-light: #FFFFFF;
+  --content-bg-dark: #3E5469;
+  --text-color-light: #2C3E50;
+  --text-color-dark: #ECF0F1;
+  --border-color-light: #DDE4E6;
+  --border-color-dark: #5E6A7A;
+  --toggle-bg-light: #BDC3C7;
+  --toggle-bg-dark: #7F8C8D;
+}
+
 .admin-settings-container {
   display: flex;
   min-height: 100vh;
   background-color: var(--bg-color);
   color: var(--text-color);
+  font-family: 'Inter', sans-serif;
+}
+
+[data-theme="light"] {
+  --bg-color: var(--bg-color-light);
+  --sidebar-bg: var(--sidebar-bg-light);
+  --content-bg: var(--content-bg-light);
+  --text-color: var(--text-color-light);
+  --border-color: var(--border-color-light);
+  --toggle-bg: var(--toggle-bg-light);
+}
+
+[data-theme="dark"] {
+  --bg-color: var(--bg-color-dark);
+  --sidebar-bg: var(--sidebar-bg-dark);
+  --content-bg: var(--content-bg-dark);
+  --text-color: var(--text-color-dark);
+  --border-color: var(--border-color-dark);
+  --toggle-bg: var(--toggle-bg-dark);
 }
 
 .settings-sidebar {
-  width: 250px;
+  width: 260px;
   background-color: var(--sidebar-bg);
-  padding: 1.5rem;
-  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+  padding: 2rem 1.5rem;
+  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.1);
 }
 
 .sidebar-title {
-  font-size: 1.5rem;
-  font-weight: bold;
-  margin-bottom: 1.5rem;
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 2rem;
+  color: var(--primary-color);
 }
 
 .settings-menu {
   list-style: none;
   padding: 0;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
 }
 
 .menu-item {
   display: flex;
-  align-items: center;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: all 0.3s ease;
+  margin-bottom: 0.5rem;
+  position: relative;
+}
+
+.menu-item-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.menu-item:hover {
+  background-color: rgba(var(--primary-color), 0.1);
 }
 
 .menu-item.active {
@@ -307,46 +1077,92 @@ const completeLogout = () => {
 }
 
 .menu-icon {
-  margin-right: 0.75rem;
+  margin-right: 1rem;
+  font-size: 1.2rem;
+}
+
+.submenu {
+  list-style: none;
+  padding-left: 2rem;
+  margin-top: 0.5rem;
+  width: 100%;
+  display: block;
+  transition: opacity 0.3s ease;
+}
+
+.submenu-item {
+  padding: 0.5rem 0.5rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: var(--text-color);
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.submenu-item:hover {
+  color: var(--primary-color);
+}
+
+.submenu-item.active {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.menu-item:not(.active) .submenu {
+  display: none;
 }
 
 .settings-content {
   flex: 1;
-  padding: 2rem;
+  padding: 2.5rem;
 }
 
 .settings-header {
-  margin-bottom: 2rem;
+  margin-bottom: 2.5rem;
+}
+
+.settings-header h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary-color);
 }
 
 .settings-body {
   background-color: var(--content-bg);
-  padding: 2rem;
+  padding: 2.5rem;
   border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
 }
 
 .settings-section {
-  margin-bottom: 2rem;
+  margin-bottom: 3rem;
+}
+
+.settings-section h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  color: var(--text-color);
 }
 
 .settings-options {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.5rem;
 }
 
 .option {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-size: 1rem;
 }
 
 .toggle-switch {
-  width: 50px;
-  height: 26px;
+  width: 54px;
+  height: 28px;
   background-color: var(--toggle-bg);
-  border-radius: 26px;
+  border-radius: 28px;
   position: relative;
   cursor: pointer;
   transition: background-color 0.3s;
@@ -357,76 +1173,145 @@ const completeLogout = () => {
 }
 
 .toggle-handle {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   background-color: white;
   border-radius: 50%;
   position: absolute;
   top: 2px;
   left: 2px;
   transition: transform 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .toggle-switch.active .toggle-handle {
-  transform: translateX(24px);
+  transform: translateX(26px);
 }
 
 .theme-options {
   display: flex;
-  gap: 1rem;
+  gap: 1.5rem;
 }
 
 .theme-option {
   flex: 1;
-  padding: 1rem;
+  padding: 1.25rem;
   text-align: center;
-  border: 2px solid transparent;
-  border-radius: 8px;
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.3s ease;
+}
+
+.theme-option:hover {
+  border-color: var(--primary-color);
 }
 
 .theme-option.selected {
   background-color: var(--primary-color);
   color: white;
-  border-color: var(--primary-dark);
+  border-color: var(--primary-color);
+}
+
+.form-group {
+  margin-bottom: 2rem;
+}
+
+.form-group h4 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+input, select {
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1rem;
+  background-color: var(--content-bg);
+  color: var(--text-color);
+  transition: border-color 0.3s, transform 0.2s;
+}
+
+input:focus, select:focus {
+  border-color: var(--primary-color);
+  outline: none;
+  transform: scale(1.02);
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg fill='%232C3E50' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+  background-repeat: no-repeat;
+  background-position-x: 98%;
+  background-position-y: 50%;
+}
+
+[data-theme="dark"] select {
+  background-image: url("data:image/svg+xml;utf8,<svg fill='%23ECF0F1' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
 }
 
 .action-buttons {
   display: flex;
   justify-content: flex-end;
-  gap: 1rem;
 }
 
 .btn-primary {
   background-color: var(--primary-color);
   color: white;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-weight: bold;
+  padding: 0.85rem 1.75rem;
+  border-radius: 10px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s ease, transform 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-primary:hover {
+  background-color: #3A7BC8;
+  transform: scale(1.05);
 }
 
 .btn-danger {
   background-color: var(--danger-color);
   color: white;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-weight: bold;
+  padding: 0.85rem 1.75rem;
+  border-radius: 10px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s ease, transform 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-danger:hover {
+  background-color: #C0392B;
+  transform: scale(1.05);
 }
 
 .btn-outline {
   background-color: transparent;
   border: 2px solid var(--border-color);
   color: var(--text-color);
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-weight: bold;
+  padding: 0.85rem 1.75rem;
+  border-radius: 10px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.3s ease;
+}
+
+.btn-outline:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
 .modal-overlay {
@@ -435,7 +1320,7 @@ const completeLogout = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: rgba(0, 0, 0, 0.7);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -444,26 +1329,126 @@ const completeLogout = () => {
 
 .modal-container {
   background-color: var(--content-bg);
-  padding: 2rem;
+  padding: 2.5rem;
   border-radius: 12px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+  max-width: 500px;
+  width: 100%;
 }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
 }
 
 .modal-icon {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   color: var(--danger-color);
 }
 
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 1rem;
+  gap: 1.5rem;
+}
+
+.section-fade-enter-active, .section-fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.section-fade-enter-from, .section-fade-leave-to {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.modal-fade-enter-active, .modal-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.modal-fade-enter-from, .modal-fade-leave-to {
+  opacity: 0;
+}
+
+.logout-animation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.logout-animation-container {
+  text-align: center;
+  color: white;
+}
+
+.logout-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.logout-message {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.logout-spinner {
+  margin-top: 1rem;
+}
+
+.spinner-circle {
+  width: 10px;
+  height: 10px;
+  background-color: var(--primary-color);
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: center;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg) translate(-50%, -50%) scale(1); }
+  50% { transform: rotate(180deg) translate(-50%, -50%) scale(0.5); }
+  100% { transform: rotate(360deg) translate(-50%, -50%) scale(1); }
+}
+
+.spinner-circle:nth-child(1) { transform: rotate(0deg) translate(20px); }
+.spinner-circle:nth-child(2) { transform: rotate(30deg) translate(20px); }
+.spinner-circle:nth-child(3) { transform: rotate(60deg) translate(20px); }
+.spinner-circle:nth-child(4) { transform: rotate(90deg) translate(20px); }
+.spinner-circle:nth-child(5) { transform: rotate(120deg) translate(20px); }
+.spinner-circle:nth-child(6) { transform: rotate(150deg) translate(20px); }
+.spinner-circle:nth-child(7) { transform: rotate(180deg) translate(20px); }
+.spinner-circle:nth-child(8) { transform: rotate(210deg) translate(20px); }
+.spinner-circle:nth-child(9) { transform: rotate(240deg) translate(20px); }
+.spinner-circle:nth-child(10) { transform: rotate(270deg) translate(20px); }
+.spinner-circle:nth-child(11) { transform: rotate(300deg) translate(20px); }
+.spinner-circle:nth-child(12) { transform: rotate(330deg) translate(20px); }
+
+/* Toast styles */
+:deep(.Vue-Toastification__toast--success) {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+:deep(.Vue-Toastification__toast--error) {
+  background-color: var(--danger-color);
+  color: white;
+}
+
+:deep(.Vue-Toastification__toast) {
+  font-family: 'Inter', sans-serif;
+  font-size: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 </style>
