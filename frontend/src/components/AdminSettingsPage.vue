@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/no-parsing-error -->
 <template>
   <div class="admin-settings-container" :data-theme="isDarkTheme ? 'dark' : 'light'">
 
@@ -34,7 +35,7 @@
     </div>
 
     <main class="settings-content">
-       <!-- Logout Button -->
+      <!-- Logout Button -->
       <div class="action-buttons">
         <button
           class="btn-danger"
@@ -49,47 +50,48 @@
           {{ isLoggingOut ? 'Logging out...' : 'Logout' }}
         </button>
       </div>
-       <!-- Logout Confirmation Modal -->
-    <transition name="modal-fade">
-      <div v-if="showLogoutConfirmation" class="modal-overlay" @click="showLogoutConfirmation = false">
-        <div class="modal-container" @click.stop>
-          <div class="modal-header">
-            <font-awesome-icon icon="sign-out-alt" class="modal-icon" />
-            <h3>Confirm Logout</h3>
-            <button class="close-btn" @click="showLogoutConfirmation = false">
-              <font-awesome-icon icon="times" />
-            </button>
-          </div>
-          <p>Are you sure you want to log out?</p>
-          <div class="modal-actions">
-            <button
-              class="btn-danger"
-              @click="handleLogout(playLogoutAnimation)"
-              :disabled="isLoggingOut"
-            >
-              <font-awesome-icon
-                :icon="isLoggingOut ? 'spinner' : 'sign-out-alt'"
-                :spin="isLoggingOut"
-                class="icon-left"
-              />
-              {{ isLoggingOut ? 'Logging out...' : 'Logout' }}
-            </button>
-            <button class="btn-outline" @click="showLogoutConfirmation = false">Cancel</button>
+      <!-- Logout Confirmation Modal -->
+      <transition name="modal-fade">
+        <div v-if="showLogoutConfirmation" class="modal-overlay" @click="showLogoutConfirmation = false">
+          <div class="modal-container" @click.stop>
+            <div class="modal-header">
+              <font-awesome-icon icon="sign-out-alt" class="modal-icon" />
+              <h3>Confirm Logout</h3>
+              <button class="close-btn" @click="showLogoutConfirmation = false">
+                <font-awesome-icon icon="times" />
+              </button>
+            </div>
+            <p class="modal-message">Are you sure you want to log out of your account?</p>
+            <div class="modal-actions">
+              <button
+                class="btn btn-danger"
+                @click="handleLogout(playLogoutAnimation)"
+                :disabled="isLoggingOut"
+              >
+                <font-awesome-icon
+                  :icon="isLoggingOut ? 'spinner' : 'sign-out-alt'"
+                  :spin="isLoggingOut"
+                  class="icon-left"
+                />
+                {{ isLoggingOut ? 'Logging out...' : 'Logout' }}
+              </button>
+              <button class="btn btn-outline" @click="showLogoutConfirmation = false">Cancel</button>
+            </div>
           </div>
         </div>
-      </div>
-    </transition>
+      </transition>
 
-    <!-- Logout Animation -->
-    <div v-if="showLogoutAnimation" class="logout-animation-overlay">
-      <div class="logout-animation-container" ref="logoutAnimationContainer">
-        <font-awesome-icon icon="sign-out-alt" class="logout-icon" ref="logoutIcon" />
-        <div class="logout-message" ref="logoutMessage">Logging out...</div>
-        <div class="logout-spinner" ref="logoutSpinner">
-          <div class="spinner-circle" v-for="n in 12" :key="n" :style="`--i: ${n}`"></div>
+      <!-- Logout Animation -->
+      <div v-if="showLogoutAnimation" class="logout-animation-overlay">
+        <div class="logout-animation-container" ref="logoutAnimationContainer">
+          <font-awesome-icon icon="sign-out-alt" class="logout-icon" ref="logoutIcon" />
+          <div class="logout-message" ref="logoutMessage">Logging out...</div>
+          <div class="logout-spinner" ref="logoutSpinner">
+            <div class="spinner-circle" v-for="n in 12" :key="n" :style="`--i: ${n}`"></div>
+          </div>
         </div>
       </div>
-    </div>
+
       <div class="settings-header">
         <h2>{{ sections.find(s => s.id === activeSection)?.name || 'Settings' }}</h2>
       </div>
@@ -479,19 +481,15 @@
         </div>
       </transition>
 
-     
+      <!-- Telegram Onboarding -->
+      <TelegramOnboarding
+        :is-visible="showTelegramModal"
+        :existing-username="telegramUsername"
+        :existing-chat-id="telegramChatId"
+        @close="showTelegramModal = false"
+        @telegram-connected="handleTelegramConnected"
+      />
     </main>
-
-   
-
-    <!-- Telegram Onboarding -->
-    <TelegramOnboarding
-      :is-visible="showTelegramModal"
-      :existing-username="telegramUsername"
-      :existing-chat-id="telegramChatId"
-      @close="showTelegramModal = false"
-      @telegram-connected="handleTelegramConnected"
-    />
   </div>
 </template>
 
@@ -904,7 +902,7 @@ const logoutSpinner = ref(null)
 
 const playLogoutAnimation = () => {
   showLogoutAnimation.value = true
-
+  
   nextTick(() => {
     if (logoutAnimationContainer.value) {
       anime({
@@ -915,7 +913,7 @@ const playLogoutAnimation = () => {
         easing: 'easeOutCubic'
       })
     }
-
+    
     if (logoutIcon.value) {
       anime({
         targets: logoutIcon.value,
@@ -925,7 +923,7 @@ const playLogoutAnimation = () => {
         easing: 'easeOutBack'
       })
     }
-
+    
     if (logoutMessage.value) {
       anime({
         targets: logoutMessage.value,
@@ -936,7 +934,7 @@ const playLogoutAnimation = () => {
         easing: 'easeOutQuad'
       })
     }
-
+    
     if (logoutSpinner.value) {
       const spinnerCircles = logoutSpinner.value.querySelectorAll('.spinner-circle')
       anime({
@@ -959,7 +957,7 @@ const playLogoutAnimation = () => {
         }
       })
     }
-
+    
     setTimeout(() => {
       completeLogout()
     }, 2000)
@@ -977,7 +975,7 @@ const completeLogout = () => {
       showLogoutAnimation.value = false
       emit('logout')
       localStorage.removeItem('userSettings')
-      window.location.href = '/login'
+      window.location.href = '/dashboard'
     }
   })
 }
@@ -1097,15 +1095,11 @@ const completeLogout = () => {
   padding: 0.5rem 0.5rem;
   cursor: pointer;
   font-size: 0.95rem;
-/*  color: var(--text-color);*/
   transition: all 0.3s ease;
   width: 100%;
 }
 
-
-
 .submenu-item.active {
-/*  color: var(--primary-color);*/
   font-weight: 600;
 }
 
@@ -1489,77 +1483,6 @@ select {
   opacity: 0;
   transform: translateY(20px);
 }
-
-.modal-fade-enter-active, .modal-fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.modal-fade-enter-from, .modal-fade-leave-to {
-  opacity: 0;
-}
-
-.logout-animation-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.8);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.logout-animation-container {
-  text-align: center;
-  color: white;
-}
-
-.logout-icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-}
-
-.logout-message {
-  font-size: 1.5rem;
-  font-weight: 600;
-}
-
-.logout-spinner {
-  margin-top: 1rem;
-}
-
-.spinner-circle {
-  width: 10px;
-  height: 10px;
-  background-color: var(--primary-color);
-  border-radius: 50%;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform-origin: center;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg) translate(-50%, -50%) scale(1); }
-  50% { transform: rotate(180deg) translate(-50%, -50%) scale(0.5); }
-  100% { transform: rotate(360deg) translate(-50%, -50%) scale(1); }
-}
-
-.spinner-circle:nth-child(1) { transform: rotate(0deg) translate(20px); }
-.spinner-circle:nth-child(2) { transform: rotate(30deg) translate(20px); }
-.spinner-circle:nth-child(3) { transform: rotate(60deg) translate(20px); }
-.spinner-circle:nth-child(4) { transform: rotate(90deg) translate(20px); }
-.spinner-circle:nth-child(5) { transform: rotate(120deg) translate(20px); }
-.spinner-circle:nth-child(6) { transform: rotate(150deg) translate(20px); }
-.spinner-circle:nth-child(7) { transform: rotate(180deg) translate(20px); }
-.spinner-circle:nth-child(8) { transform: rotate(210deg) translate(20px); }
-.spinner-circle:nth-child(9) { transform: rotate(240deg) translate(20px); }
-.spinner-circle:nth-child(10) { transform: rotate(270deg) translate(20px); }
-.spinner-circle:nth-child(11) { transform: rotate(300deg) translate(20px); }
-.spinner-circle:nth-child(12) { transform: rotate(330deg) translate(20px); }
 
 /* Toast styles */
 :deep(.Vue-Toastification__toast--success) {

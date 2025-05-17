@@ -1,7 +1,6 @@
 # monitoring.py - Simplified Version without FFmpeg for Audio Detection
 import os
 import time
-import threading
 import logging
 import numpy as np
 import json
@@ -25,8 +24,10 @@ from models import (
 )
 from extensions import db
 from utils.notifications import emit_notification, emit_stream_update
-from notifications import send_notifications, send_text_message
 from sqlalchemy.orm import joinedload
+import gevent
+from gevent.pool import Pool
+from gevent.lock import Semaphore
 
 # Configure logging
 logging.basicConfig(
@@ -49,9 +50,9 @@ NEGATIVE_SENTIMENT_THRESHOLD = float(os.environ.get("NEGATIVE_SENTIMENT_THRESHOL
 
 # =============== GLOBAL VARIABLES ===============
 _whisper_model = None
-_whisper_lock = threading.Lock()
+_whisper_lock = Semaphore()
 _yolo_model = None
-_yolo_lock = threading.Lock()
+_yolo_lock = Semaphore()
 _sentiment_analyzer = SentimentIntensityAnalyzer()
 
 # Tracking variables
@@ -65,6 +66,9 @@ stream_processors = {}
 agent_cache = {}
 all_agents_fetched = False
 
+# Gevent thread pool
+gevent_pool = Pool(5)  # Max 5 workers
+
 # =============== MODEL LOADING ===============
 def load_whisper_model():
     """Load the OpenAI Whisper model with configurable size and fallback"""
@@ -73,7 +77,6 @@ def load_whisper_model():
         if _whisper_model is None:
             try:
                 logger.info(f"Loading Whisper model: {WHISPER_MODEL_SIZE}")
-                # Ensure using openai-whisper package
                 import whisper
                 _whisper_model = whisper.load_model(WHISPER_MODEL_SIZE)
                 logger.info(f"Whisper model '{WHISPER_MODEL_SIZE}' loaded successfully")
@@ -138,6 +141,17 @@ def get_stream_info(stream_url):
             return stream.type.lower(), stream.streamer_username
     return 'unknown', 'unknown'
 
+def get_m3u8_url(stream):
+    """Get the m3u8 URL for a stream"""
+    with current_app.app_context():
+        if stream.type.lower() == 'chaturbate':
+            cb_stream = ChaturbateStream.query.get(stream.id)
+            return cb_stream.chaturbate_m3u8_url if cb_stream else None
+        elif stream.type.lower() == 'stripchat':
+            sc_stream = StripchatStream.query.get(stream.id)
+            return sc_stream.stripchat_m3u8_url if sc_stream else None
+    return None
+
 def fetch_all_agents():
     """Fetch all agents and cache their usernames"""
     global all_agents_fetched
@@ -175,7 +189,6 @@ def fetch_agent_username(agent_id):
 def get_stream_assignment(stream_url):
     """Get assignment info for a stream, mimicking /api/assignments endpoint logic"""
     with current_app.app_context():
-        # Find the stream by room_url or m3u8 URL
         stream = Stream.query.filter_by(room_url=stream_url).first()
         if not stream:
             cb_stream = ChaturbateStream.query.filter_by(chaturbate_m3u8_url=stream_url).first()
@@ -190,7 +203,6 @@ def get_stream_assignment(stream_url):
             logger.warning(f"No stream found for URL: {stream_url}")
             return None, None
         
-        # Query assignments for this stream
         query = Assignment.query.options(
             joinedload(Assignment.agent),
             joinedload(Assignment.stream)
@@ -202,10 +214,8 @@ def get_stream_assignment(stream_url):
             logger.info(f"No assignments found for stream: {stream_url}")
             return None, None
         
-        # Select the first assignment (consistent with StreamCard.vue)
         assignment = assignments[0]
         agent_id = assignment.agent_id
-        # Cache the agent username
         fetch_agent_username(agent_id)
         return assignment.id, agent_id
 
@@ -221,7 +231,7 @@ def process_combined_detection(app, stream_url, cancel_event):
                 audio_stream = next((s for s in container.streams if s.type == 'audio'), None)
                 if not video_stream or not audio_stream:
                     logger.error(f"Missing video or audio stream in {stream_url}")
-                    time.sleep(10)
+                    gevent.sleep(10)
                     continue
 
                 audio_buffer = []
@@ -256,7 +266,7 @@ def process_combined_detection(app, stream_url, cancel_event):
                                 total_audio_duration = 0
             except Exception as e:
                 logger.error(f"Stream error: {e}")
-                time.sleep(10)
+                gevent.sleep(10)
         logger.info(f"Stopped monitoring {stream_url}")
 
 def process_audio_segment(audio_data, original_sample_rate, stream_url):
@@ -567,25 +577,21 @@ def start_monitoring(stream):
             return True
         stream.is_monitored = True
         db.session.commit()
-    # Use the latest m3u8_url from the database
-    if stream.type.lower() == 'chaturbate' and hasattr(stream, 'chaturbate_m3u8_url'):
-        stream_url = stream.chaturbate_m3u8_url
-    elif stream.type.lower() == 'stripchat' and hasattr(stream, 'stripchat_m3u8_url'):
-        stream_url = stream.stripchat_m3u8_url
-    else:
-        stream_url = stream.room_url
+    
+    stream_url = get_m3u8_url(stream)
     if not stream_url:
-        logger.error(f"No valid URL for stream: {stream.id}")
+        logger.error(f"No valid m3u8 URL for stream: {stream.id}")
         return False
+    
     logger.info(f"Starting monitoring for {stream_url}")
-    cancel_event = threading.Event()
-    thread = threading.Thread(
-        target=process_combined_detection,
-        args=(current_app._get_current_object(), stream_url, cancel_event),
+    cancel_event = gevent.event.Event()
+    task = gevent_pool.spawn(
+        process_combined_detection,
+        current_app._get_current_object(),
+        stream_url,
+        cancel_event
     )
-    thread.daemon = True
-    thread.start()
-    stream_processors[stream_url] = (cancel_event, thread)
+    stream_processors[stream_url] = (cancel_event, task)
     emit_stream_update({
         'id': stream.id,
         'url': stream_url,
@@ -599,22 +605,23 @@ def stop_monitoring(stream):
     if not stream:
         logger.error("Stream not provided")
         return
-    if stream.type.lower() == 'chaturbate' and hasattr(stream, 'chaturbate_m3u8_url'):
-        stream_url = stream.chaturbate_m3u8_url
-    elif stream.type.lower() == 'stripchat' and hasattr(stream, 'stripchat_m3u8_url'):
-        stream_url = stream.stripchat_m3u8_url
-    else:
+    
+    stream_url = get_m3u8_url(stream)
+    if not stream_url:
         stream_url = stream.room_url
+    
     with current_app.app_context():
         stream.is_monitored = False
         db.session.commit()
+    
     if stream_url in stream_processors:
-        cancel_event, thread = stream_processors.get(stream_url, (None, None))
+        cancel_event, task = stream_processors.get(stream_url, (None, None))
         if cancel_event:
             cancel_event.set()
-            if thread:
-                thread.join(timeout=2.0)
+            if task:
+                task.join(timeout=2.0)
         del stream_processors[stream_url]
+    
     logger.info(f"Stopped monitoring {stream_url}")
     emit_stream_update({
         'id': stream.id,
@@ -630,12 +637,11 @@ def refresh_and_monitor_streams(stream_ids):
         if not streams:
             logger.warning("No streams found for provided IDs")
             return False
+        tasks = []
         for stream in streams:
             try:
-                # Stop existing monitoring if active
                 if stream.is_monitored:
                     stop_monitoring(stream)
-                # Refresh stream via platform-specific endpoint
                 if stream.type.lower() == 'chaturbate':
                     endpoint = '/api/streams/refresh/chaturbate'
                     payload = {'room_slug': stream.streamer_username}
@@ -646,15 +652,22 @@ def refresh_and_monitor_streams(stream_ids):
                     logger.warning(f"Unsupported platform {stream.type} for stream {stream.id}")
                     continue
                 logger.info(f"Refreshing stream {stream.id} ({stream.type})")
-                response = requests.post(
-                    f"{current_app.config['BASE_URL']}{endpoint}",
-                    json=payload,
-                    timeout=10
+                task = gevent_pool.spawn(
+                    lambda: requests.post(
+                        f"{current_app.config['BASE_URL']}{endpoint}",
+                        json=payload,
+                        timeout=10
+                    )
                 )
+                tasks.append((stream, task))
+            except Exception as e:
+                logger.error(f"Error initiating stream refresh {stream.id}: {e}")
+                continue
+        for stream, task in tasks:
+            try:
+                response = task.get()
                 if response.status_code == 200 and response.json().get('m3u8_url'):
-                    # Update stream in database (handled by endpoint, but verify)
                     db.session.refresh(stream)
-                    # Start monitoring with updated URL
                     start_monitoring(stream)
                     logger.info(f"Successfully refreshed and started monitoring stream {stream.id}")
                 else:

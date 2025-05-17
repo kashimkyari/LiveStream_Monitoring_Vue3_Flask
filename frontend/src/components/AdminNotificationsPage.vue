@@ -120,7 +120,8 @@
                 <div class="notification-meta">
                   <span class="notification-source">
                     {{ notification.details?.platform || 'System' }} | 
-                    {{ notification.details?.streamer_name || 'Unknown' }}
+                    {{ notification.details?.streamer_name || 'Unknown' }} | 
+                    {{ notification.details?.assigned_agent || 'None' }}
                   </span>
                   <span 
                     v-if="notification.event_type === 'object_detection' && notification.details?.detections?.length" 
@@ -233,9 +234,9 @@
               <label>Streamer:</label>
               <span>{{ selectedNotification.details?.streamer_name || 'Unknown' }}</span>
             </div>
-            <div v-if="selectedNotification.assigned_agent" class="detail-field">
+            <div class="detail-field">
               <label>Assigned Agent:</label>
-              <span>{{ selectedNotification.assigned_agent }}</span>
+              <span>{{ selectedNotification.details?.assigned_agent || 'None' }}</span>
             </div>
             
             <!-- Specific details based on notification type -->
@@ -715,20 +716,21 @@ export default {
     }
 
     const getNotificationMessage = (n) => {
+      const agent = n.details?.assigned_agent || 'None'
       if (n.event_type === 'object_detection') {
         const det = n.details?.detections || []
-        return det.length ? `Detected: ${det.map(d => d.class).join(', ')}` : 'Object detected'
+        return det.length ? `Detected: ${det.map(d => d.class).join(', ')} (Agent: ${agent})` : `Object detected (Agent: ${agent})`
       }
       if (n.event_type === 'audio_detection') {
-        return n.details?.transcript?.substring(0, 100) || 'Audio detected'
+        return `${n.details?.transcript?.substring(0, 100) || 'Audio detected'} (Agent: ${agent})`
       }
       if (n.event_type === 'chat_detection') {
-        return n.details?.message?.substring(0, 100) || 'Chat message detected'
+        return `${n.details?.message?.substring(0, 100) || 'Chat message detected'} (Agent: ${agent})`
       }
       if (n.event_type === 'stream_status_updated') {
-        return n.details?.message || 'Stream status updated'
+        return `${n.details?.message || 'Stream status updated'} (Agent: ${agent})`
       }
-      return n.details?.message || 'Notification received'
+      return `${n.details?.message || 'Notification received'} (Agent: ${agent})`
     }
 
     const getNotificationDetailTitle = () => {
@@ -904,9 +906,9 @@ export default {
       try {
         await axios.post(`/api/notifications/${selectedNotification.value.id}/assign`, { agent_id: agentId })
         const agent = agents.value.find(a => a.id === agentId)
-        selectedNotification.value.assigned_agent = agent?.username
+        selectedNotification.value.details.assigned_agent = agent?.username
         const n = notifications.value.find(x => x.id === selectedNotification.value.id)
-        if (n) n.assigned_agent = agent?.username
+        if (n) n.details.assigned_agent = agent?.username
         showToast(`Forwarded to ${agent?.username || 'agent'}`, 'success')
       } catch {
         showToast('Failed to forward notification', 'error')

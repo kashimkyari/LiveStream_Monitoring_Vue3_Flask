@@ -7,6 +7,7 @@ from sqlalchemy import or_
 from datetime import datetime
 from utils.notifications import emit_notification, emit_notification_update, emit_message_update
 from sqlalchemy.orm import joinedload
+from services.notification_service import NotificationService
 
 notification_bp = Blueprint('notification', __name__)
 
@@ -29,58 +30,11 @@ def fetch_all_agents():
 
 def fetch_agent_username(agent_id):
     """Fetch a single agent's username and cache it"""
-    if agent_id in agent_cache:
-        return agent_cache[agent_id]
-    try:
-        agent = User.query.get(agent_id)
-        if agent:
-            agent_cache[agent_id] = agent.username or f"Agent {agent.id}"
-            return agent_cache[agent_id]
-        else:
-            agent_cache[agent_id] = f"Agent {agent_id}"
-            return agent_cache[agent_id]
-    except Exception as e:
-        print(f"Error fetching username for agent {agent_id}: {e}")
-        agent_cache[agent_id] = f"Agent {agent_id}"
-        return agent_cache[agent_id]
+    return NotificationService.fetch_agent_username(agent_id)
 
 def get_stream_assignment(stream_url):
     """Get assignment info for a stream"""
-    try:
-        # Find the stream by room_url or m3u8 URL
-        stream = Stream.query.filter_by(room_url=stream_url).first()
-        if not stream:
-            from models import ChaturbateStream, StripchatStream
-            cb_stream = ChaturbateStream.query.filter_by(chaturbate_m3u8_url=stream_url).first()
-            if cb_stream:
-                stream = Stream.query.get(cb_stream.id)
-            else:
-                sc_stream = StripchatStream.query.filter_by(stripchat_m3u8_url=stream_url).first()
-                if sc_stream:
-                    stream = Stream.query.get(sc_stream.id)
-        
-        if not stream:
-            return None, None
-        
-        # Query assignments for this stream
-        query = Assignment.query.options(
-            joinedload(Assignment.agent),
-            joinedload(Assignment.stream)
-        ).filter_by(stream_id=stream.id)
-        
-        assignments = query.all()
-        
-        if not assignments:
-            return None, None
-        
-        # Select the first assignment
-        assignment = assignments[0]
-        agent_id = assignment.agent_id
-        fetch_agent_username(agent_id)
-        return assignment.id, agent_id
-    except Exception as e:
-        print(f"Error fetching assignment for stream {stream_url}: {e}")
-        return None, None
+    return NotificationService.get_stream_assignment(stream_url)
 
 @notification_bp.route("/api/logs", methods=["GET"])
 @login_required(role="admin")
@@ -128,10 +82,7 @@ def get_all_notifications():
             
             for notification in notifications:
                 # Check if notification is explicitly assigned to this agent
-                details = notification.details or {}
-                assigned_agent_id = details.get('assigned_agent')
-                
-                if assigned_agent_id and int(assigned_agent_id) == user_id:
+                if notification.assigned_agent and int(notification.assigned_agent) == user_id:
                     relevant_notifications.append(notification)
                     continue
                     
@@ -177,11 +128,13 @@ def create_notification():
             details=data.get('details', {}),
             read=data.get('read', False),
             assigned_agent=agent_id,
-            assignment_id=assignment_id
+            assignment_id=assignment_id,
+            detection_image=data.get('detection_image')
         )
         
         # Update details with assigned agent
-        notification.details['assigned_agent'] = agent_id
+        assigned_agent_username = fetch_agent_username(agent_id) if agent_id else 'Unassigned'
+        notification.details['assigned_agent'] = assigned_agent_username
         
         db.session.add(notification)
         db.session.commit()
@@ -196,11 +149,28 @@ def create_notification():
             "room_url": notification.room_url,
             "streamer": notification.details.get('streamer_name', 'Unknown'),
             "platform": notification.details.get('platform', 'Unknown'),
-            "assigned_agent": agent_cache.get(agent_id, "Unassigned") if agent_id else "Unassigned"
+            "assigned_agent": assigned_agent_username
         }
         
         # Emit real-time notification
         emit_notification(notification_data)
+        
+        # Notify recipients
+        if agent_id:
+            agent = User.query.get(agent_id)
+            if agent and agent.receive_updates:
+                NotificationService.send_user_notification(
+                    agent, notification.event_type, notification.details, 
+                    notification.room_url, notification.details.get('platform'), 
+                    notification.details.get('streamer_name'),
+                    is_image=bool(notification.detection_image), 
+                    image_data=notification.detection_image
+                )
+        NotificationService.notify_admins(
+            notification.event_type, notification.details, 
+            notification.room_url, notification.details.get('platform'), 
+            notification.details.get('streamer_name')
+        )
         
         return jsonify({
             "message": "Notification created successfully",
@@ -228,16 +198,13 @@ def get_notification(notification_id):
                 return jsonify({"error": "Agent not found"}), 404
                 
             # Check if notification is explicitly assigned to this agent
-            details = notification.details or {}
-            assigned_agent_id = details.get('assigned_agent')
-            
-            # Check if notification is for a stream assigned to this agent
-            stream = Stream.query.filter_by(room_url=notification.room_url).first()
-            assigned_streams = [assignment.stream_id for assignment in agent.assignments]
-            
-            if not ((assigned_agent_id and int(assigned_agent_id) == user_id) or 
-                   (stream and stream.id in assigned_streams)):
-                return jsonify({"error": "Not authorized to view this notification"}), 403
+            if notification.assigned_agent and int(notification.assigned_agent) != user_id:
+                # Check if notification is for a stream assigned to this agent
+                stream = Stream.query.filter_by(room_url=notification.room_url).first()
+                assigned_streams = [assignment.stream_id for assignment in agent.assignments]
+                
+                if not (stream and stream.id in assigned_streams):
+                    return jsonify({"error": "Not authorized to view this notification"}), 403
         
         return jsonify({
             "id": notification.id,
@@ -276,7 +243,7 @@ def update_notification(notification_id):
             assignment_id, agent_id = get_stream_assignment(data['room_url'])
             notification.assigned_agent = agent_id
             notification.assignment_id = assignment_id
-            notification.details['assigned_agent'] = agent_id
+            notification.details['assigned_agent'] = fetch_agent_username(agent_id) if agent_id else 'Unassigned'
             
         if 'read' in data:
             notification.read = data['read']
@@ -285,6 +252,23 @@ def update_notification(notification_id):
         
         # Emit update notification
         emit_notification_update(notification.id, 'updated')
+        
+        # Notify recipients
+        if notification.assigned_agent:
+            agent = User.query.get(notification.assigned_agent)
+            if agent and agent.receive_updates:
+                NotificationService.send_user_notification(
+                    agent, notification.event_type, notification.details, 
+                    notification.room_url, notification.details.get('platform'), 
+                    notification.details.get('streamer_name'),
+                    is_image=bool(notification.detection_image), 
+                    image_data=notification.detection_image
+                )
+        NotificationService.notify_admins(
+            notification.event_type, notification.details, 
+            notification.room_url, notification.details.get('platform'), 
+            notification.details.get('streamer_name')
+        )
         
         return jsonify({
             "message": "Notification updated successfully",
@@ -320,10 +304,7 @@ def mark_notification_read(notification_id):
                 return jsonify({"error": "Agent not found"}), 404
                 
             # Check if notification is explicitly assigned to this agent
-            details = notification.details or {}
-            assigned_agent_id = details.get('assigned_agent')
-            
-            if assigned_agent_id and int(assigned_agent_id) != user_id:
+            if notification.assigned_agent and int(notification.assigned_agent) != user_id:
                 # Not directly assigned to this agent, check if it's for a stream they're assigned to
                 stream = Stream.query.filter_by(room_url=notification.room_url).first()
                 if not stream:
@@ -457,7 +438,7 @@ def forward_notification(notification_id):
 
         # Update the notification details to include the assigned agent
         details = notification.details or {}
-        details['assigned_agent'] = agent.id
+        details['assigned_agent'] = NotificationService.fetch_agent_username(agent_id)
         notification.details = details
         notification.assigned_agent = agent.id
 
@@ -465,10 +446,6 @@ def forward_notification(notification_id):
         assignment_id, _ = get_stream_assignment(notification.room_url)
         notification.assignment_id = assignment_id
 
-        # Cache the agent username
-        fetch_agent_username(agent_id)
-
-        # Save to database
         db.session.commit()
 
         # Emit notification update
@@ -486,7 +463,7 @@ def forward_notification(notification_id):
         if notification.event_type == 'object_detection':
             message_details.update({
                 "detections": notification.details.get('detections', []),
-                "annotated_image": notification.details.get('annotated_image')
+                "annotated_image": bool(notification.detection_image)
             })
         elif notification.event_type == 'chat_detection':
             message_details.update({
@@ -502,7 +479,7 @@ def forward_notification(notification_id):
         sys_msg = ChatMessage(
             sender_id=session['user_id'],
             receiver_id=agent.id,
-            message=f"🚨 Forwarded {notification.event_type.replace('_', ' ').title()} Alert",
+            message=f"📨 Forwarded {notification.event_type.replace('_', ' ').title()} Alert",
             details=message_details,
             is_system=True,
             timestamp=datetime.utcnow()
@@ -522,6 +499,16 @@ def forward_notification(notification_id):
             "read": False,
             "details": message_details
         })
+
+        # Send notification to the agent
+        if agent.receive_updates:
+            NotificationService.send_user_notification(
+                agent, notification.event_type, notification.details, 
+                notification.room_url, notification.details.get('platform'), 
+                notification.details.get('streamer_name'),
+                is_image=bool(notification.detection_image), 
+                image_data=notification.detection_image
+            )
 
         return jsonify({
             "message": "Notification forwarded to agent",

@@ -119,7 +119,8 @@
                 <div class="notification-meta">
                   <span class="notification-source">
                     {{ notification.details?.platform || 'System' }} | 
-                    {{ notification.details?.streamer_name || 'Unknown' }}
+                    {{ notification.details?.streamer_name || 'Unknown' }} | 
+                    {{ notification.details?.assigned_agent || 'None' }}
                   </span>
                   <span 
                     v-if="notification.event_type === 'object_detection' && notification.details?.detections?.length" 
@@ -218,9 +219,9 @@
               <label>Streamer:</label>
               <span>{{ selectedNotification.details?.streamer_name || 'Unknown' }}</span>
             </div>
-            <div v-if="selectedNotification.assigned_agent" class="detail-field">
+            <div class="detail-field">
               <label>Assigned Agent:</label>
-              <span>{{ selectedNotification.assigned_agent }}</span>
+              <span>{{ selectedNotification.details?.assigned_agent || 'None' }}</span>
             </div>
             
             <!-- Specific details based on notification type -->
@@ -441,7 +442,7 @@ export default {
       }
 
       try {
-        socket.value = io(' https://monitor-backend.jetcamstudio.com:5000/notifications', {
+        socket.value = io('https://monitor-backend.jetcamstudio.com:5000/notifications', {
           path: '/ws',
           transports: ['websocket', 'polling'],
           reconnection: false,
@@ -483,7 +484,7 @@ export default {
         reconnectAttempts++
         if (reconnectAttempts < maxReconnectAttempts) {
           const delay = reconnectDelayMs * Math.pow(2, reconnectAttempts - 1)
-          setTimeout(setupSocketConnection, delay)
+            setTimeout(setupSocketConnection, delay)
         }
       }
     }
@@ -504,9 +505,8 @@ export default {
 
     const handleNewNotification = (data) => {
       if (!user.value) return
-      // Only add if assigned to the current agent or unassigned and relevant
-      if (data.assigned_agent === user.value.username || 
-          (!data.assigned_agent && ['object_detection', 'audio_detection', 'chat_detection', 'stream_status_updated'].includes(data.event_type))) {
+      // Only add if assigned to the current agent
+      if (data.details?.assigned_agent === user.value.username) {
         if (!notifications.value.some(n => n.id === data.id)) {
           notifications.value.unshift(data)
           newNotificationIds.value.push(data.id)
@@ -540,7 +540,8 @@ export default {
         const res = await axios.get('/api/notifications', {
           params: { assigned_agent: user.value.username }
         })
-        notifications.value = res.data
+        // Filter notifications client-side to ensure only those assigned to the user are shown
+        notifications.value = res.data.filter(n => n.details?.assigned_agent === user.value.username)
       } catch (err) {
         console.error('Error fetching notifications:', err)
         error.value = 'Failed to load notifications. Please try again.'
@@ -581,20 +582,21 @@ export default {
     }
 
     const getNotificationMessage = (n) => {
+      const agent = n.details?.assigned_agent || 'None'
       if (n.event_type === 'object_detection') {
         const det = n.details?.detections || []
-        return det.length ? `Detected: ${det.map(d => d.class).join(', ')}` : 'Object detected'
+        return det.length ? `Detected: ${det.map(d => d.class).join(', ')} (Agent: ${agent})` : `Object detected (Agent: ${agent})`
       }
       if (n.event_type === 'audio_detection') {
-        return n.details?.transcript?.substring(0, 100) || 'Audio detected'
+        return `${n.details?.transcript?.substring(0, 100) || 'Audio detected'} (Agent: ${agent})`
       }
       if (n.event_type === 'chat_detection') {
-        return n.details?.message?.substring(0, 100) || 'Chat message detected'
+        return `${n.details?.message?.substring(0, 100) || 'Chat message detected'} (Agent: ${agent})`
       }
       if (n.event_type === 'stream_status_updated') {
-        return n.details?.message || 'Stream status updated'
+        return `${n.details?.message || 'Stream status updated'} (Agent: ${agent})`
       }
-      return n.details?.message || 'Notification received'
+      return `${n.details?.message || 'Notification received'} (Agent: ${agent})`
     }
 
     const getNotificationDetailTitle = () => {

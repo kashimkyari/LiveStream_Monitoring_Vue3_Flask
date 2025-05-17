@@ -2,6 +2,7 @@
 from flask_socketio import SocketIO
 import os
 import logging
+from models import Stream, User
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -13,6 +14,7 @@ def init_socketio(app):
     """Initialize SocketIO with proper configuration"""
     allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else ['*']
     
+    global socketio
     socketio = SocketIO(
         app,
         async_mode='gevent',
@@ -45,9 +47,6 @@ def emit_notification(notification_data):
         # If notification is for a specific stream, emit to its room
         stream_url = notification_data.get('room_url')
         if stream_url:
-            # Import the Stream model here to avoid circular imports
-            from models import Stream, User
-            
             stream = Stream.query.filter_by(room_url=stream_url).first()
             if stream:
                 emit_stream_notification(notification_data, stream.id)

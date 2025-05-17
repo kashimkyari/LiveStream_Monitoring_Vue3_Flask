@@ -62,6 +62,7 @@
           :stream="enhanceStreamWithUsername(stream)" 
           :detectionCount="getDetectionCount(stream)"
           :totalStreams="liveStreams.length"
+          :agentUsername="stream.agent?.username"
           @click="openStreamDetails(stream)"
           @detection-toggled="handleDetectionToggled"
           @status-change="handleStreamStatusChange"
@@ -80,6 +81,7 @@
           :stream="enhanceStreamWithUsername(stream)" 
           :detectionCount="getDetectionCount(stream)"
           :totalStreams="offlineStreams.length"
+          :agentUsername="stream.agent?.username"
           @click="openStreamDetails(stream)"
           @detection-toggled="handleDetectionToggled"
           @status-change="handleStreamStatusChange"
@@ -125,13 +127,13 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { library } from '@fortawesome/fontawesome-svg-core'
-import StreamCard from './StreamCard.vue'
-import StreamDetailsModal from './StreamDetailsModal.vue'
-import StatCard from './StatCard.vue'
-import axios from 'axios'
+import { ref, computed, onMounted } from 'vue';
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
+import { library } from '@fortawesome/fontawesome-svg-core';
+import StreamCard from './StreamCard.vue';
+import StreamDetailsModal from './StreamDetailsModal.vue';
+import StatCard from './StatCard.vue';
+import axios from 'axios';
 import {
   faSync,
   faVideoSlash,
@@ -141,9 +143,9 @@ import {
   faChevronUp,
   faChevronDown,
   faSpinner
-} from '@fortawesome/free-solid-svg-icons'
+} from '@fortawesome/free-solid-svg-icons';
 
-library.add(faSync, faVideoSlash, faExclamationTriangle, faSearch, faSyncAlt, faChevronUp, faChevronDown, faSpinner)
+library.add(faSync, faVideoSlash, faExclamationTriangle, faSearch, faSyncAlt, faChevronUp, faChevronDown, faSpinner);
 
 export default {
   name: 'AgentStreamsComponent',
@@ -178,44 +180,44 @@ export default {
   emits: ['open-stream', 'refresh-streams', 'update-streams'],
   setup(props, { emit }) {
     // Core state
-    const showModal = ref(false)
-    const selectedStream = ref(null)
-    const selectedStreamDetections = ref([])
-    const isRefreshingStream = ref(false)
-    const viewMode = ref('grid')
-    const localStreams = ref([])
-    const localIsLoading = ref(false)
-    const localError = ref(null)
-    const currentAgentId = ref(null)
-    const agentData = ref(null)
-    const agents = ref([])
-    const searchQuery = ref('')
-    const isLiveCollapsed = ref(false)
-    const isOfflineCollapsed = ref(true)
-    const notifications = ref([])
-    const refreshing = ref(false)
-    const refreshMessages = ref([])
+    const showModal = ref(false);
+    const selectedStream = ref(null);
+    const selectedStreamDetections = ref([]);
+    const isRefreshingStream = ref(false);
+    const viewMode = ref('grid');
+    const localStreams = ref([]);
+    const localIsLoading = ref(false);
+    const localError = ref(null);
+    const currentAgentId = ref(null);
+    const agentData = ref(null);
+    const agents = ref([]);
+    const searchQuery = ref('');
+    const isLiveCollapsed = ref(false);
+    const isOfflineCollapsed = ref(true);
+    const notifications = ref([]);
+    const refreshing = ref(false);
+    const refreshMessages = ref([]);
 
     // Computed properties
     const liveStreams = computed(() => {
-      return localStreams.value.filter(stream => isStreamLive(stream))
-    })
+      return localStreams.value.filter(stream => isStreamLive(stream));
+    });
     
     const offlineStreams = computed(() => {
-      return localStreams.value.filter(stream => !isStreamLive(stream))
-    })
+      return localStreams.value.filter(stream => !isStreamLive(stream));
+    });
 
     const filteredLiveStreams = computed(() => 
       liveStreams.value.filter(s => 
         s.streamer_username.toLowerCase().includes(searchQuery.value.toLowerCase())
       )
-    )
+    );
 
     const filteredOfflineStreams = computed(() => 
       offlineStreams.value.filter(s => 
         s.streamer_username.toLowerCase().includes(searchQuery.value.toLowerCase())
       )
-    )
+    );
 
     const stats = computed(() => [{
       value: liveStreams.value.length,
@@ -232,170 +234,179 @@ export default {
       value: agents.value.filter(a => a.id === currentAgentId.value && a.status === 'active').length,
       label: 'Agent Status',
       icon: 'user-shield'
-    }])
+    }]);
 
     // Core functions
     const fetchCurrentAgent = async () => {
       try {
-        const response = await axios.get('/api/session')
+        const response = await axios.get('/api/session');
         if (response.data?.isLoggedIn) {
-          currentAgentId.value = response.data.user.id
-          agentData.value = response.data.user
-          return response.data.user
+          currentAgentId.value = response.data.user.id;
+          agentData.value = response.data.user;
+          return response.data.user;
         }
-        return null
+        return null;
       } catch (error) {
-        console.error('Error fetching current agent:', error)
-        return null
+        console.error('Error fetching current agent:', error);
+        return null;
       }
-    }
+    };
 
     const fetchAgents = async () => {
       try {
-        const response = await axios.get('/api/agents')
-        agents.value = response.data || []
+        const response = await axios.get('/api/agents');
+        agents.value = response.data || [];
       } catch (error) {
-        console.error('Error fetching agents:', error)
+        console.error('Error fetching agents:', error);
       }
-    }
+    };
     
     const fetchAssignedStreams = async () => {
-      if (localIsLoading.value) return
+      if (localIsLoading.value) return;
       
-      localIsLoading.value = true
-      localError.value = null
+      localIsLoading.value = true;
+      localError.value = null;
       
       try {
         if (!currentAgentId.value) {
-          const agent = await fetchCurrentAgent()
+          const agent = await fetchCurrentAgent();
           if (!agent) {
-            localError.value = 'Unable to authenticate. Please log in again.'
-            return
+            localError.value = 'Unable to authenticate. Please log in again.';
+            return;
           }
         }
 
+        // Only fetch agents if necessary (e.g., for fallback username resolution)
         if (agents.value.length === 0) {
-          await fetchAgents()
+          await fetchAgents();
         }
         
-        const response = await axios.get('/api/streams')
-        localStreams.value = (response.data || []).filter(stream => 
-          stream.assignments?.some(assignment => 
-            assignment.agent_id === currentAgentId.value && assignment.status === 'active'
+        const response = await axios.get('/api/streams');
+        localStreams.value = (response.data || []).filter(stream =>
+          stream.assignments?.some(assignment =>
+            assignment.agent_id === currentAgentId.value &&
+            assignment.status === 'active'
           )
-        )
+        ).map(stream => ({
+          ...stream,
+          streamer_username: stream.streamer_username || stream.room_url.split('/').pop()
+        }));
       } catch (error) {
-        console.error('Error fetching streams:', error)
-        localError.value = 'Failed to load streams. Please try again.'
+        console.error('Error fetching streams:', error);
+        localError.value = 'Failed to load streams. Please try again.';
       } finally {
-        localIsLoading.value = false
+        localIsLoading.value = false;
       }
-    }
+    };
 
     const fetchNotifications = async () => {
       try {
-        const { data } = await axios.get('/api/notifications')
-        notifications.value = data
+        const { data } = await axios.get('/api/notifications');
+        notifications.value = data;
       } catch (error) {
-        console.error('Error fetching notifications:', error)
+        console.error('Error fetching notifications:', error);
       }
-    }
+    };
 
     const enhanceStreamWithUsername = (stream) => {
-      if (!stream) return stream
-      const enhanced = JSON.parse(JSON.stringify(stream))
+      if (!stream) return stream;
+      const enhanced = JSON.parse(JSON.stringify(stream));
       
       if (enhanced.assignments?.length) {
         enhanced.assignments = enhanced.assignments.map(assignment => {
-          const username = assignment.agent?.username || 
+          const username = assignment.agent?.username ||
             agents.value.find(a => a.id === assignment.agent_id)?.username ||
             (assignment.agent_id === currentAgentId.value ? agentData.value?.username : null) ||
-            `Agent ${assignment.agent_id}`
-            
-          return { ...assignment, agent_username: username }
-        })
+            `Agent ${assignment.agent_id}`;
+          return {
+            ...assignment,
+            agent_username: username,
+            stream_id: assignment.stream_id
+          };
+        });
+        const currentAssignment = enhanced.assignments.find(a => a.agent_id === currentAgentId.value);
         enhanced.agent = {
-          username: enhanced.assignments.find(a => a.agent_id === currentAgentId.value)?.agent_username || 'Unassigned',
-          status: enhanced.assignments.find(a => a.agent_id === currentAgentId.value)?.status || 'inactive'
-        }
+          username: currentAssignment?.agent_username || 'Unassigned',
+          status: currentAssignment?.status || 'inactive'
+        };
       } else {
-        enhanced.agent = { username: 'Unassigned', status: 'inactive' }
+        enhanced.agent = { username: 'Unassigned', status: 'inactive' };
       }
       
-      return enhanced
-    }
+      return enhanced;
+    };
     
     const isStreamLive = (stream) => {
-      if (!stream) return false
-      const platform = stream.platform?.toLowerCase()
+      if (!stream) return false;
+      const platform = stream.platform?.toLowerCase();
       return platform === 'chaturbate' ? !!stream.chaturbate_m3u8_url :
              platform === 'stripchat' ? !!stream.stripchat_m3u8_url :
-             false
-    }
+             false;
+    };
     
     const openStreamDetails = (stream) => {
-      selectedStream.value = stream
-      selectedStreamDetections.value = props.detections[stream.room_url] || []
-      showModal.value = true
-      emit('open-stream', stream)
-    }
+      selectedStream.value = stream;
+      selectedStreamDetections.value = props.detections[stream.room_url] || [];
+      showModal.value = true;
+      emit('open-stream', stream);
+    };
     
     const closeModal = () => {
-      showModal.value = false
-      selectedStream.value = null
-    }
+      showModal.value = false;
+      selectedStream.value = null;
+    };
     
     const handleStreamRefresh = async (streamId) => {
-      isRefreshingStream.value = true
+      isRefreshingStream.value = true;
       try {
-        const response = await axios.put(`/api/streams/${streamId}`, { refresh: true })
+        const response = await axios.put(`/api/streams/${streamId}`, { refresh: true });
         if (response.data?.stream) {
-          const streamIndex = localStreams.value.findIndex(s => s.id === streamId)
+          const streamIndex = localStreams.value.findIndex(s => s.id === streamId);
           if (streamIndex >= 0) {
-            localStreams.value[streamIndex] = response.data.stream
+            localStreams.value[streamIndex] = response.data.stream;
             if (selectedStream.value?.id === streamId) {
-              selectedStream.value = response.data.stream
+              selectedStream.value = response.data.stream;
             }
-            emit('update-streams', localStreams.value)
+            emit('update-streams', localStreams.value);
           }
         }
       } catch (error) {
-        console.error('Error refreshing stream:', error)
-        localError.value = 'Failed to refresh stream. Please try again.'
+        console.error('Error refreshing stream:', error);
+        localError.value = 'Failed to refresh stream. Please try again.';
       } finally {
-        isRefreshingStream.value = false
+        isRefreshingStream.value = false;
       }
-    }
+    };
 
     const addRefreshMessage = (text, type = 'info') => {
-      refreshMessages.value.push({ text, type })
+      refreshMessages.value.push({ text, type });
       setTimeout(() => {
-        refreshMessages.value.shift()
-      }, 5000)
-    }
+        refreshMessages.value.shift();
+      }, 5000);
+    };
 
     const refreshStreams = async () => {
-      if (refreshing.value) return
-      refreshing.value = true
-      refreshMessages.value = []
+      if (refreshing.value) return;
+      refreshing.value = true;
+      refreshMessages.value = [];
 
       try {
         for (const stream of liveStreams.value) {
           try {
-            let endpoint, payload
+            let endpoint, payload;
             if (stream.platform === 'chaturbate') {
-              endpoint = '/api/streams/refresh/chaturbate'
-              payload = { room_slug: stream.streamer_username }
+              endpoint = '/api/streams/refresh/chaturbate';
+              payload = { room_slug: stream.streamer_username };
             } else if (stream.platform === 'stripchat') {
-              endpoint = '/api/streams/refresh/stripchat'
-              payload = { room_url: stream.room_url }
+              endpoint = '/api/streams/refresh/stripchat';
+              payload = { room_url: stream.room_url };
             } else {
-              addRefreshMessage(`Unsupported platform for ${stream.streamer_username}`, 'error')
-              continue
+              addRefreshMessage(`Unsupported platform for ${stream.streamer_username}`, 'error');
+              continue;
             }
 
-            addRefreshMessage(`Refreshing ${stream.streamer_username}...`, 'info')
-            const response = await axios.post(endpoint, payload)
+            addRefreshMessage(`Refreshing ${stream.streamer_username}...`, 'info');
+            const response = await axios.post(endpoint, payload);
             if (response.data.m3u8_url) {
               const updatedStreams = localStreams.value.map(s => 
                 s.id === stream.id 
@@ -404,55 +415,55 @@ export default {
                       [stream.platform === 'chaturbate' ? 'chaturbate_m3u8_url' : 'stripchat_m3u8_url']: response.data.m3u8_url 
                     } 
                   : s
-              )
-              localStreams.value = updatedStreams
-              emit('update-streams', updatedStreams)
-              addRefreshMessage(`Refreshed ${stream.streamer_username} successfully`, 'success')
+              );
+              localStreams.value = updatedStreams;
+              emit('update-streams', updatedStreams);
+              addRefreshMessage(`Refreshed ${stream.streamer_username} successfully`, 'success');
             } else {
-              addRefreshMessage(`Failed to refresh ${stream.streamer_username}`, 'error')
+              addRefreshMessage(`Failed to refresh ${stream.streamer_username}`, 'error');
             }
           } catch (error) {
-            console.error(`Error refreshing ${stream.streamer_username}:`, error)
-            addRefreshMessage(`Error refreshing ${stream.streamer_username}: ${error.response?.data?.message || error.message}`, 'error')
+            console.error(`Error refreshing ${stream.streamer_username}:`, error);
+            addRefreshMessage(`Error refreshing ${stream.streamer_username}: ${error.response?.data?.message || error.message}`, 'error');
           }
-          await new Promise(resolve => setTimeout(resolve, 1000))
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       } finally {
-        refreshing.value = false
+        refreshing.value = false;
       }
-    }
+    };
 
     const toggleLiveCollapse = () => {
-      isLiveCollapsed.value = !isLiveCollapsed.value
-    }
+      isLiveCollapsed.value = !isLiveCollapsed.value;
+    };
 
     const toggleOfflineCollapse = () => {
-      isOfflineCollapsed.value = !isOfflineCollapsed.value
-    }
+      isOfflineCollapsed.value = !isOfflineCollapsed.value;
+    };
 
     const handleDetectionToggled = ({ streamId, active }) => {
       const updatedStreams = localStreams.value.map(s => 
         s.id === streamId ? { ...s, isDetecting: active } : s
-      )
-      localStreams.value = updatedStreams
-      emit('update-streams', updatedStreams)
-    }
+      );
+      localStreams.value = updatedStreams;
+      emit('update-streams', updatedStreams);
+    };
 
     const handleStreamStatusChange = ({ streamId, newStatus }) => {
       const updatedStreams = localStreams.value.map(s => 
         s.id === streamId ? { ...s, status: newStatus } : s
-      )
-      localStreams.value = updatedStreams
-      emit('update-streams', updatedStreams)
-    }
+      );
+      localStreams.value = updatedStreams;
+      emit('update-streams', updatedStreams);
+    };
 
     const getDetectionCount = (stream) => 
-      props.detections[stream.room_url]?.length || 0
+      props.detections[stream.room_url]?.length || 0;
 
     onMounted(async () => {
-      await fetchAssignedStreams()
-      await fetchNotifications()
-    })
+      await fetchAssignedStreams();
+      await fetchNotifications();
+    });
 
     return {
       viewMode,
@@ -484,7 +495,7 @@ export default {
       toggleOfflineCollapse,
       refreshing,
       refreshMessages
-    }
+    };
   }
 }
 </script>

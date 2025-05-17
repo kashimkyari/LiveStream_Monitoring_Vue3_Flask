@@ -2,7 +2,7 @@
 """
 chaturbate_scraper_updated.py
 
-This module provides scraping functions for Chaturbate (and Stripchat) streams.
+This module provides scraping functions for Chaturbate and Stripchat streams.
 The updated Chaturbate scraper uses a POST request to retrieve the HLS URL 
 via free proxies. SSL verification is disabled due to known proxy issues.
 """
@@ -12,7 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 import sys
 import types
-import tempfile  # For generating unique user-data directories
+import tempfile
 import os
 import re
 import logging
@@ -21,8 +21,11 @@ import time
 import random
 import requests
 import urllib3
+import gevent
+from gevent.pool import Pool
+from gevent.lock import Semaphore
 
-# --- Monkey Patch for blinker._saferef ---
+# Monkey Patch for blinker._saferef
 if 'blinker._saferef' not in sys.modules:
     saferef = types.ModuleType('blinker._saferef')
     import weakref
@@ -39,51 +42,41 @@ if 'blinker._saferef' not in sys.modules:
                 return False
     saferef.SafeRef = SafeRef
     sys.modules['blinker._saferef'] = saferef
-# --- End of Monkey Patch ---
+
 from requests.exceptions import RequestException, SSLError
 from urllib.parse import urlparse
-from concurrent.futures import ThreadPoolExecutor
 from seleniumwire import webdriver
 from selenium.webdriver.chrome.options import Options
 from flask import jsonify, current_app
 from datetime import datetime
-import threading
 from services.assignment_service import AssignmentService
 from services.notification_service import NotificationService
-
-# Disable insecure request warnings due to disabled SSL certificate verification.
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# Import models and database session for stream creation.
 from models import Stream, ChaturbateStream, StripchatStream, Assignment, User
 from extensions import db
-from notifications import send_text_message
 
-# Global dictionaries to hold job statuses.
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 scrape_jobs = {}
 stream_creation_jobs = {}
-executor = ThreadPoolExecutor(max_workers=1)  # Thread pool for parallel scraping
-
+gevent_pool = Pool(5)  # Max 5 workers
 PROXY_LIST = []
 PROXY_LIST_LAST_UPDATED = None
-PROXY_LOCK = threading.Lock()
-PROXY_UPDATE_INTERVAL = 3600  
-
+PROXY_LOCK = Semaphore()
+PROXY_UPDATE_INTERVAL = 3600
 
 def update_proxy_list():
     """Fetch fresh proxies from free API services"""
     try:
-        # Try ProxyScrape API first
         response = requests.get(
             "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all",
             timeout=15
         )
         if response.status_code == 200 and response.text:
             proxies = [proxy.strip() for proxy in response.text.split('\n') if proxy.strip()]
-            if len(proxies) > 20:  # Ensure we got enough proxies
+            if len(proxies) > 20:
                 return proxies
                 
-        # Fallback to other sources
         response = requests.get(
             "https://www.proxy-list.download/api/v1/get?type=http",
             timeout=15
@@ -93,77 +86,45 @@ def update_proxy_list():
             if len(proxies) > 20:
                 return proxies
                 
-        # Return None if both failed
         return None
     except Exception as e:
         logging.error(f"Failed to update proxy list: {str(e)}")
         return None
 
-def get_random_proxy() -> dict:
-    """
-    Select a random proxy from the proxy list, refreshing if needed.
-    
-    Returns:
-        dict: A dictionary with HTTP and HTTPS proxies formatted for requests.
-    """
+def get_random_proxy():
+    """Select a random proxy from the proxy list, refreshing if needed."""
     global PROXY_LIST, PROXY_LIST_LAST_UPDATED
     
-    # Check if proxies need updating
     with PROXY_LOCK:
         current_time = time.time()
         if not PROXY_LIST or not PROXY_LIST_LAST_UPDATED or \
            current_time - PROXY_LIST_LAST_UPDATED > PROXY_UPDATE_INTERVAL:
-            # Try different methods to get proxies
-            new_proxies = update_proxy_list() or get_proxies_with_library() or scrape_free_proxy_list() # type: ignore
+            new_proxies = update_proxy_list() or get_proxies_with_library() or scrape_free_proxy_list()
             
             if new_proxies and len(new_proxies) >= 10:
                 PROXY_LIST = new_proxies
                 PROXY_LIST_LAST_UPDATED = current_time
                 logging.info(f"Updated proxy list with {len(PROXY_LIST)} proxies")
             elif not PROXY_LIST:
-                # Fallback to original static list if we have no proxies at all
                 PROXY_LIST = [
                     "52.67.10.183:80",
                     "200.250.131.218:80",
-                    # ...rest of your static list
                 ]
                 logging.warning("Using static proxy list as fallback")
     
-    # If we have proxies, select a random one
     if PROXY_LIST:
         proxy = random.choice(PROXY_LIST)
         return {
             "http": f"http://{proxy}",
             "https": f"http://{proxy}"
         }
-    else:
-        # Return None if no proxies available
-        return None
+    return None
 
 def create_selenium_driver_with_proxy(headless=True):
-    """
-    Create a Selenium driver configured with a random proxy
-    
-    Args:
-        headless (bool): Whether to run the browser in headless mode
-        
-    Returns:
-        webdriver: Configured Selenium Wire webdriver
-    """
-    from seleniumwire import webdriver
-    from selenium.webdriver.chrome.options import Options
-    import tempfile
-    
-    # Get a random proxy
+    """Create a Selenium driver configured with a random proxy"""
     proxy_dict = get_random_proxy()
-    if not proxy_dict:
-        logging.warning("No proxies available, using direct connection")
-        proxy_address = None
-    else:
-        # Extract the proxy address (remove http:// prefix)
-        proxy_address = proxy_dict["http"].replace("http://", "")
+    proxy_address = None if not proxy_dict else proxy_dict["http"].replace("http://", "")
     
-    # Configure Chrome options
     chrome_options = Options()
     if headless:
         chrome_options.add_argument("--headless=new")
@@ -172,27 +133,22 @@ def create_selenium_driver_with_proxy(headless=True):
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--ignore-certificate-errors")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    
-    # Anti-detection settings
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option("useAutomationExtension", False)
     
-    # Create a unique user data directory
     unique_user_data_dir = tempfile.mkdtemp()
     chrome_options.add_argument(f"--user-data-dir={unique_user_data_dir}")
     
-    # Configure Selenium Wire options with proxy if available
     seleniumwire_options = {}
     if proxy_address:
         seleniumwire_options = {
             'proxy': {
                 'http': f'http://{proxy_address}',
                 'https': f'http://{proxy_address}',
-                'verify_ssl': False,  # Disable SSL verification due to proxy issues
+                'verify_ssl': False,
             }
         }
     
-    # Initialize the driver
     driver = webdriver.Chrome(
         options=chrome_options,
         seleniumwire_options=seleniumwire_options
@@ -200,8 +156,6 @@ def create_selenium_driver_with_proxy(headless=True):
     
     return driver
 
-
-# --- Helper Functions for Job Progress ---
 def update_job_progress(job_id, percent, message):
     """Update the progress of a scraping job"""
     now = time.time()
@@ -260,8 +214,7 @@ def update_stream_job_progress(job_id, percent, message, estimated_time=None):
         logging.info("Stream Job %s: %s%% - %s (Est: %ss)",
                     job_id, percent, message, final_estimated_time)
 
-# --- New Helper Functions for Chaturbate Scraping ---
-def extract_room_slug(url: str) -> str:
+def extract_room_slug(url):
     """Extract the room slug from a Chaturbate URL"""
     parsed_url = urlparse(url)
     path_parts = [part for part in parsed_url.path.split('/') if part]
@@ -269,23 +222,19 @@ def extract_room_slug(url: str) -> str:
         raise ValueError("No room slug found in URL")
     return path_parts[0]
 
-
 def get_proxies_with_library(count=50):
     """Get working proxies using free-proxy library"""
     try:
         from fp.fp import FreeProxy
-        
         proxies = []
         for _ in range(count):
             try:
                 proxy = FreeProxy(timeout=1, https=True).get()
                 if proxy:
-                    # Convert from URL format to IP:PORT format
                     proxy = proxy.replace("http://", "").replace("https://", "")
                     proxies.append(proxy)
             except Exception:
                 continue
-                
         return proxies if proxies else None
     except ImportError:
         logging.error("free-proxy library not installed. Run: pip install free-proxy")
@@ -294,30 +243,34 @@ def get_proxies_with_library(count=50):
         logging.error(f"Error getting proxies with library: {str(e)}")
         return None
 
-def get_random_proxy() -> dict:
-    """
-    Select a random proxy from the proxy list.
-    
-    Returns:
-        dict: A dictionary with HTTP and HTTPS proxies formatted for requests.
-    """
-    proxy = random.choice(PROXY_LIST)
-    return {
-        "http": f"http://{proxy}",
-        "https": f"http://{proxy}"
-    }
+def scrape_free_proxy_list():
+    """Scrape proxies from free-proxy-list.net"""
+    try:
+        url = "https://free-proxy-list.net/"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0"
+        }
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(response.text, 'html.parser')
+        proxy_table = soup.find('table', {'id': 'proxylisttable'})
+        proxies = []
+        if proxy_table:
+            for row in proxy_table.find('tbody').find_all('tr'):
+                cols = row.find_all('td')
+                if len(cols) >= 2:
+                    ip = cols[0].text.strip()
+                    port = cols[1].text.strip()
+                    proxies.append(f"{ip}:{port}")
+        return proxies if proxies else None
+    except Exception as e:
+        logging.error(f"Failed to scrape free-proxy-list.net: {str(e)}")
+        return None
 
-
-
-
-def get_hls_url(room_slug: str, max_attempts: int = 15) -> dict:
-    """
-    Send a POST request to Chaturbate's endpoint to fetch the HLS URL for a given room.
-    Includes necessary headers and cookies observed from browser DevTools.
-    """
+def get_hls_url(room_slug, max_attempts=15):
+    """Send a POST request to Chaturbate's endpoint to fetch the HLS URL"""
     url = 'https://chaturbate.com/get_edge_hls_url_ajax/'
-    
-    # Dynamic boundary generation
     boundary = uuid.uuid4().hex
     
     headers = {
@@ -335,7 +288,6 @@ def get_hls_url(room_slug: str, max_attempts: int = 15) -> dict:
         )
     }
 
-    # Construct dynamic multipart payload
     payload = (
         f'--{boundary}\r\n'
         'Content-Disposition: form-data; name="room_slug"\r\n\r\n'
@@ -345,7 +297,7 @@ def get_hls_url(room_slug: str, max_attempts: int = 15) -> dict:
         'high\r\n'
         f'--{boundary}\r\n'
         'Content-Disposition: form-data; name="current_edge"\r\n\r\n'
-        '\r\n'  # Empty current_edge to let server assign
+        '\r\n'
         f'--{boundary}\r\n'
         'Content-Disposition: form-data; name="exclude_edge"\r\n\r\n'
         '\r\n'
@@ -381,21 +333,12 @@ def get_hls_url(room_slug: str, max_attempts: int = 15) -> dict:
             attempts += 1
         except Exception as e:
             attempts += 1
-            time.sleep(1)
+            gevent.sleep(1)
 
     return None
 
 def fetch_chaturbate_hls_with_curl_method(room_slug):
-    """
-    Direct implementation of the curl-based approach to fetch HLS URL.
-    This serves as a backup method if other approaches fail.
-    
-    Args:
-        room_slug (str): The Chaturbate room slug/username
-    
-    Returns:
-        dict: Response containing HLS URL or error information
-    """
+    """Direct implementation of the curl-based approach to fetch HLS URL"""
     url = 'https://chaturbate.com/get_edge_hls_url_ajax/'
     boundary = f'geckoformboundary{uuid.uuid4().hex[:24]}'
     
@@ -409,7 +352,6 @@ def fetch_chaturbate_hls_with_curl_method(room_slug):
         'Cookie': 'csrftoken=ZF2KoQPEfT3ikgEEvhx4Ht4Dfg9LOo3f; stcki="Eg6Gdq=1"; agreeterms=1;'
     }
     
-    # Build multipart form data exactly as in the curl request
     payload = (
         f'------{boundary}\r\n'
         f'Content-Disposition: form-data; name="room_slug"\r\n\r\n'
@@ -456,13 +398,11 @@ def fetch_chaturbate_hls_with_curl_method(room_slug):
         return None
 
 def scrape_chaturbate_data(url, progress_callback=None):
-    """Enhanced Chaturbate scraper that searches for any .m3u8 URL in XHR network requests with realtime progress updates"""
+    """Enhanced Chaturbate scraper that searches for any .m3u8 URL in XHR network requests"""
     try:
-        # Initial URL validation
         if not url or 'chaturbate.com/' not in url:
             raise ValueError("Invalid Chaturbate URL")
 
-        # Progress tracking helper function
         def update_progress(p, m):
             if progress_callback:
                 progress_callback(p, m)
@@ -470,11 +410,9 @@ def scrape_chaturbate_data(url, progress_callback=None):
         update_progress(10, "Extracting room slug")
         room_slug = extract_room_slug(url)
 
-        # First, try fetching the HLS URL via the API endpoint
         update_progress(30, "Fetching HLS URL via API")
         result = get_hls_url(room_slug)
         
-        # If the primary API method fails, try the curl-based method as fallback
         if not result or 'error' in result or not result.get('hls_url'):
             update_progress(35, "Primary method failed, trying curl-based fallback")
             result = fetch_chaturbate_hls_with_curl_method(room_slug)
@@ -486,12 +424,10 @@ def scrape_chaturbate_data(url, progress_callback=None):
             raise RuntimeError(f"Chaturbate API error: {error_msg}")
 
         hls_url = result.get("hls_url") or result.get("url")
-        # If both API methods fail, force fallback to network search
         if not hls_url or ".m3u8" not in hls_url:
             update_progress(40, "API methods failed, falling back to browser scraping")
             hls_url = None
         else:
-            # If we have a valid HLS URL from either API method, return early
             update_progress(100, "Scraping complete")
             return {
                 "status": "online",
@@ -499,31 +435,27 @@ def scrape_chaturbate_data(url, progress_callback=None):
                 "chaturbate_m3u8_url": hls_url,
             }
 
-        # Use Selenium Wire with proxy to capture any .m3u8 URL from XHR network requests
         update_progress(50, "Searching XHR requests for .m3u8 URL")
-        
-        # Use our enhanced driver creation function with proxy support
         driver = create_selenium_driver_with_proxy(headless=True)
         
         try:
             driver.scopes = [r'.*\.m3u8.*']
             driver.get(url)
             found_url = None
-            timeout = 15  # seconds timeout for waiting network traffic
+            timeout = 15
             start_time = time.time()
 
             while time.time() - start_time < timeout:
                 elapsed = time.time() - start_time
-                # Update progress dynamically: ranges from 50% to 80%
                 progress_percent = 50 + int((elapsed / timeout) * 30)
                 update_progress(progress_percent, f"Waiting for stream URL... {int(elapsed)}s elapsed")
                 for request in driver.requests:
                     if request.response and ".m3u8" in request.url:
-                        found_url = request.url.split('?')[0]  # Remove query parameters if present
+                        found_url = request.url.split('?')[0]
                         break
                 if found_url:
                     break
-                time.sleep(1)
+                gevent.sleep(1)
 
             if found_url:
                 hls_url = found_url
@@ -532,7 +464,6 @@ def scrape_chaturbate_data(url, progress_callback=None):
         finally:
             driver.quit()
 
-        # Validate that the found URL is in a proper format
         if not re.match(r"https?://[^\s]+\.m3u8", hls_url):
             raise ValueError("Invalid HLS URL format detected")
 
@@ -554,22 +485,8 @@ def scrape_chaturbate_data(url, progress_callback=None):
             "details": str(e)
         }
 
-# --- Existing Functions Remain Unchanged ---
 def fetch_page_content(url, use_selenium=False):
-    """
-    Fetch the HTML content of the provided URL.
-    Uses a robust set of headers to mimic a real browser.
-    
-    Args:
-        url (str): The URL of the webpage to scrape.
-        use_selenium (bool): If True, uses Selenium to fetch the page.
-        
-    Returns:
-        str: The HTML content of the webpage.
-        
-    Raises:
-        Exception: If the request fails.
-    """
+    """Fetch the HTML content of the provided URL."""
     if use_selenium:
         chrome_options = Options()
         chrome_options.add_argument("--headless")
@@ -581,7 +498,7 @@ def fetch_page_content(url, use_selenium=False):
         driver = webdriver.Chrome(options=chrome_options)
         try:
             driver.get(url)
-            time.sleep(5)
+            gevent.sleep(5)
             return driver.page_source
         finally:
             driver.quit()
@@ -606,21 +523,11 @@ def fetch_page_content(url, use_selenium=False):
             logging.error("Direct request failed: %s. Trying Selenium...", e)
             return fetch_page_content(url, use_selenium=True)
 
-
 def extract_m3u8_urls(html_content):
-    """
-    Extract m3u8 URLs from the given HTML content using a regular expression.
-    
-    Args:
-        html_content (str): The HTML content to search within.
-    
-    Returns:
-        list: A list of found m3u8 URLs.
-    """
+    """Extract m3u8 URLs from the given HTML content."""
     pattern = r'https?://[^\s"\']+\.m3u8'
     urls = re.findall(pattern, html_content)
     return urls
-
 
 def fetch_m3u8_from_page(url, timeout=90):
     """Fetch the M3U8 URL from the given page using Selenium."""
@@ -638,7 +545,7 @@ def fetch_m3u8_from_page(url, timeout=90):
     try:
         logging.info(f"Opening URL: {url}")
         driver.get(url)
-        time.sleep(5)
+        gevent.sleep(5)
         found_url = None
         elapsed = 0
         while elapsed < timeout:
@@ -649,7 +556,7 @@ def fetch_m3u8_from_page(url, timeout=90):
                     break
             if found_url:
                 break
-            time.sleep(1)
+            gevent.sleep(1)
             elapsed += 1
         return found_url if found_url else None
     except Exception as e:
@@ -658,12 +565,8 @@ def fetch_m3u8_from_page(url, timeout=90):
     finally:
         driver.quit()
 
-
 def scrape_stripchat_data(url, progress_callback=None):
-    """
-    Enhanced Stripchat scraper combining network interception with direct JavaScript
-    player state inspection to reliably capture HLS URLs.
-    """
+    """Enhanced Stripchat scraper combining network interception with direct JavaScript"""
     def update_progress(percent, message):
         if progress_callback:
             progress_callback(percent, message)
@@ -726,7 +629,7 @@ def scrape_stripchat_data(url, progress_callback=None):
                             m3u8_urls.add(clean_url)
                     if m3u8_urls:
                         break
-                    time.sleep(1)
+                    gevent.sleep(1)
                     update_progress(43 + ((time.time() - start_time) / max_wait) * 10, "Still searching for stream...")
 
                 hls_url = next((url for url in m3u8_urls 
@@ -774,7 +677,6 @@ def scrape_stripchat_data(url, progress_callback=None):
             "platform": "stripchat"
         }
 
-
 def run_scrape_job(job_id, url):
     """Run a scraping job and update progress interactively."""
     update_job_progress(job_id, 0, "Starting scrape job")
@@ -791,7 +693,6 @@ def run_scrape_job(job_id, url):
         scrape_jobs[job_id]["error"] = "Scraping failed"
     update_job_progress(job_id, 100, scrape_jobs[job_id].get("error", "Scraping complete"))
 
-# scraping.py
 def run_stream_creation_job(app, job_id, room_url, platform, agent_id=None, notes=None, priority='normal'):
     with app.app_context():
         start_time = time.time()
@@ -895,7 +796,7 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id=None, note
             for i in range(progress_markers['validation']['microsteps']):
                 progress_pct = (i / progress_markers['validation']['microsteps']) * 100
                 update_with_phase('validation', progress_pct)
-                time.sleep(0.2)
+                gevent.sleep(0.2)
 
             update_with_phase('scraping', 5, f"Deploying data extraction probes to {platform}")
             try:
@@ -920,14 +821,14 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id=None, note
                             raise RuntimeError("Scraping failed after maximum retries")
                         retry_delay = 2 * retry_count
                         update_with_phase('scraping', 40 + retry_count * 10, f"Retrying scraping (attempt {retry_count+1}/{max_retries})")
-                        time.sleep(retry_delay)
+                        gevent.sleep(retry_delay)
                     except Exception as e:
                         retry_count += 1
                         if retry_count >= max_retries:
                             raise
                         retry_delay = 2 * retry_count
                         update_with_phase('scraping', 40 + retry_count * 10, f"Retrying scraping (attempt {retry_count+1}/{max_retries})")
-                        time.sleep(retry_delay)
+                        gevent.sleep(retry_delay)
 
                 update_with_phase('scraping', 85, "Verifying data integrity")
                 if not scraped_data or 'status' not in scraped_data:
@@ -996,6 +897,7 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id=None, note
 
             update_with_phase('finalization', 30, "Charging notification particle accelerator")
             try:
+                # Notify admins
                 NotificationService.notify_admins(
                     'stream_created',
                     {
@@ -1009,6 +911,26 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id=None, note
                     platform,
                     stream.streamer_username,
                 )
+                
+                # Notify assigned agent if exists
+                if assignment and assignment.agent_id:
+                    agent = User.query.get(assignment.agent_id)
+                    if agent:
+                        NotificationService.send_user_notification(
+                            agent,
+                            'stream_assigned',
+                            {
+                                'message': f"You have been assigned to stream: {stream.streamer_username}",
+                                'room_url': room_url,
+                                'streamer_username': stream.streamer_username,
+                                'platform': platform,
+                                'assignment_id': assignment.id,
+                            },
+                            room_url,
+                            platform,
+                            stream.streamer_username,
+                        )
+                
                 update_with_phase('finalization', 95, "Notifications broadcasted")
             except Exception as e:
                 logging.error(f"Notifications failed: {str(e)}")
@@ -1038,7 +960,6 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id=None, note
             completion_time = time.time() - start_time
             logging.info(f"Stream creation job {job_id} completed in {completion_time:.2f} seconds")
 
-            
 def send_telegram_notifications(platform, streamer, room_url):
     """Robust notification handler"""
     try:
@@ -1053,18 +974,15 @@ def send_telegram_notifications(platform, streamer, room_url):
         )
         
         for recipient in recipients:
-            try:
-                executor.submit(
-                    send_text_message,
-                    message=message,
-                    chat_id=recipient.chat_id
-                )
-            except Exception as e:
-                logging.error("Failed to notify %s: %s", 
-                            recipient.chat_id, str(e))
+            gevent_pool.spawn(
+                send_telegram_notifications,
+                message=message,
+                chat_id=recipient.telegram_chat_id
+            )
                 
     except Exception as e:
         logging.error("Notification system error: %s", str(e))
+
 def fetch_chaturbate_chat_history(room_slug):
     """Fetch chat history from Chaturbate's API endpoint."""
     url = "https://chaturbate.com/push_service/room_history/"
@@ -1084,25 +1002,20 @@ def fetch_chaturbate_chat_history(room_slug):
         logging.error(f"Chat history fetch error: {str(e)}")
         return []
 
+def fetch_stripchat_chat_history(url):
+    """Placeholder for fetching Stripchat chat history."""
+    try:
+        return []
+    except Exception as e:
+        logging.error(f"Stripchat chat fetch error: {str(e)}")
+        return []
 
 def refresh_chaturbate_stream(room_slug):
-    """
-    Refresh the m3u8 URL for a Chaturbate stream using the proxy-enabled scraping function.
-    
-    Args:
-        room_slug (str): The room slug (streamer username).
-    
-    Returns:
-        str or None: The new m3u8 URL if successful, or None if an error occurred.
-    """
+    """Refresh the m3u8 URL for a Chaturbate stream."""
     try:
-        # Construct the Chaturbate room URL
         room_url = f"https://chaturbate.com/{room_slug}/"
-        
-        # Use our enhanced scraper that consistently uses proxies
         scraped_data = scrape_chaturbate_data(room_url)
         
-        # Validate the response
         if not scraped_data or scraped_data.get('status') != 'online':
             logging.error("Scraping failed or stream offline for %s", room_slug)
             return None
@@ -1112,139 +1025,133 @@ def refresh_chaturbate_stream(room_slug):
             logging.error("No valid m3u8 URL found for room slug: %s", room_slug)
             return None
         
-        # Update the database
         stream = ChaturbateStream.query.filter_by(streamer_username=room_slug).first()
         if stream:
             stream.chaturbate_m3u8_url = new_url
             db.session.commit()
             logging.info("Updated stream '%s' with new m3u8 URL: %s", room_slug, new_url)
-            return new_url
         else:
-            logging.info("No existing stream found, but valid URL found: %s", new_url)
-            return new_url
-    
+            logging.info("No existing stream found for %s, creating new", room_slug)
+            stream = ChaturbateStream(
+                room_url=room_url,
+                streamer_username=room_slug,
+                chaturbate_m3u8_url=new_url,
+                type='chaturbate'
+            )
+            db.session.add(stream)
+            db.session.commit()
+            logging.info("Created new stream for %s with m3u8 URL: %s", room_slug, new_url)
+
+        # Notify admins and assigned agents
+        NotificationService.notify_admins(
+            'stream_refreshed',
+            {
+                'message': f"Chaturbate stream {room_slug} refreshed",
+                'room_url': room_url,
+                'streamer_username': room_slug,
+                'platform': 'chaturbate',
+                'new_url': new_url,
+            },
+            room_url,
+            'chaturbate',
+            room_slug,
+        )
+        
+        assignment = Assignment.query.filter_by(stream_id=stream.id, status='active').first()
+        if assignment and assignment.agent_id:
+            agent = User.query.get(assignment.agent_id)
+            if agent:
+                NotificationService.send_user_notification(
+                    agent,
+                    'stream_refreshed',
+                    {
+                        'message': f"Stream {room_slug} refreshed",
+                        'room_url': room_url,
+                        'streamer_username': room_slug,
+                        'platform': 'chaturbate',
+                        'new_url': new_url,
+                    },
+                    room_url,
+                    'chaturbate',
+                    room_slug,
+                )
+
+        return new_url
     except Exception as e:
-            logging.error("Error refreshing stream for room slug %s: %s", room_slug, str(e))
-            db.session.rollback()
-            return None
+        logging.error(f"Failed to refresh Chaturbate stream for %s: %s", room_slug, str(e))
+        return None
 
-
-def refresh_stripchat_stream(room_url: str) -> str:
-    """
-    Refresh the M3U8 URL for a Stripchat stream using the proxy-enabled scraping function.
-    
-    Args:
-        room_url (str): The full URL of the Stripchat room.
-    
-    Returns:
-        str: The new M3U8 URL if successful, None otherwise.
-    """
+def refresh_stripchat_stream(room_url):
+    """Refresh the m3u8 URL for a Stripchat stream."""
     try:
-        # Use our enhanced scraper with proxy support
         scraped_data = scrape_stripchat_data(room_url)
         
-        # Validate the response
         if not scraped_data or scraped_data.get('status') != 'online':
             logging.error("Scraping failed or stream offline for %s", room_url)
             return None
         
-        new_url = scraped_data.get("stripchat_m3u8_url")
+        new_url = scraped_data.get('stripchat_m3u8_url')
         if not new_url:
             logging.error("No valid m3u8 URL found for URL: %s", room_url)
             return None
         
-        # Update the database
         stream = StripchatStream.query.filter_by(room_url=room_url).first()
         if stream:
             stream.stripchat_m3u8_url = new_url
             db.session.commit()
-            return new_url
-        return None
-    except Exception as e:
-        logging.error(f"Error refreshing Stripchat stream: {str(e)}")
-        db.session.rollback()
-        return None
+            logging.info("Updated stream at %s with new m3u8 URL: %s", room_url, new_url)
+        else:
+            logging.info("No existing stream found for %s, creating new", room_url)
+            stream = StripchatStream(
+                room_url=room_url,
+                streamer_username=scraped_data.get('streamer_username', 'unknown'),
+                stripchat_m3u8_url=new_url,
+                type='stripchat'
+            )
+            db.session.add(stream)
+            db.session.commit()
+            logging.info("Created new stream for %s with m3u8 URL: %s", room_url, new_url)
 
-def validate_proxy(proxy, timeout=3):
-    """
-    Check if a proxy is working by making a test request
-    
-    Args:
-        proxy (str): Proxy in format IP:PORT
-        timeout (int): Request timeout in seconds
-        
-    Returns:
-        bool: True if proxy is working, False otherwise
-    """
-    proxies = {
-        "http": f"http://{proxy}",
-        "https": f"http://{proxy}"
-    }
-    
-    try:
-        response = requests.get(
-            "https://httpbin.org/ip", 
-            proxies=proxies, 
-            timeout=timeout,
-            verify=False
+        # Notify admins and assigned agents
+        streamer_username = scraped_data.get('streamer_username', 'unknown')
+        NotificationService.notify_admins(
+            'stream_refreshed',
+            {
+                'message': f"Stripchat stream {streamer_username} refreshed",
+                'room_url': room_url,
+                'streamer_username': streamer_username,
+                'platform': 'stripchat',
+                'new_url': new_url,
+            },
+            room_url,
+            'stripchat',
+            streamer_username,
         )
-        return response.status_code == 200
-    except:
-        return False
-
-def get_validated_proxies(proxy_list, max_count=20):
-    """
-    Filter and return only working proxies
-    
-    Args:
-        proxy_list (list): List of proxies to validate
-        max_count (int): Maximum number of validated proxies to return
         
-    Returns:
-        list: List of validated proxies
-    """
-    validated = []
-    
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(validate_proxy, proxy): proxy for proxy in proxy_list}
-        
-        for future in as_completed(futures):
-            proxy = futures[future]
-            try:
-                if future.result():
-                    validated.append(proxy)
-                    if len(validated) >= max_count:
-                        break
-            except Exception:
-                pass
-    
-    return validated
+        assignment = Assignment.query.filter_by(stream_id=stream.id, status='active').first()
+        if assignment and assignment.agent_id:
+            agent = User.query.get(assignment.agent_id)
+            if agent:
+                NotificationService.send_user_notification(
+                    agent,
+                    'stream_refreshed',
+                    {
+                        'message': f"Stream {streamer_username} refreshed",
+                        'room_url': room_url,
+                        'streamer_username': streamer_username,
+                        'platform': 'stripchat',
+                        'new_url': new_url,
+                    },
+                    room_url,
+                    'stripchat',
+                    streamer_username,
+                )
 
-def scrape_free_proxy_list():
-    raise NotImplementedError
+        return new_url
+    except Exception as e:
+        logging.error(f"Failed to refresh Stripchat stream for %s: %s", room_url, str(e))
+        return None
 
-def proxy_updater_thread():
-    """Background thread to update proxy list periodically"""
-    global PROXY_LIST, PROXY_LIST_LAST_UPDATED
-    
-    while True:
-        try:
-            # Try different methods to get fresh proxies
-            new_proxies = update_proxy_list() or get_proxies_with_library() or scrape_free_proxy_list()
-            
-            if new_proxies and len(new_proxies) >= 10:
-                with PROXY_LOCK:
-                    PROXY_LIST = new_proxies
-                    PROXY_LIST_LAST_UPDATED = time.time()
-                    logging.info(f"[Background] Updated proxy list with {len(PROXY_LIST)} proxies at {datetime.now()}")
-        except Exception as e:
-            logging.error(f"Error in proxy updater thread: {str(e)}")
-        
-        # Sleep for the update interval
-        time.sleep(PROXY_UPDATE_INTERVAL)
-
-# Start the background thread when the module is imported
-proxy_thread = threading.Thread(target=proxy_updater_thread, daemon=True)
-proxy_thread.start()
-
-
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    print("This module is intended to be imported, not run directly.")
