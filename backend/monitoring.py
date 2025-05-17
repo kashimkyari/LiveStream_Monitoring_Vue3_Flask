@@ -10,7 +10,7 @@ import requests
 from datetime import datetime, timedelta
 import io
 from PIL import Image
-import whisper
+import whisper  # Updated import
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import torch
 import av
@@ -84,7 +84,6 @@ def load_whisper_model():
         if _whisper_model is None:
             try:
                 logger.info(f"Loading Whisper model: {WHISPER_MODEL_SIZE}")
-                import whisper
                 _whisper_model = whisper.load_model(WHISPER_MODEL_SIZE)
                 logger.info(f"Whisper model '{WHISPER_MODEL_SIZE}' loaded successfully")
             except AttributeError as e:
@@ -109,7 +108,7 @@ def load_yolo_model():
         logger.info("Video monitoring disabled; skipping YOLO model loading")
         return None
     global _yolo_model
-    with _yolo_lock:
+    with _whisper_lock:
         if _yolo_model is None:
             try:
                 from ultralytics import YOLO
@@ -234,7 +233,28 @@ def process_combined_detection(app, stream_url, cancel_event):
     """Main monitoring loop processing audio, video, and chat from M3U8 stream"""
     with app.app_context():
         logger.info(f"Starting monitoring for {stream_url}")
+        # Get stream object to check status
+        stream = Stream.query.filter_by(room_url=stream_url).first()
+        if not stream:
+            cb_stream = ChaturbateStream.query.filter_by(chaturbate_m3u8_url=stream_url).first()
+            if cb_stream:
+                stream = Stream.query.get(cb_stream.id)
+            else:
+                sc_stream = StripchatStream.query.filter_by(stripchat_m3u8_url=stream_url).first()
+                if sc_stream:
+                    stream = Stream.query.get(sc_stream.id)
+        
+        if not stream:
+            logger.error(f"Stream not found for URL: {stream_url}")
+            return
+
         while not cancel_event.is_set():
+            # Check stream status
+            if stream.status == 'offline':
+                logger.info(f"Stopping monitoring for offline stream: {stream.id}")
+                stop_monitoring(stream)
+                break
+
             try:
                 container = av.open(stream_url, timeout=30)
                 video_stream = next((s for s in container.streams if s.type == 'video'), None) if ENABLE_VIDEO_MONITORING else None
@@ -607,6 +627,11 @@ def start_monitoring(stream):
     if not CONTINUOUS_MONITORING:
         logger.info(f"Continuous monitoring disabled; skipping stream {stream.room_url}")
         return False
+    # Check if stream is offline
+    if stream.status == 'offline':
+        logger.info(f"Cannot start monitoring for offline stream: {stream.id}")
+        return False
+
     with current_app.app_context():
         if stream.is_monitored:
             logger.info(f"Stream already monitored: {stream.room_url}")
@@ -726,7 +751,10 @@ def start_notification_monitor():
         with current_app.app_context():
             streams = Stream.query.filter_by(is_monitored=True).all()
             for stream in streams:
-                start_monitoring(stream)
+                if stream.status != 'offline':
+                    start_monitoring(stream)
+                else:
+                    logger.info(f"Skipping offline stream {stream.id} during notification monitor startup")
         logger.info("Notification monitor started successfully")
     except Exception as e:
         logger.error(f"Error starting notification monitor: {e}")

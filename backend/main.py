@@ -34,6 +34,23 @@ app = create_app()
 # Initialize SocketIO
 socketio = init_socketio(app)
 
+# Immediately start monitoring
+with app.app_context():
+    try:
+        from utils.notifications import emit_notification
+        from monitoring import start_notification_monitor
+
+        if os.getenv('CONTINUOUS_MONITORING', 'true').lower() == 'true':
+            start_notification_monitor()
+            emit_notification({'system': 'Server started successfully with monitoring', 'event_type': 'server_start'})
+            logging.info("Monitoring initialized immediately on app startup for non-offline streams")
+        else:
+            emit_notification({'system': 'Server started without monitoring', 'event_type': 'server_start'})
+            logging.info("Monitoring disabled on app startup")
+    except Exception as e:
+        logging.error(f"Monitoring initialization failed: {str(e)}")
+        raise
+
 # Parse allowed origins from environment
 allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else ['*']
 # Ensure https://monitor.jetcamstudio.com/ is in allowed origins
@@ -127,25 +144,6 @@ with app.app_context():
     except Exception as e:
         logging.error(f"DB init failed: {str(e)}")
         raise
-
-# === Background Services ===
-with app.app_context():
-    try:
-        from utils.notifications import emit_notification
-        from monitoring import start_notification_monitor
-
-        time.sleep(1)
-        # Start monitoring only if enabled
-        if os.getenv('CONTINUOUS_MONITORING', 'true').lower() == 'true':
-            start_notification_monitor()
-            emit_notification({'system': 'Server started successfully with monitoring', 'event_type': 'server_start'})
-            logging.info("Background services and monitoring initialized")
-        else:
-            emit_notification({'system': 'Server started without monitoring', 'event_type': 'server_start'})
-            logging.info("Background services initialized without monitoring")
-    
-    except Exception as e:
-        logging.error(f"Background services error: {str(e)}")
 
 # === Health Check Endpoint ===
 @app.route('/check-health', methods=['GET'])

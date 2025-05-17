@@ -40,3 +40,4 @@ librosa
 flask_jwt_extended
 openai-whisper
 flask_limiter
+openai-whisper

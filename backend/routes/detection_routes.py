@@ -1,7 +1,5 @@
 # routes/detection_routes.py
 from flask import Blueprint, request, jsonify, send_from_directory, session, current_app
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from models import Stream
 from utils import login_required
 from extensions import db
@@ -11,16 +9,6 @@ import numpy as np
 from monitoring import start_monitoring, stop_monitoring, stream_processors
 
 detection_bp = Blueprint('detection', __name__)
-
-# Initialize rate limiter
-limiter = Limiter(
-    key_func=lambda: f"{request.view_args.get('stream_id')}",
-    default_limits=["10 per minute"]
-)
-
-@detection_bp.record
-def setup_limiter(state):
-    limiter.init_app(state.app)
 
 # Helper function to get stream URL
 def get_stream_url(stream):
@@ -100,6 +88,8 @@ def trigger_detection():
         if stream.is_monitored or stream_url in stream_processors:
             try:
                 stop_monitoring(stream)
+                stream.is_monitored = False
+                db.session.commit()
                 current_app.logger.info(f"Detection stopped for stream: {stream.id}")
                 return jsonify({
                     "message": "Detection stopped successfully",
@@ -133,6 +123,19 @@ def trigger_detection():
                 "detectionError": None
             }), 200
 
+    # Check if stream is offline
+    if stream.status == 'offline':
+        current_app.logger.info(f"Cannot start detection for offline stream: {stream.id}")
+        return jsonify({
+            "error": "Cannot start detection for offline stream",
+            "stream_id": stream.id,
+            "active": False,
+            "status": stream.status or "unknown",
+            "isDetecting": False,
+            "isDetectionLoading": False,
+            "detectionError": "Stream is offline"
+        }), 400
+
     # Check if detection is already running
     if stream.is_monitored or stream_url in stream_processors:
         current_app.logger.info(f"Detection already running for stream: {stream.id}")
@@ -150,6 +153,8 @@ def trigger_detection():
     try:
         current_app.logger.info(f"Starting detection for stream: {stream.id}")
         if start_monitoring(stream):
+            stream.is_monitored = True
+            db.session.commit()
             return jsonify({
                 "message": "Detection started successfully",
                 "stream_id": stream.id,
@@ -187,7 +192,7 @@ def trigger_detection():
 def detection_status(stream_id):
     stream = Stream.query.get_or_404(stream_id)
     stream_url = get_stream_url(stream)
-    is_active = stream_url in stream_processors or stream.is_monitored
+    is_active = (stream_url in stream_processors or stream.is_monitored) and stream.status != 'offline'
     stream_status = getattr(stream, 'status', 'unknown')
     return jsonify({
         "stream_id": stream_id,
@@ -196,12 +201,11 @@ def detection_status(stream_id):
         "status": stream_status,
         "isDetecting": is_active,
         "isDetectionLoading": False,  # Assume no loading state unless triggered
-        "detectionError": None  # No error unless explicitly set
+        "detectionError": "Stream is offline" if stream.status == 'offline' else None
     })
 
 @detection_bp.route("/api/streams/<int:stream_id>/status", methods=["POST"])
 @login_required()
-@limiter.limit("10 per minute")
 def update_stream_status(stream_id):
     """Update the status of a stream."""
     data = request.get_json()
@@ -218,6 +222,10 @@ def update_stream_status(stream_id):
 
     try:
         stream.status = status
+        # If setting to offline, stop monitoring
+        if status == 'offline' and (stream.is_monitored or get_stream_url(stream) in stream_processors):
+            stop_monitoring(stream)
+            stream.is_monitored = False
         db.session.commit()
         current_app.logger.info(f"Stream {stream_id} status updated to {status}")
         return jsonify({
