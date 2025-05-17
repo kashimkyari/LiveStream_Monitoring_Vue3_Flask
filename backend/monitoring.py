@@ -47,6 +47,10 @@ AUDIO_SAMPLE_DURATION = int(os.environ.get("AUDIO_SAMPLE_DURATION", "10"))
 VISUAL_ALERT_COOLDOWN = int(os.environ.get("VISUAL_ALERT_COOLDOWN", "30"))
 CHAT_ALERT_COOLDOWN = int(os.environ.get("CHAT_ALERT_COOLDOWN", "45"))
 NEGATIVE_SENTIMENT_THRESHOLD = float(os.environ.get("NEGATIVE_SENTIMENT_THRESHOLD", "-0.5"))
+CONTINUOUS_MONITORING = os.environ.get("CONTINUOUS_MONITORING", "true").lower() == "true"
+ENABLE_AUDIO_MONITORING = os.environ.get("ENABLE_AUDIO_MONITORING", "true").lower() == "true"
+ENABLE_VIDEO_MONITORING = os.environ.get("ENABLE_VIDEO_MONITORING", "true").lower() == "true"
+ENABLE_CHAT_MONITORING = os.environ.get("ENABLE_CHAT_MONITORING", "true").lower() == "true"
 
 # =============== GLOBAL VARIABLES ===============
 _whisper_model = None
@@ -72,6 +76,9 @@ gevent_pool = Pool(5)  # Max 5 workers
 # =============== MODEL LOADING ===============
 def load_whisper_model():
     """Load the OpenAI Whisper model with configurable size and fallback"""
+    if not ENABLE_AUDIO_MONITORING:
+        logger.info("Audio monitoring disabled; skipping Whisper model loading")
+        return None
     global _whisper_model
     with _whisper_lock:
         if _whisper_model is None:
@@ -98,6 +105,9 @@ def load_whisper_model():
 
 def load_yolo_model():
     """Load the YOLO object detection model"""
+    if not ENABLE_VIDEO_MONITORING:
+        logger.info("Video monitoring disabled; skipping YOLO model loading")
+        return None
     global _yolo_model
     with _yolo_lock:
         if _yolo_model is None:
@@ -221,28 +231,30 @@ def get_stream_assignment(stream_url):
 
 # =============== AUDIO AND VIDEO PROCESSING ===============
 def process_combined_detection(app, stream_url, cancel_event):
-    """Main monitoring loop processing audio and video from M3U8 stream"""
+    """Main monitoring loop processing audio, video, and chat from M3U8 stream"""
     with app.app_context():
         logger.info(f"Starting monitoring for {stream_url}")
         while not cancel_event.is_set():
             try:
                 container = av.open(stream_url, timeout=30)
-                video_stream = next((s for s in container.streams if s.type == 'video'), None)
-                audio_stream = next((s for s in container.streams if s.type == 'audio'), None)
-                if not video_stream or not audio_stream:
-                    logger.error(f"Missing video or audio stream in {stream_url}")
+                video_stream = next((s for s in container.streams if s.type == 'video'), None) if ENABLE_VIDEO_MONITORING else None
+                audio_stream = next((s for s in container.streams if s.type == 'audio'), None) if ENABLE_AUDIO_MONITORING else None
+                
+                if not (video_stream or audio_stream or ENABLE_CHAT_MONITORING):
+                    logger.error(f"No enabled monitoring types for {stream_url}")
                     gevent.sleep(10)
                     continue
 
                 audio_buffer = []
                 total_audio_duration = 0
-                sample_rate = audio_stream.rate
+                sample_rate = audio_stream.rate if audio_stream else 16000
                 last_process_time = None
+                last_chat_process_time = None
 
                 for packet in container.demux():
                     if cancel_event.is_set():
                         break
-                    if packet.stream == video_stream:
+                    if ENABLE_VIDEO_MONITORING and packet.stream == video_stream:
                         for frame in packet.decode():
                             frame_time = frame.pts * float(video_stream.time_base)
                             if last_process_time is None or frame_time - last_process_time >= 5:
@@ -251,7 +263,7 @@ def process_combined_detection(app, stream_url, cancel_event):
                                 if detections:
                                     log_video_detection(detections, img, stream_url)
                                 last_process_time = frame_time
-                    elif packet.stream == audio_stream:
+                    elif ENABLE_AUDIO_MONITORING and packet.stream == audio_stream:
                         for frame in packet.decode():
                             audio_data = frame.to_ndarray().flatten().astype(np.float32) / 32768.0
                             frame_duration = frame.samples / sample_rate
@@ -264,6 +276,13 @@ def process_combined_detection(app, stream_url, cancel_event):
                                     log_audio_detection(detection, stream_url)
                                 audio_buffer = []
                                 total_audio_duration = 0
+                    if ENABLE_CHAT_MONITORING:
+                        current_time = time.time()
+                        if last_chat_process_time is None or current_time - last_chat_process_time >= 30:
+                            messages = fetch_chat_messages(stream_url)
+                            chat_detections = process_chat_messages(messages, stream_url)
+                            log_chat_detection(chat_detections, stream_url)
+                            last_chat_process_time = current_time
             except Exception as e:
                 logger.error(f"Stream error: {e}")
                 gevent.sleep(10)
@@ -271,6 +290,9 @@ def process_combined_detection(app, stream_url, cancel_event):
 
 def process_audio_segment(audio_data, original_sample_rate, stream_url):
     """Process an audio segment for transcription and analysis"""
+    if not ENABLE_AUDIO_MONITORING:
+        logger.info(f"Audio monitoring disabled for {stream_url}")
+        return []
     model = load_whisper_model()
     if model is None:
         logger.warning(f"Skipping audio processing for {stream_url} due to unavailable Whisper model")
@@ -301,6 +323,9 @@ def process_audio_segment(audio_data, original_sample_rate, stream_url):
 
 def process_video_frame(frame, stream_url):
     """Detect objects in video frame"""
+    if not ENABLE_VIDEO_MONITORING:
+        logger.info(f"Video monitoring disabled for {stream_url}")
+        return []
     model = load_yolo_model()
     if not model:
         return []
@@ -348,6 +373,8 @@ def annotate_frame(frame, detections):
 
 def log_audio_detection(detection, stream_url):
     """Log audio detections to database"""
+    if not ENABLE_AUDIO_MONITORING:
+        return
     platform, streamer = get_stream_info(stream_url)
     assignment_id, agent_id = get_stream_assignment(stream_url)
     details = {
@@ -385,7 +412,7 @@ def log_audio_detection(detection, stream_url):
 
 def log_video_detection(detections, frame, stream_url):
     """Log video detections with annotated frame"""
-    if not detections:
+    if not ENABLE_VIDEO_MONITORING or not detections:
         return
     platform, streamer = get_stream_info(stream_url)
     assignment_id, agent_id = get_stream_assignment(stream_url)
@@ -432,6 +459,9 @@ def log_video_detection(detections, frame, stream_url):
 # =============== CHAT PROCESSING ===============
 def fetch_chat_messages(stream_url):
     """Fetch chat messages based on platform"""
+    if not ENABLE_CHAT_MONITORING:
+        logger.info(f"Chat monitoring disabled for {stream_url}")
+        return []
     platform, streamer = get_stream_info(stream_url)
     try:
         if platform == "chaturbate":
@@ -481,6 +511,9 @@ def fetch_stripchat_chat(stream_url, streamer):
 
 def process_chat_messages(messages, stream_url):
     """Analyze chat messages for keywords and sentiment"""
+    if not ENABLE_CHAT_MONITORING:
+        logger.info(f"Chat monitoring disabled for {stream_url}")
+        return []
     keywords = refresh_flagged_keywords()
     if not keywords:
         return []
@@ -523,7 +556,7 @@ def process_chat_messages(messages, stream_url):
 
 def log_chat_detection(detections, stream_url):
     """Log chat detections grouped by type"""
-    if not detections:
+    if not ENABLE_CHAT_MONITORING or not detections:
         return
     platform, streamer = get_stream_info(stream_url)
     assignment_id, agent_id = get_stream_assignment(stream_url)
@@ -570,6 +603,9 @@ def start_monitoring(stream):
     """Start monitoring a stream for detections"""
     if not stream:
         logger.error("Stream not provided")
+        return False
+    if not CONTINUOUS_MONITORING:
+        logger.info(f"Continuous monitoring disabled; skipping stream {stream.room_url}")
         return False
     with current_app.app_context():
         if stream.is_monitored:
@@ -632,6 +668,9 @@ def stop_monitoring(stream):
 
 def refresh_and_monitor_streams(stream_ids):
     """Refresh and monitor selected streams"""
+    if not CONTINUOUS_MONITORING:
+        logger.info("Continuous monitoring disabled; skipping stream refresh")
+        return False
     with current_app.app_context():
         streams = Stream.query.filter(Stream.id.in_(stream_ids)).all()
         if not streams:
@@ -679,6 +718,9 @@ def refresh_and_monitor_streams(stream_ids):
 
 def start_notification_monitor():
     """Initialize background tasks for notifications monitoring"""
+    if not CONTINUOUS_MONITORING:
+        logger.info("Continuous monitoring disabled; notification monitor not started")
+        return
     logger.info("Starting notification monitor")
     try:
         with current_app.app_context():

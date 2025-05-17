@@ -135,9 +135,14 @@ with app.app_context():
         from monitoring import start_notification_monitor
 
         time.sleep(1)
-        start_notification_monitor()
-        emit_notification({'system': 'Server started successfully', 'event_type': 'server_start'})
-        logging.info("Background services initialized")
+        # Start monitoring only if enabled
+        if os.getenv('CONTINUOUS_MONITORING', 'true').lower() == 'true':
+            start_notification_monitor()
+            emit_notification({'system': 'Server started successfully with monitoring', 'event_type': 'server_start'})
+            logging.info("Background services and monitoring initialized")
+        else:
+            emit_notification({'system': 'Server started without monitoring', 'event_type': 'server_start'})
+            logging.info("Background services initialized without monitoring")
     
     except Exception as e:
         logging.error(f"Background services error: {str(e)}")
@@ -149,7 +154,11 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "timestamp": time.time(),
-        "version": os.getenv('APP_VERSION', '1.0.0')
+        "version": os.getenv('APP_VERSION', '1.0.0'),
+        "monitoring_enabled": os.getenv('CONTINUOUS_MONITORING', 'true').lower() == 'true',
+        "audio_monitoring": os.getenv('ENABLE_AUDIO_MONITORING', 'true').lower() == 'true',
+        "video_monitoring": os.getenv('ENABLE_VIDEO_MONITORING', 'true').lower() == 'true',
+        "chat_monitoring": os.getenv('ENABLE_CHAT_MONITORING', 'true').lower() == 'true'
     })
 
 # === SSL Configuration Helper ===
