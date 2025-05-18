@@ -1,4 +1,3 @@
-# stream_routes.py
 from datetime import datetime, timedelta
 import re
 from flask import Blueprint, request, jsonify, session, current_app
@@ -542,12 +541,23 @@ def interactive_create_stream():
                 "assignment": None,
             }
 
-            # Run the job synchronously within the app context
-            with current_app.app_context():
-                run_stream_creation_job(current_app._get_current_object(), job_id, room_url, platform, agent_id, notes, priority)
+            # Define a function to run the job in a separate thread
+            def run_job_in_thread(app, job_id, room_url, platform, agent_id, notes, priority):
+                with app.app_context():
+                    try:
+                        run_stream_creation_job(app, job_id, room_url, platform, agent_id, notes, priority)
+                    except Exception as e:
+                        stream_creation_jobs[job_id]["error"] = str(e)
+                        logging.error(f"Stream creation job {job_id} failed: {str(e)}")
+                    finally:
+                        cleanup_jobs()
 
-            # Clean up after job completion
-            cleanup_jobs()
+            # Start the job in a new thread
+            thread = threading.Thread(
+                target=run_job_in_thread,
+                args=(current_app._get_current_object(), job_id, room_url, platform, agent_id, notes, priority)
+            )
+            thread.start()
 
             return jsonify({
                 "message": "Stream creation started",
@@ -638,7 +648,6 @@ def cleanup_jobs_route():
         "message": f"Cleaned up old jobs",
         "remaining_jobs": len(stream_creation_jobs),
     })
-
 
 @stream_bp.route('/api/streams/refresh_selected', methods=['POST'])
 @login_required(role="admin")

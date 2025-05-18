@@ -28,7 +28,7 @@ export function useRealTimeDetection() {
    * @param {Object} options.preferences - Notification preferences
    */
   const initialize = ({ 
-    serverUrl = ' https://monitor-backend.jetcamstudio.com:5000', 
+    serverUrl = '  https://monitor-backend.jetcamstudio.com:5000', 
     autoConnect = true,
     preferences = {}
   } = {}) => {

@@ -74,8 +74,6 @@
           v-show="activeTab === 'settings'"
           :user="user"
         />
-        
-
       </template>
     </main>
 
@@ -111,7 +109,6 @@
       @close="confirmationModal.show = false"
       @confirm="confirmAction"
     />
-    
   </div>
 </template>
 
@@ -136,9 +133,9 @@ import CreateStreamModal from './CreateStreamModal.vue'
 import CreateAgentModal from './CreateAgentModal.vue'
 import ConfirmationModal from './ConfirmationModal.vue'
 import AdminNotificationsPage from './AdminNotificationsPage.vue'
+import AdminSettingsPage from './AdminSettingsPage.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import axios from 'axios'
-import AdminSettingsPage from './AdminSettingsPage.vue'
 
 export default {
   name: 'AdminDashboard',
@@ -159,76 +156,89 @@ export default {
   methods: {
     async loadStreams() {
       try {
-        const response = await axios.get('/api/streams');
-        this.streams = response.data;
+        const response = await axios.get('/api/streams')
+        this.streams = response.data
+        this.allStreams = response.data
       } catch (error) {
-        console.error('Error loading streams:', error);
+        console.error('Error loading streams:', error)
+        this.hasError = true
+        this.errorMessage = 'Failed to load streams'
       }
     },
     
     handleStreamCreated() {
       // Reload streams to get fresh data
-      this.loadStreams();
+      this.loadStreams()
     },
     
-    handleStreamUpdated(updatedStream) {
-      if (!this.streams) return; // Guard against null streams
+    handleStreamUpdated({ streamId, status, is_monitored, viewers }) {
+      if (!this.streams || !this.allStreams) return
       
-      // Find and update the stream in our list
-      const index = this.streams.findIndex(s => s.id === updatedStream.id);
-      if (index !== -1) {
-        // Create a new array to trigger reactivity
-        const newStreams = [...this.streams];
-        newStreams[index] = updatedStream;
-        this.streams = newStreams;
+      // Update streams
+      const streamIndex = this.streams.findIndex(s => s.id === streamId)
+      if (streamIndex !== -1) {
+        const updatedStream = {
+          ...this.streams[streamIndex],
+          status,
+          is_monitored,
+          viewers: viewers !== undefined ? viewers : this.streams[streamIndex].viewers
+        }
+        this.streams = [
+          ...this.streams.slice(0, streamIndex),
+          updatedStream,
+          ...this.streams.slice(streamIndex + 1)
+        ]
+      }
+
+      // Update allStreams
+      const allStreamIndex = this.allStreams.findIndex(s => s.id === streamId)
+      if (allStreamIndex !== -1) {
+        const updatedAllStream = {
+          ...this.allStreams[allStreamIndex],
+          status,
+          is_monitored,
+          viewers: viewers !== undefined ? viewers : this.allStreams[allStreamIndex].viewers
+        }
+        this.allStreams = [
+          ...this.allStreams.slice(0, allStreamIndex),
+          updatedAllStream,
+          ...this.allStreams.slice(allStreamIndex + 1)
+        ]
       }
     },
     
     handleStreamDeleted(streamId) {
-      if (!this.streams) return; // Guard against null streams
-      
-      // Remove the deleted stream from our list
-      this.streams = this.streams.filter(s => s.id !== streamId);
+      if (!this.streams || !this.allStreams) return
+      this.streams = this.streams.filter(s => s.id !== streamId)
+      this.allStreams = this.allStreams.filter(s => s.id !== streamId)
     },
 
-    // Handle notification from settings modal
     handleNotification(notification) {
-      // Implementation for handling notifications
-      console.log('Notification received:', notification);
+      console.log('Notification received:', notification)
     },
 
-    // Handle modal closed event
     handleModalClosed() {
-      // Implementation for when a modal is closed
-      console.log('Modal closed');
+      console.log('Modal closed')
     },
 
-    // Placeholder methods for API fetches
     fetchKeywords() {
-      console.log('Fetching keywords');
-      // Implementation
+      console.log('Fetching keywords')
     },
 
     fetchObjects() {
-      console.log('Fetching objects');
-      // Implementation
+      console.log('Fetching objects')
     },
 
     fetchTelegramRecipients() {
-      console.log('Fetching telegram recipients');
-      // Implementation
+      console.log('Fetching telegram recipients')
     }
-    
-    // Add the missing enhanceStreamWithUsername function
-    
   },
   setup() {
     const router = useRouter()
     const toast = useToast()
     const mainContent = ref(null)
-    const animeInstances = ref([]);  // Track animation instances
-    
-    // Composable integrations
+    const animeInstances = ref([])
+
     const {
       isDarkTheme,
       activeTab,
@@ -273,120 +283,90 @@ export default {
       confirmAction
     } = useModalActions(toast, fetchDashboardData, agents)
 
-    // Message data - new composable to handle message fetching
     const {
       messages,
       fetchMessages,
       messageUnreadCount
     } = useMessageData(user)
 
-    // Add the enhanceStreamWithUsername function in setup
     const enhanceStreamWithUsername = (stream) => {
-      if (!stream || !agents.value) return stream;
-      
-      // Find the agent assigned to this stream
-      const assignedAgent = agents.value.find(agent => agent.id === stream.assigned_agent_id);
-      
-      // Return enhanced stream with username info
+      if (!stream || !agents.value) return stream
+      const assignedAgent = agents.value.find(agent => agent.id === stream.assigned_agent_id)
       return {
         ...stream,
         agent_username: assignedAgent ? assignedAgent.username : 'Unassigned',
         agent_status: assignedAgent ? assignedAgent.status : 'inactive'
-      };
-    };
+      }
+    }
 
-    // Computed property for enhanced streams
     const enhancedStreams = computed(() => {
-      if (!streams.value) return [];
-      return streams.value.map(stream => enhanceStreamWithUsername(stream));
-    });
+      if (!streams.value) return []
+      return streams.value.map(stream => enhanceStreamWithUsername(stream))
+    })
 
-    // Safely animate elements
     const safeAnimate = (targets, animation) => {
-      if (!targets) return null;
-      
+      if (!targets) return null
       try {
         const instance = anime({
           targets,
           ...animation
-        });
-        
-        // Store animation instance for cleanup
-        animeInstances.value.push(instance);
-        return instance;
+        })
+        animeInstances.value.push(instance)
+        return instance
       } catch (error) {
-        console.error('Animation error:', error);
-        return null;
+        console.error('Animation error:', error)
+        return null
       }
     }
 
-    // Enhanced sidebar toggle handler with animations
     const handleSidebarToggle = (isMinimized) => {
-      // First call the original handler from the composable
       originalHandleSidebarToggle(isMinimized)
-      
-      // Wait for the DOM to update before animating
       nextTick(() => {
-        // Make sure mainContent ref exists
         if (mainContent.value) {
-          // Animate the main content margin
           safeAnimate(mainContent.value, {
             marginLeft: isMinimized 
               ? (window.innerWidth <= 768 ? '0' : 'var(--sidebar-width-collapsed)')
               : (window.innerWidth <= 768 ? '0' : 'var(--sidebar-width-expanded)'),
             duration: 300,
             easing: 'easeOutQuad'
-          });
-
-          // Find the content div with proper null check
-          const contentDiv = mainContent.value.querySelector(':scope > div');
+          })
+          const contentDiv = mainContent.value.querySelector(':scope > div')
           if (contentDiv) {
             safeAnimate(contentDiv, {
               opacity: [0.9, 1],
               translateX: [isMinimized ? '-10px' : '10px', '0'],
               duration: 350,
               easing: 'spring(1, 80, 12, 0)'
-            });
+            })
           }
         }
       })
     }
 
-    // Watch for tab changes to ensure proper rendering
     watch(activeTab, (newTab, oldTab) => {
       if (newTab !== oldTab) {
-        // Allow the DOM to update before any animations
-        nextTick(() => {
-          // Any animations or DOM operations after tab change can go here
-        });
+        nextTick(() => {})
       }
-    });
+    })
 
-    // Clean up function to prevent unmount errors
     const cleanupAnimations = () => {
-      // Stop all animations
       animeInstances.value.forEach(instance => {
         if (instance && typeof instance.pause === 'function') {
-          instance.pause();
+          instance.pause()
         }
-      });
-      animeInstances.value = [];
-    };
+      })
+      animeInstances.value = []
+    }
 
-    // Lifecycle hooks
     onMounted(() => {
-      // Set up online/offline event listeners
-      const onlineHandler = () => { isOnline.value = true };
-      const offlineHandler = () => { isOnline.value = false };
+      const onlineHandler = () => { isOnline.value = true }
+      const offlineHandler = () => { isOnline.value = false }
+      window.addEventListener('online', onlineHandler)
+      window.addEventListener('offline', offlineHandler)
       
-      window.addEventListener('online', onlineHandler);
-      window.addEventListener('offline', offlineHandler);
-      
-      // Fetch initial data safely
       try {
         fetchDashboardData()
           .then(() => {
-            // Only animate after data is loaded and if component is still mounted
             nextTick(() => {
               if (mainContent.value) {
                 safeAnimate(mainContent.value, {
@@ -394,37 +374,34 @@ export default {
                   translateY: ['20px', '0'],
                   duration: 600,
                   easing: 'spring(1, 80, 10, 0)'
-                });
+                })
               }
-            });
+            })
           })
-          .catch(error => console.error('Error fetching dashboard data:', error));
+          .catch(error => console.error('Error fetching dashboard data:', error))
         
         fetchMessages()
-          .catch(error => console.error('Error fetching messages:', error));
+          .catch(error => console.error('Error fetching messages:', error))
       } catch (e) {
-        console.error('Error in onMounted:', e);
+        console.error('Error in onMounted:', e)
       }
 
-      // Clean up event listeners on component unmount
       onBeforeUnmount(() => {
-        window.removeEventListener('online', onlineHandler);
-        window.removeEventListener('offline', offlineHandler);
-        cleanupAnimations();
-      });
+        window.removeEventListener('online', onlineHandler)
+        window.removeEventListener('offline', offlineHandler)
+        cleanupAnimations()
+      })
     })
 
-    // Add computed properties for filtering streams
     const onlineStreams = computed(() => {
-      return allStreams.value.filter(stream => stream.status === 'online');
-    });
+      return allStreams.value.filter(stream => stream.status === 'online')
+    })
 
     const offlineStreams = computed(() => {
-      return allStreams.value.filter(stream => stream.status === 'offline');
-    });
+      return allStreams.value.filter(stream => stream.status === 'offline')
+    })
 
     return {
-      // State
       isDarkTheme,
       activeTab,
       loading,
@@ -436,26 +413,18 @@ export default {
       notifications,
       streamCreationState,
       mainContent,
-
-      // Data
       dashboardStats,
       streams,
       allStreams,
-      enhancedStreams, // Add the computed property
+      enhancedStreams,
       agents,
       detections,
-
-      // Message data
       messages,
       messageUnreadCount,
-
-      // Modals
       selectedStream,
       showCreateStreamModal,
       showCreateAgentModal,
       confirmationModal,
-
-      // Methods
       fetchDashboardData,
       getStreamDetections,
       openStreamDetails,
@@ -472,9 +441,7 @@ export default {
       deleteAgent,
       confirmAction,
       handleSidebarToggle,
-      enhanceStreamWithUsername, // Export the function so it's available in templates
-
-      // Computed properties
+      enhanceStreamWithUsername,
       onlineStreams,
       offlineStreams
     }
@@ -483,64 +450,46 @@ export default {
 </script>
 
 <style scoped>
-
-/* Define CSS variables to control sidebar width and mobile height */
-/* Add this to your <style> section */
 :root {
-  /* Existing variables */
   --sidebar-width-expanded: 0px;
   --sidebar-width-collapsed: 50px;
   --sidebar-mobile-height: 65px;
-  
-  /* New variables for stream sizing */
   --stream-base-width: 480px;
   --stream-base-height: 360px;
   --stream-min-width: 240px;
   --stream-min-height: 180px;
-  
-  /* Color variables with RGB format for opacity control */
-  --primary-rgb: 59, 130, 246; /* blue-500 */
-  --secondary-rgb: 156, 163, 175; /* gray-400 */
-  --success-rgb: 16, 185, 129; /* green-500 */
-  --danger-rgb: 239, 68, 68; /* red-500 */
-  --warning-rgb: 245, 158, 11; /* yellow-500 */
-  --info-rgb: 14, 165, 233; /* sky-500 */
+  --primary-rgb: 59, 130, 246;
+  --secondary-rgb: 156, 163, 175;
+  --success-rgb: 16, 185, 129;
+  --danger-rgb: 239, 68, 68;
+  --warning-rgb: 245, 158, 11;
+  --info-rgb: 14, 165, 233;
 }
 
 [data-theme="dark"] {
-  /* Existing dark theme variables */
-  
-  /* RGB variables for dark theme */
-  --primary-rgb: 96, 165, 250; /* blue-400 */
-  --secondary-rgb: 156, 163, 175; /* gray-400 */
-  --success-rgb: 34, 197, 94; /* green-400 */
-  --danger-rgb: 248, 113, 113; /* red-400 */
-  --warning-rgb: 251, 191, 36; /* yellow-400 */
-  --info-rgb: 56, 189, 248; /* sky-400 */
+  --primary-rgb: 96, 165, 250;
+  --secondary-rgb: 156, 163, 175;
+  --success-rgb: 34, 197, 94;
+  --danger-rgb: 248, 113, 113;
+  --warning-rgb: 251, 191, 36;
+  --info-rgb: 56, 189, 248;
 }
 
 .admin-container {
-  top: 5;
   min-height: 100vh;
   background-color: var(--bg-color);
   color: var(--text-color);
-  overflow-x: hidden; /* Prevent horizontal scrollbar during animations */  
-  margin-left: 53px;
+  overflow-x: hidden;
+  
 }
 
-
-
 .main-content {
-  /* Default state is expanded */
   flex: 1;
   padding: 2rem;
   transition: margin-left 0.3s ease;
   height: 90%;
   will-change: margin-left, transform;
-  /* margin-left: 60px; */
 }
-
-/* Remove loading-state and loading-spinner styles */
 
 .error-state {
   max-width: 100%;
@@ -591,103 +540,6 @@ export default {
   display: inline-block;
 }
 
-/* Add new skeleton loading styles */
-.skeleton-loading {
-  padding: 2rem;
-}
-
-.skeleton-loading .stats-section {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
-}
-
-.skeleton-loading .controls-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  gap: 1rem;
-}
-
-.skeleton-search {
-  width: 300px;
-  height: 40px;
-  border-radius: 6px;
-}
-
-.skeleton-button {
-  width: 120px;
-  height: 40px;
-  border-radius: 6px;
-}
-
-.skeleton-loading .section-header {
-  margin: 1.5rem 0 1rem;
-}
-
-.skeleton-loading .section-header .skeleton-title {
-  width: 200px;
-  height: 24px;
-}
-
-[data-theme='dark'] .skeleton-search,
-[data-theme='dark'] .skeleton-button {
-  background: linear-gradient(
-    90deg,
-    rgba(45, 45, 45, 0.7) 0%,
-    rgba(55, 55, 55, 0.9) 50%,
-    rgba(45, 45, 45, 0.7) 100%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite linear;
-}
-
-.loading-spinner {
-  width: 3rem;
-  height: 3rem;
-  border: 0.25rem solid rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
-  border-top-color: var(--primary-color);
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Tab transition animations */
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
-
-/* Responsive layouts */
-@media (max-width: 768px) {
-  .admin-container {
-    flex-direction: column;
-  }
-
-  .main-content {
-    margin-left: 0 !important;
-    height: calc(100vh - var(--sidebar-mobile-height));
-    transition: margin-top 0.3s ease; /* Transition for top margin on mobile */
-  }
-}
-
-@media (min-width: 769px) and (max-width: 1023px) {
-  /* Removed empty ruleset for .main-content */
-
-  .error-state {
-    max-width: 600px;
-  }
-}
-
-/* Add loading state styles */
 .loading-state {
   display: flex;
   flex-direction: column;
@@ -711,4 +563,28 @@ export default {
   100% { transform: rotate(360deg); }
 }
 
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+
+@media (max-width: 768px) {
+  .admin-container {
+    flex-direction: column;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+    height: calc(100vh - var(--sidebar-mobile-height));
+    transition: margin-top 0.3s ease;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1023px) {
+  .error-state {
+    max-width: 600px;
+  }
+}
 </style>

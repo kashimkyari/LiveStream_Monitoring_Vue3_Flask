@@ -1,43 +1,51 @@
-# Flask and related packages
-Flask==2.3.2
-Flask-Cors==3.0.10
-Flask-SQLAlchemy==3.0.3
-Flask-Migrate==4.0.4
+# Flask and Web Framework
+Flask
+Flask-Cors
+Flask-SQLAlchemy
+Flask-Migrate
+Flask-SocketIO
+Flask-JWT-Extended
+Flask-Limiter
 
-# WebSocket support
-Flask-SocketIO==5.3.4
-python-socketio==5.8.0
-engineio==4.3.4
-gevent==22.10.2
-gevent-websocket==0.10.1
+# WebSocket and Real-time Communication
+python-socketio
+python-engineio
+gevent
+gevent-websocket
+simple-websocket
 
-# Database drivers
-psycopg2-binary==2.9.9
-SQLAlchemy==2.0.15
+# Database and ORM
+psycopg2-binary
+SQLAlchemy
 
-# Environment and configuration
-dotenv==0.0.5
-python-dotenv==1.0.0
+# Configuration and Environment
+python-dotenv
 
-# Web server
-gunicorn==20.1.0
+# Web Server
+gunicorn
 
-# Utilities
-requests==2.31.0
+# HTTP and API
+requests
 
+# Date and Time
 python-dateutil
-python-telegram-bot
+APScheduler
+
+# Computer Vision and Image Processing
 pytesseract
 opencv-python
 ultralytics
-whisper
-scipy
-vaderSentiment
-free-proxy
-jsonify
-simple-websocket
+
+# Audio and Speech Processing
+openai-whisper
 librosa
-flask_jwt_extended
-openai-whisper
-flask_limiter
-openai-whisper
+scipy
+
+# Natural Language Processing
+vaderSentiment
+
+# Network and Proxy
+free-proxy
+
+# Messaging and Notifications
+python-telegram-bot

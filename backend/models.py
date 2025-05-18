@@ -1,5 +1,8 @@
+# models.py
 from datetime import datetime, timezone, timedelta
 from extensions import db
+
+data = []
 
 class User(db.Model):
     """
@@ -26,9 +29,15 @@ class User(db.Model):
     assignments = db.relationship(
         'Assignment',
         back_populates='agent',
-        foreign_keys='Assignment.agent_id',  # Specify the foreign key
+        foreign_keys='Assignment.agent_id',
         lazy='selectin',
         cascade="all, delete"
+    )
+    detection_logs = db.relationship(
+        'DetectionLog',
+        back_populates='assigned_user',
+        foreign_keys='DetectionLog.assigned_agent',
+        lazy='dynamic'
     )
 
     def __repr__(self):
@@ -55,7 +64,7 @@ class Stream(db.Model):
     room_url = db.Column(db.String(300), unique=True, nullable=False, index=True)
     streamer_username = db.Column(db.String(100), index=True)
     type = db.Column(db.String(50), index=True)
-    status = db.Column(db.String(20), default='online', nullable=False, index=True)
+    status = db.Column(db.String(20), default='offline', nullable=False, index=True)
     is_monitored = db.Column(db.Boolean, default=False, nullable=False)
 
     assignments = db.relationship('Assignment', back_populates='stream', lazy='selectin', cascade="all, delete")
@@ -64,6 +73,10 @@ class Stream(db.Model):
         'polymorphic_on': type,
         'polymorphic_identity': 'stream',
     }
+
+    __table_args__ = (
+        db.Index('idx_streams_status_type', 'status', 'type'),
+    )
 
     def __repr__(self):
         return f"<Stream {self.room_url}>"
@@ -138,11 +151,11 @@ class Assignment(db.Model):
     agent_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     stream_id = db.Column(db.Integer, db.ForeignKey('streams.id'), nullable=False, index=True)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
-    assigned_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)  # Who assigned it
-    notes = db.Column(db.Text, nullable=True)  # Optional notes for the assignment
-    priority = db.Column(db.String(20), default='normal', index=True)  # Priority: low, normal, high
-    status = db.Column(db.String(20), default='active', index=True)  # Status: active, completed, paused
-    assignment_metadata = db.Column(db.JSON, nullable=True)  # Renamed from 'metadata' to avoid conflict
+    assigned_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    notes = db.Column(db.Text, nullable=True)
+    priority = db.Column(db.String(20), default='normal', index=True)
+    status = db.Column(db.String(20), default='active', index=True)
+    assignment_metadata = db.Column(db.JSON, nullable=True)
 
     agent = db.relationship('User', foreign_keys=[agent_id], back_populates='assignments', lazy='joined')
     stream = db.relationship('Stream', back_populates='assignments', lazy='selectin')
@@ -166,7 +179,8 @@ class Assignment(db.Model):
             "notes": self.notes,
             "priority": self.priority,
             "status": self.status,
-            "assignment_metadata": self.assignment_metadata or {},  # Updated to match renamed column
+            "assignment_metadata": self.assignment_metadata or {},
+            "streamer_username": self.stream.streamer_username if self.stream else None
         }
         if include_relationships:
             if self.agent:
@@ -210,6 +224,9 @@ class Log(db.Model):
     event_type = db.Column(db.String(50), index=True)
     details = db.Column(db.JSON)
     read = db.Column(db.Boolean, default=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+
+    user = db.relationship('User', foreign_keys=[user_id], lazy='joined')
 
     __table_args__ = (
         db.Index('idx_logs_room_event', 'room_url', 'event_type'),
@@ -227,6 +244,7 @@ class Log(db.Model):
             "event_type": self.event_type,
             "details": self.details,
             "read": self.read,
+            "user_id": self.user_id,
         }
 
 class ChatKeyword(db.Model):
@@ -266,34 +284,38 @@ class FlaggedObject(db.Model):
 class DetectionLog(db.Model):
     """
     DetectionLog model stores detection events, including the annotated image.
-    Now with a relationship to Assignment so that we can easily get the assigned agent.
+    Now with relationships to Assignment and User for assigned agent.
     """
     __tablename__ = "detection_logs"
     id = db.Column(db.Integer, primary_key=True)
-    room_url = db.Column(db.String(255), nullable=False)
-    event_type = db.Column(db.String(50), nullable=False)
+    room_url = db.Column(db.String(255), nullable=False, index=True)
+    event_type = db.Column(db.String(50), nullable=False, index=True)
     details = db.Column(db.JSON, nullable=True)
     detection_image = db.Column(db.LargeBinary, nullable=True)
-    assigned_agent = db.Column(db.Integer, nullable=True)
-    assignment_id = db.Column(db.Integer, db.ForeignKey('assignments.id'), nullable=True)
-    timestamp = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    assigned_agent = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    assignment_id = db.Column(db.Integer, db.ForeignKey('assignments.id'), nullable=True, index=True)
+    timestamp = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     sender_username = db.Column(db.String(100), nullable=True)
-    read = db.Column(db.Boolean, default=False)
+    read = db.Column(db.Boolean, default=False, index=True)
 
     assignment = db.relationship("Assignment", backref=db.backref("detection_logs", lazy="dynamic"))
+    assigned_user = db.relationship("User", foreign_keys=[assigned_agent], back_populates='detection_logs', lazy='joined')
+
+    __table_args__ = (
+        db.Index('idx_detection_logs_event_timestamp', 'event_type', 'timestamp'),
+    )
 
     def serialize(self):
-        assigned = self.assigned_agent
-        if self.assignment and self.assignment.agent:
-            assigned = self.assignment.agent.id
         return {
             "id": self.id,
             "room_url": self.room_url,
             "event_type": self.event_type,
             "details": self.details,
-            "assigned_agent": assigned,
+            "assigned_agent": self.assigned_agent,
+            "assignment_id": self.assignment_id,
             "timestamp": self.timestamp.isoformat(),
             "read": self.read,
+            "sender_username": self.sender_username,
         }
 
 class MessageAttachment(db.Model):
@@ -364,7 +386,7 @@ class ChatMessage(db.Model):
                 "size": self.attachment.size
             }
             
-        return result
+        return data
 
 class PasswordReset(db.Model):
     __tablename__ = 'password_resets'

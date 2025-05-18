@@ -40,7 +40,8 @@ import {
   faUserClock,
   faUserCircle,
   faTags,
-  faTasks
+  faTasks,
+  faStickyNote
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import Toast from 'vue-toastification';
@@ -90,7 +91,8 @@ library.add(
   faUserClock,
   faUserCircle,
   faTags,
-  faTasks
+  faTasks,
+  faStickyNote
  
   
 );

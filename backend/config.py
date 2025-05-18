@@ -4,7 +4,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 
 from extensions import db
-from utils.notifications import init_socketio
+from services.notification_service import NotificationService
 
 # Load .env into environment (must be in project root)
 load_dotenv()
@@ -13,22 +13,18 @@ class Config:
     """Base configuration for all environments."""
     # ─── Secret & Security ───────────────────────────────────────────────
     SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'please-set-a-secure-key')
-    SESSION_COOKIE_SECURE = False            # Allow cookies over HTTP?
-    REMEMBER_COOKIE_SECURE = False           # Allow cookies over HTTP
+    SESSION_COOKIE_SECURE = os.getenv('ENABLE_SSL', 'false').lower() == 'true'
+    REMEMBER_COOKIE_SECURE = os.getenv('ENABLE_SSL', 'false').lower() == 'true'
 
     # ─── Database ────────────────────────────────────────────────────────
-    # For Supabase or other hosted PostgreSQL services, ensure SSL is configured
     if os.getenv('DATABASE_URL') and 'supabase' in os.getenv('DATABASE_URL'):
-        # Log the database URI (mask sensitive parts)
         db_uri = os.getenv('DATABASE_URL')
         masked_uri = db_uri[:db_uri.find('://') + 3] + '****:****@' + db_uri[db_uri.find('@') + 1:]
         print(f"Using Supabase database: {masked_uri}")
         
-        # Check if sslmode is already in the URI
         if 'sslmode' not in db_uri:
             db_uri = f"{db_uri}?sslmode=verify-ca"
         
-        # Set the SSL root certificate path
         root_cert_path = os.getenv('PG_ROOT_CERT_PATH')
         if root_cert_path and os.path.exists(root_cert_path):
             print(f"Using SSL root certificate: {root_cert_path}")
@@ -38,18 +34,21 @@ class Config:
             SQLALCHEMY_DATABASE_URI = db_uri
     else:
         SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL')
-    SQLALCHEMY_TRACK_MODIFICATIONS = False   # Disable event system for performance
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # ─── CORS ────────────────────────────────────────────────────────────
     CORS_SUPPORTS_CREDENTIALS = True
-    CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
+    CORS_ORIGINS = os.getenv('CORS_ORIGINS', 'https://monitor.jetcamstudio.com,*')
+
+    # ─── Notification Service ────────────────────────────────────────────
+    STREAM_STATUS_CHECK_INTERVAL = int(os.getenv('STREAM_STATUS_CHECK_INTERVAL', 60))  # Seconds
+    VIEWER_COUNT_INTERVAL = int(os.getenv('VIEWER_COUNT_INTERVAL', 30))  # Seconds
+    NOTIFICATION_DEBOUNCE = int(os.getenv('NOTIFICATION_DEBOUNCE', 300))  # Seconds
 
 def create_app(config_class=Config):
-    # Create app with instance folder for config & SQLite file
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class)
 
-    # Ensure instance folder exists
     try:
         os.makedirs(app.instance_path, exist_ok=True)
     except OSError as e:
@@ -59,19 +58,24 @@ def create_app(config_class=Config):
     CORS(
         app,
         supports_credentials=app.config['CORS_SUPPORTS_CREDENTIALS'],
-        origins=[u.strip() for u in app.config['CORS_ORIGINS'].split(',')]
+        origins=[u.strip() for u in app.config['CORS_ORIGINS'].split(',')],
+        resources={r"/api/*": {}, r"/socket.io/*": {}}
     )
 
     # ─── Initialize Extensions ───────────────────────────────────────────
     try:
-        db.init_app(app)                     # SQLAlchemy
+        db.init_app(app)
     except Exception as e:
         app.logger.error(f"Extension init failed: {e}")
         raise
 
     # ─── Initialize Socket.IO ───────────────────────────────────────────
-    with app.app_context():  # Add app context here
-        socketio = init_socketio(app)
+    with app.app_context():
+          # Initialize NotificationService with Flask app and SocketIO
+            NotificationService.init(app)
+
+    # Start the background scheduler
+            NotificationService.start_scheduler()
 
     # ─── Register Blueprints ─────────────────────────────────────────────
     from routes.auth_routes import auth_bp

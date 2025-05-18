@@ -90,7 +90,6 @@
       </div>
     </div>
     <div class="quick-actions">
-     
     </div>
   </div>
 </template>
@@ -101,6 +100,7 @@ import anime from 'animejs/lib/anime.es.js'
 import DetectionBadge from './DetectionBadge.vue'
 import { ref, computed, onMounted, onBeforeUnmount, watch, inject } from 'vue'
 import axios from 'axios'
+import { io } from 'socket.io-client'
 
 export default {
   name: 'StreamCard',
@@ -119,7 +119,7 @@ export default {
       default: 1
     }
   },
-  emits: ['click', 'assign', 'bookmark', 'mute-change', 'fullscreen', 'detection-toggled'],
+  emits: ['click', 'assign', 'bookmark', 'mute-change', 'fullscreen', 'detection-toggled', 'stream-updated'],
   setup(props, { emit }) {
     const streamCard = ref(null)
     const videoPlayer = ref(null)
@@ -130,27 +130,22 @@ export default {
     const isMuted = ref(true)
     const isBookmarked = ref(false)
     const isFullscreen = ref(false)
-    const isOnline = ref(props.stream.status === 'online')
+    const isOnline = ref(props.stream.status === 'online' || props.stream.status === 'monitoring')
     const isLoading = ref(true)
-    const streamStatus = ref(props.stream.status || 'unknown')
+    const streamStatus = ref(props.stream.status || 'offline')
     
-    const isDetecting = ref(false)
+    const isDetecting = ref(props.stream.is_monitored)
     const isDetectionLoading = ref(false)
     const detectionError = ref(null)
-    const detectionStatusInterval = ref(null)
     
-    const viewers = ref(1)
-    const viewersRefreshInterval = ref(null)
+    const viewers = ref(0)
     const eventBus = inject('eventBus', null)
     const isDarkTheme = inject('theme', ref(true))
-    let streamStatusCheckInterval = ref(null)
     const isPlaying = ref(false)
     
     const agentCache = ref({})
     const allAgentsFetched = ref(false)
-    
-    const lastStatusUpdate = ref({})
-    const debounceDelay = 30000
+    const socket = io({ autoConnect: false })
 
     const isCompactView = computed(() => {
       return props.totalStreams > 5
@@ -161,8 +156,12 @@ export default {
     })
 
     watch(() => props.stream.status, (newStatus) => {
-      isOnline.value = newStatus === 'online'
-      streamStatus.value = newStatus || 'unknown'
+      isOnline.value = newStatus === 'online' || newStatus === 'monitoring'
+      streamStatus.value = newStatus || 'offline'
+    })
+
+    watch(() => props.stream.is_monitored, (newMonitored) => {
+      isDetecting.value = newMonitored
     })
 
     const streamUrl = computed(() => {
@@ -208,24 +207,6 @@ export default {
       return isDetecting.value ? 'Stop detection' : 'Start detection'
     })
 
-    const debounce = (func, wait) => {
-      let timeout
-      return (...args) => {
-        clearTimeout(timeout)
-        timeout = setTimeout(() => func(...args), wait)
-      }
-    }
-
-    const updateStreamStatus = debounce(async (streamId, status) => {
-      try {
-        await axios.post(`/api/streams/${streamId}/status`, { status })
-        lastStatusUpdate.value[streamId] = Date.now()
-        console.log(`Updated stream ${streamId} status to ${status}`)
-      } catch (error) {
-        console.error('Failed to update stream status:', error)
-      }
-    }, debounceDelay)
-
     const fetchAllAgents = async () => {
       if (allAgentsFetched.value) return
       try {
@@ -267,31 +248,6 @@ export default {
       }
     }, { deep: true })
 
-    const getStreamerUsername = () => {
-      if (!props.stream || !props.stream.streamer_username) return null
-      return props.stream.streamer_username
-    }
-
-    const fetchViewerCount = async () => {
-      if (!isStripchatStream.value) return
-      const username = getStreamerUsername()
-      if (!username) return
-      try {
-        const response = await axios.get(`https://stripchat.com/api/front/v2/models/username/${username}`)
-        if (response.data && response.data.guests !== undefined) {
-          viewers.value = response.data.guests
-          anime({
-            targets: '.viewer-count',
-            scale: [1, 1.1, 1],
-            duration: 300,
-            easing: 'easeOutQuad'
-          })
-        }
-      } catch (error) {
-        console.error('Error fetching viewer count:', error)
-      }
-    }
-
     const initializeVideo = () => {
       let m3u8Url = streamUrl.value
       if (!m3u8Url) {
@@ -299,7 +255,6 @@ export default {
         isOnline.value = false
         streamStatus.value = 'offline'
         isLoading.value = false
-        updateStreamStatus(props.stream.id, 'offline')
         return
       }
       
@@ -320,7 +275,6 @@ export default {
           isOnline.value = true
           streamStatus.value = 'online'
           isLoading.value = false
-          updateStreamStatus(props.stream.id, 'online')
         })
         hls.on(Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
@@ -332,7 +286,6 @@ export default {
                 isLoading.value = false
                 hls.stopLoad()
                 hls.detachMedia()
-                reportStreamOffline(props.stream.id)
                 break
               case Hls.ErrorTypes.MEDIA_ERROR:
                 console.error('HLS media error:', data)
@@ -344,7 +297,6 @@ export default {
                 isOnline.value = false
                 streamStatus.value = 'offline'
                 isLoading.value = false
-                reportStreamOffline(props.stream.id)
                 break
             }
           }
@@ -359,13 +311,11 @@ export default {
           isOnline.value = true
           streamStatus.value = 'online'
           isLoading.value = false
-          updateStreamStatus(props.stream.id, 'online')
         })
         videoPlayer.value.addEventListener('error', () => {
           isOnline.value = false
           streamStatus.value = 'offline'
           isLoading.value = false
-          updateStreamStatus(props.stream.id, 'offline')
         })
       }
     }
@@ -374,28 +324,6 @@ export default {
       if (hls) {
         hls.destroy()
         hls = null
-      }
-    }
-
-    const checkDetectionStatus = async () => {
-      try {
-        const response = await axios.get(`/api/detection-status/${props.stream.id}`)
-        isDetecting.value = response.data.isDetecting
-        isDetectionLoading.value = response.data.isDetectionLoading
-        detectionError.value = response.data.detectionError
-        streamStatus.value = response.data.status || 'unknown'
-        isOnline.value = streamStatus.value === 'online'
-        isLoading.value = false
-        if (isPlaying.value && streamStatus.value !== 'online') {
-          updateStreamStatus(props.stream.id, 'online')
-          streamStatus.value = 'online'
-          isOnline.value = true
-        }
-      } catch (error) {
-        console.error('Error checking detection status:', error)
-        detectionError.value = error.response?.data?.error || error.message
-        isDetectionLoading.value = false
-        isLoading.value = false
       }
     }
 
@@ -562,20 +490,6 @@ export default {
       }
     })
 
-    const setupViewerCountRefresh = () => {
-      if (isStripchatStream.value) {
-        fetchViewerCount()
-        viewersRefreshInterval.value = setInterval(fetchViewerCount, 30000)
-      }
-    }
-
-    const cleanupViewerCountRefresh = () => {
-      if (viewersRefreshInterval.value) {
-        clearInterval(viewersRefreshInterval.value)
-        viewersRefreshInterval.value = null
-      }
-    }
-
     const handleVideoPlayback = () => {
       const videoElement = videoPlayer.value
       if (videoElement) {
@@ -583,7 +497,6 @@ export default {
           isPlaying.value = true
           isOnline.value = true
           streamStatus.value = 'online'
-          updateStreamStatus(props.stream.id, 'online')
         }
         videoElement.onpause = () => {
           isPlaying.value = false
@@ -595,28 +508,50 @@ export default {
           isOnline.value = false
           streamStatus.value = 'offline'
           isLoading.value = false
-          updateStreamStatus(props.stream.id, 'offline')
         }
       }
     }
 
     const handleStreamUpdate = (data) => {
-      if (data.id === props.stream.id) {
-        isDetecting.value = data.status === 'monitoring'
+      if (data.id === props.stream.id || data.room_url === props.stream.room_url) {
+        isDetecting.value = data.status === 'monitoring' || data.is_monitored
         isDetectionLoading.value = false
         detectionError.value = null
-        streamStatus.value = data.status || 'unknown'
+        streamStatus.value = data.status || 'offline'
         isOnline.value = streamStatus.value === 'online' || streamStatus.value === 'monitoring'
+        if (data.viewers !== undefined) {
+          viewers.value = data.viewers
+          anime({
+            targets: '.viewer-count',
+            scale: [1, 1.1, 1],
+            duration: 300,
+            easing: 'easeOutQuad'
+          })
+        }
+        toast.info(`Stream ${props.stream.streamer_username} is now ${streamStatus.value}`)
+        emit('stream-updated', {
+          streamId: props.stream.id,
+          status: streamStatus.value,
+          is_monitored: isDetecting.value,
+          viewers: data.viewers
+        })
       }
     }
 
     onMounted(() => {
+      socket.connect()
+      socket.on('connect', () => {
+        console.log('Connected to SocketIO server')
+      })
+      socket.on('notification', (data) => {
+        if (data.room_url === props.stream.room_url) {
+          handleStreamUpdate(data)
+        }
+      })
+      socket.on('stream-update', handleStreamUpdate)
+      
       initializeVideo()
       addEntranceAnimation()
-      checkDetectionStatus()
-      detectionStatusInterval.value = setInterval(checkDetectionStatus, 15000)
-      streamStatusCheckInterval.value = setInterval(checkDetectionStatus, 120000)
-      setupViewerCountRefresh()
       fetchAllAgents()
       if (eventBus) {
         eventBus.$on('muteAllStreams', (exceptId) => {
@@ -631,33 +566,19 @@ export default {
     })
 
     onBeforeUnmount(() => {
+      socket.off('notification')
+      socket.off('stream-update')
+      socket.disconnect()
       destroyHls()
-      if (detectionStatusInterval.value) {
-        clearInterval(detectionStatusInterval.value)
-      }
-      if (streamStatusCheckInterval.value) {
-        clearInterval(streamStatusCheckInterval.value)
-      }
-      cleanupViewerCountRefresh()
       if (eventBus) {
         eventBus.$off('muteAllStreams')
         eventBus.$off('stream-update')
       }
     })
 
-    watch(() => props.stream.platform, (newPlatform) => {
-      cleanupViewerCountRefresh()
+    watch(() => props.stream.platform, () => {
       viewers.value = 0
-      if (newPlatform?.toLowerCase() === 'stripchat') {
-        setupViewerCountRefresh()
-      }
     })
-
-    const reportStreamOffline = async (streamId) => {
-      updateStreamStatus(streamId, 'offline')
-      streamStatus.value = 'offline'
-      isOnline.value = false
-    }
 
     const handleCardClick = () => {
       if (!isOnline.value) {
@@ -695,8 +616,6 @@ export default {
       toggleDetection,
       getDetectionButtonText,
       getDetectionButtonTooltip,
-      reportStreamOffline,
-      checkDetectionStatus,
       hasAssignedAgents,
       assignedAgentNames,
       handleCardClick,

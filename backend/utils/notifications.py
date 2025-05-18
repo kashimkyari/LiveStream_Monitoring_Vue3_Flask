@@ -7,32 +7,41 @@ from models import Stream, User
 # Initialize logger
 logger = logging.getLogger(__name__)
 
-# Initialize Socket.IO with threading mode
+# Cache for agent usernames
+agent_cache = {}
+
+# Module-level SocketIO instance
 socketio = None
 
 def init_socketio(app):
     """Initialize SocketIO with proper configuration"""
-    allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else ['*']
-    
     global socketio
-    socketio = SocketIO(
-        app,
-        async_mode='gevent',
-        cors_allowed_origins=allowed_origins,
-        logger=True,
-        engineio_logger=True
-    )
-    
-    return socketio
+    try:
+        allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else ['*']
+        socketio = SocketIO(
+            app,
+            async_mode='gevent',
+            cors_allowed_origins=allowed_origins,
+            logger=True,
+            engineio_logger=True
+        )
+        logger.info("SocketIO initialized in notifications module")
+        return socketio
+    except Exception as e:
+        logger.error(f"Error initializing SocketIO: {str(e)}")
+        raise
 
 def get_socketio():
-    """Get the global socketio instance"""
+    """Get the module-level socketio instance"""
     global socketio
+    if not socketio:
+        logger.error("Socket.IO not initialized")
+        return None
     return socketio
 
 def emit_notification(notification_data):
     """Emit a notification to all connected clients"""
-    global socketio
+    socketio = get_socketio()
     if not socketio:
         logger.error("Socket.IO not initialized")
         return False
@@ -65,7 +74,7 @@ def emit_notification(notification_data):
 
 def emit_notification_update(notification_id, update_type='read'):
     """Emit a notification update (read, deleted, etc.) to all connected clients"""
-    global socketio
+    socketio = get_socketio()
     if not socketio:
         logger.error("Socket.IO not initialized")
         return False
@@ -83,7 +92,7 @@ def emit_notification_update(notification_id, update_type='read'):
 
 def emit_stream_update(stream_data):
     """Emit a stream update to all connected clients"""
-    global socketio
+    socketio = get_socketio()
     if not socketio:
         logger.error("Socket.IO not initialized")
         return False
@@ -98,7 +107,7 @@ def emit_stream_update(stream_data):
 
 def emit_message_update(message_data):
     """Emit a message notification to specific recipients"""
-    global socketio
+    socketio = get_socketio()
     if not socketio:
         logger.error("Socket.IO not initialized")
         return False
@@ -121,7 +130,7 @@ def emit_message_update(message_data):
 
 def emit_assignment_update(assignment_data):
     """Emit an assignment update to affected agents"""
-    global socketio
+    socketio = get_socketio()
     if not socketio:
         logger.error("Socket.IO not initialized")
         return False
@@ -138,7 +147,7 @@ def emit_assignment_update(assignment_data):
 
 def emit_stream_notification(notification_data, stream_id):
     """Emit a notification to users subscribed to a specific stream"""
-    global socketio
+    socketio = get_socketio()
     if not socketio:
         logger.error("Socket.IO not initialized")
         return False
@@ -154,7 +163,7 @@ def emit_stream_notification(notification_data, stream_id):
 
 def emit_role_notification(notification_data, role):
     """Emit a notification to all users with a specific role"""
-    global socketio
+    socketio = get_socketio()
     if not socketio:
         logger.error("Socket.IO not initialized")
         return False
@@ -170,7 +179,7 @@ def emit_role_notification(notification_data, role):
 
 def emit_agent_notification(notification_data, agent_id):
     """Emit a notification to a specific agent"""
-    global socketio
+    socketio = get_socketio()
     if not socketio:
         logger.error("Socket.IO not initialized")
         return False

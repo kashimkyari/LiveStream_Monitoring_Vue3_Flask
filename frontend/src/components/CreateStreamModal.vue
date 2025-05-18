@@ -468,12 +468,13 @@ export default {
       
       try {
         const url = `/api/streams/interactive/sse?job_id=${jobId.value}`
+        
         eventSource = new EventSource(url)
         connectionStatus.value = 'sse'
         const startTime = Date.now()
         
         eventSource.onopen = () => {
-          console.log(`SSE connection established for job ${jobId.value}`)
+          console.log(`SSE connection established for job ${jobId.value}`, Date.now() - startTime)
           reconnectAttempts = 0
           latency.value = Date.now() - startTime
         }
@@ -481,7 +482,7 @@ export default {
         eventSource.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data)
-            console.log('SSE message received:', data)
+            console.log('SSE message received:', data, event)
             
             if (data.progress !== undefined) {
               progressPercentage.value = Math.min(data.progress, 100)
@@ -621,12 +622,15 @@ export default {
       
       try {
         isCreating.value = true
-        progressPercentage.value = 0
+        progressPercentage.value = 5
         progressMessage.value = 'Initializing stream creation...'
         assignmentDetails.value = null
-        reconnectAttempts = 0
+        reconnectAttempts = 1
         
-        const response = await axios.post('/api/streams/interactive', streamData)
+        const response = await axios.post('/api/streams/interactive', streamData, {
+          timeout: 30000, // Reduce timeout to 2 seconds for faster feedback
+          withCredentials: true
+        })
         
         if (response.data && response.data.job_id) {
           jobId.value = response.data.job_id

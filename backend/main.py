@@ -24,42 +24,40 @@ logging.basicConfig(
 load_dotenv()
 
 from config import create_app
-from utils.notifications import init_socketio
+from services.notification_service import NotificationService
 from extensions import db
 from models import User
 
 # Initialize Flask app
 app = create_app()
 
-# Initialize SocketIO
-socketio = init_socketio(app)
+# Initialize SocketIO and verify
+try:
+    NotificationService.init(app)
+    if not hasattr(NotificationService, 'socketio'):
+        raise AttributeError("SocketIO failed to initialize on NotificationService")
+    logging.info("SocketIO initialized successfully")
+except Exception as e:
+    logging.error(f"Failed to initialize SocketIO: {str(e)}")
+    raise
 
 # Immediately start monitoring
 with app.app_context():
     try:
-        from utils.notifications import emit_notification
-        from monitoring import start_notification_monitor
-
-        if os.getenv('CONTINUOUS_MONITORING', 'true').lower() == 'true':
-            start_notification_monitor()
-            emit_notification({'system': 'Server started successfully with monitoring', 'event_type': 'server_start'})
-            logging.info("Monitoring initialized immediately on app startup for non-offline streams")
-        else:
-            emit_notification({'system': 'Server started without monitoring', 'event_type': 'server_start'})
-            logging.info("Monitoring disabled on app startup")
+        NotificationService.start_scheduler()
+        logging.info("Stream status monitoring initialized on app startup")
     except Exception as e:
         logging.error(f"Monitoring initialization failed: {str(e)}")
         raise
 
 # Parse allowed origins from environment
 allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else ['*']
-# Ensure https://monitor.jetcamstudio.com/ is in allowed origins
-if 'https://monitor.jetcamstudio.com/' not in allowed_origins and '*' not in allowed_origins:
-    allowed_origins.append('https://monitor.jetcamstudio.com/')
+if 'https://monitor.jetcamstudio.com' not in allowed_origins and '*' not in allowed_origins:
+    allowed_origins.append('https://monitor.jetcamstudio.com')
 logging.info(f"Allowed origins configured: {allowed_origins}")
 
 # Configure CORS for Flask app
-CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
+CORS(app, resources={r"/api/*": {"origins": allowed_origins}, r"/socket.io/*": {"origins": allowed_origins}})
 
 # Register a before_request handler for CORS
 @app.before_request
@@ -186,8 +184,6 @@ if __name__ == "__main__":
     debug_mode = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
     logging.info(f"Starting server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
     
-    app = create_app()
-    
     # Configure Socket.IO options
     socketio_kwargs = {
         'app': app,
@@ -202,4 +198,4 @@ if __name__ == "__main__":
     if ssl_context:
         socketio_kwargs['ssl_context'] = ssl_context
         
-    socketio.run(**socketio_kwargs)
+    NotificationService.socketio.run(**socketio_kwargs)
