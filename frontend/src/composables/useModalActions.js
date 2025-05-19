@@ -71,7 +71,7 @@ const subscribeToProgress = (jobId) => {
     }
   }, 5000) // 5 second timeout
   
-  const eventSource = new EventSource(`/api/streams/interactive/sse?job_id=${jobId}`)
+  const eventSource = new EventSource(`/api/streams/interactive/sse?job_id=${jobId.value}`)
   
   // Handle connection open
   eventSource.onopen = () => {
@@ -136,7 +136,7 @@ const startPollingForStatus = (jobId) => {
   
   const pollInterval = setInterval(async () => {
     try {
-      const response = await axios.get(`/api/streams/interactive/sse?job_id=${jobId}`)
+      const response = await axios.get(`/api/streams/interactive/status?job_id=${jobId.value}`)
       const data = response.data
       
       streamCreationState.value.progress = data.progress
@@ -158,13 +158,13 @@ const startPollingForStatus = (jobId) => {
     } catch (error) {
       console.error('Error polling for status:', error)
       // Don't stop polling on error, but after 5 minutes we should give up
-      if (Date.now() - streamCreationState.value.startTime > 300000) {
+      if (Date.now() - streamCreationState.value.startTime > 30000) {
         clearInterval(pollInterval)
         streamCreationState.value.submitError = true
         streamCreationState.value.error = 'Status updates timed out. Please check the streams list to see if creation was successful.'
       }
     }
-  }, 3000) // Poll every 3 seconds
+  }, 15000) // Poll every 3 seconds
   
   // Store the interval ID for cleanup
   streamCreationState.value.pollInterval = pollInterval
