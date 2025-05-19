@@ -13,7 +13,7 @@ assignment_bp = Blueprint('assignment', __name__)
 # Assignment Endpoints
 # --------------------------------------------------------------------
 @assignment_bp.route("/api/assign", methods=["POST"])
-@login_required(role="admin")
+
 def assign_agent_to_stream():
     data = request.get_json()
     agent_id = data.get("agent_id")
@@ -60,7 +60,7 @@ def assign_agent_to_stream():
 
 
 @assignment_bp.route("/api/assignments", methods=["GET"])
-@login_required
+
 def get_assignments():
     stream_id = request.args.get("stream_id")
     agent_id = request.args.get("agent_id")
@@ -85,7 +85,7 @@ def get_assignments():
     })
 
 @assignment_bp.route("/api/assignments/stream/<int:stream_id>", methods=["GET"])
-@login_required
+
 def get_stream_assignments(stream_id):
     """Get all assignments for a specific stream"""
     # First check if stream exists
@@ -115,7 +115,7 @@ def get_stream_assignments(stream_id):
     })
 
 @assignment_bp.route("/api/assignments/stream/<int:stream_id>", methods=["POST"])
-@login_required(role="admin")
+
 def manage_stream_assignments(stream_id):
     data = request.get_json()
     agent_ids = data.get("agent_ids", [])
@@ -160,7 +160,7 @@ def manage_stream_assignments(stream_id):
         return jsonify({"message": "Assignment update failed", "error": str(e)}), 500
 
 @assignment_bp.route("/api/assignments/<int:assignment_id>", methods=["DELETE"])
-@login_required(role="admin")
+
 def delete_assignment(assignment_id):
     assignment = Assignment.query.get(assignment_id)
     if not assignment:
@@ -172,7 +172,7 @@ def delete_assignment(assignment_id):
 
 # Add to assignment_routes.py
 @assignment_bp.route("/api/analytics/agent-performance")
-@login_required(role="agent")
+
 def agent_performance():
     agent_id = session.get("user_id")
     # Calculate performance metrics based on DetectionLog and Assignment data

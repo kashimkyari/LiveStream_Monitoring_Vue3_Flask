@@ -7,13 +7,13 @@ from flask_jwt_extended import get_jwt_identity
 keyword_bp = Blueprint('keyword', __name__)
 
 @keyword_bp.route("/api/keywords", methods=["GET"])
-@login_required(role=["admin", "agent"])
+
 def get_keywords():
     keywords = ChatKeyword.query.all()
     return jsonify([kw.serialize() for kw in keywords])
 
 @keyword_bp.route("/api/keywords", methods=["POST"])
-@login_required(role="admin")
+
 def create_keyword():
     data = request.get_json()
     keyword = data.get("keyword", "").strip()
@@ -31,7 +31,7 @@ def create_keyword():
     return jsonify({"message": "Keyword added", "keyword": kw.serialize()}), 201
 
 @keyword_bp.route("/api/keywords/<int:keyword_id>", methods=["PUT"])
-@login_required(role="admin")
+
 def update_keyword(keyword_id):
     kw = ChatKeyword.query.get(keyword_id)
     if not kw:
@@ -49,7 +49,7 @@ def update_keyword(keyword_id):
     return jsonify({"message": "Keyword updated", "keyword": kw.serialize()})
 
 @keyword_bp.route("/api/keywords/<int:keyword_id>", methods=["DELETE"])
-@login_required(role="admin")
+
 def delete_keyword(keyword_id):
     kw = ChatKeyword.query.get(keyword_id)
     if not kw:
@@ -63,13 +63,13 @@ def delete_keyword(keyword_id):
     return jsonify({"message": "Keyword deleted"})
 
 @keyword_bp.route("/api/objects", methods=["GET"])
-@login_required(role=["admin", "agent"])
+
 def get_objects():
     objects = FlaggedObject.query.all()
     return jsonify([obj.serialize() for obj in objects])
 
 @keyword_bp.route("/api/objects", methods=["POST"])
-@login_required(role="admin")
+
 def create_object():
     data = request.get_json()
     obj_name = data.get("object_name", "").strip()
@@ -83,7 +83,7 @@ def create_object():
     return jsonify({"message": "Object added", "object": obj.serialize()}), 201
 
 @keyword_bp.route("/api/objects/<int:object_id>", methods=["PUT"])
-@login_required(role="admin")
+
 def update_object(object_id):
     obj = FlaggedObject.query.get(object_id)
     if not obj:
@@ -97,7 +97,7 @@ def update_object(object_id):
     return jsonify({"message": "Object updated", "object": obj.serialize()})
 
 @keyword_bp.route("/api/objects/<int:object_id>", methods=["DELETE"])
-@login_required(role="admin")
+
 def delete_object(object_id):
     obj = FlaggedObject.query.get(object_id)
     if not obj:

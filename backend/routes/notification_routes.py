@@ -42,7 +42,7 @@ def get_stream_assignment(stream_url):
     return NotificationService.get_stream_assignment(stream_url)
 
 @notification_bp.route("/api/streams/<int:stream_id>/status", methods=["POST"])
-@login_required()
+
 def update_stream_status(stream_id):
     """Update stream status and emit notification if necessary"""
     try:
@@ -114,7 +114,7 @@ def update_stream_status(stream_id):
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/logs", methods=["GET"])
-@login_required(role="admin")
+
 def get_logs():
     try:
         logs1 = Log.query.order_by(Log.timestamp.desc()).limit(100).all()
@@ -133,7 +133,7 @@ def get_logs():
         return jsonify({"message": "Error fetching dashboard data", "error": str(e)}), 500
 
 @notification_bp.route("/api/notifications", methods=["GET"])
-@login_required()
+
 def get_all_notifications():
     try:
         user_id = session.get("user_id")
@@ -175,7 +175,7 @@ def get_all_notifications():
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications", methods=["POST"])
-@login_required(role="admin")
+
 def create_notification():
     try:
         data = request.get_json()
@@ -241,7 +241,7 @@ def create_notification():
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/<int:notification_id>", methods=["GET"])
-@login_required()
+
 def get_notification(notification_id):
     try:
         user_id = session.get("user_id")
@@ -278,7 +278,7 @@ def get_notification(notification_id):
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/<int:notification_id>", methods=["PUT"])
-@login_required(role="admin")
+
 def update_notification(notification_id):
     try:
         notification = DetectionLog.query.get(notification_id)
@@ -340,7 +340,7 @@ def update_notification(notification_id):
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/<int:notification_id>/read", methods=["PUT"])
-@login_required()
+
 def mark_notification_read(notification_id):
     try:
         user_id = session.get("user_id")
@@ -374,7 +374,7 @@ def mark_notification_read(notification_id):
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/read-all", methods=["PUT"])
-@login_required()
+
 def mark_all_notifications_read():
     try:
         user_id = session.get("user_id")
@@ -410,7 +410,7 @@ def mark_all_notifications_read():
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/<int:notification_id>", methods=["DELETE"])
-@login_required(role="admin")
+
 def delete_notification(notification_id):
     try:
         notification = DetectionLog.query.get(notification_id)
@@ -426,7 +426,7 @@ def delete_notification(notification_id):
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/delete-all", methods=["DELETE"])
-@login_required(role="admin")
+
 def delete_all_notifications():
     try:
         notification_ids = [n.id for n in DetectionLog.query.all()]
@@ -442,7 +442,7 @@ def delete_all_notifications():
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/forwarded", methods=["GET"])
-@login_required(role="admin")
+
 def get_forwarded_notifications():
     try:
         forwarded = DetectionLog.query.filter(
@@ -461,7 +461,7 @@ def get_forwarded_notifications():
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/<int:notification_id>/forward", methods=["POST"])
-@login_required(role="admin")
+
 def forward_notification(notification_id):
     try:
         data = request.get_json()

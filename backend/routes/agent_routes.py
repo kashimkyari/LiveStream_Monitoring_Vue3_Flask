@@ -16,7 +16,7 @@ def get_agents():
     return jsonify([agent.serialize() for agent in agents])
 
 @agent_bp.route("/api/agents", methods=["POST"])
-@login_required(role="admin")
+
 def create_agent():
     data = request.get_json()
     required_fields = ["username", "password"]
@@ -37,7 +37,7 @@ def create_agent():
     return jsonify({"message": "Agent created", "agent": agent.serialize()}), 201
 
 @agent_bp.route("/api/agents/<int:agent_id>", methods=["PUT"])
-@login_required(role="admin")
+
 def update_agent(agent_id):
     agent = User.query.filter_by(id=agent_id, role="agent").first()
     if not agent:
@@ -65,7 +65,7 @@ def update_agent(agent_id):
     return jsonify({"message": "Agent updated", "agent": agent.serialize()})
 
 @agent_bp.route("/api/agents/<int:agent_id>", methods=["DELETE"])
-@login_required(role="admin")
+
 def delete_agent(agent_id):
     agent = User.query.filter_by(id=agent_id, role="agent").first()
     if not agent:
@@ -108,7 +108,7 @@ def get_agent_assignments(agent_id):
     return jsonify([assignment.serialize() for assignment in assignments])
 
 @agent_bp.route("/api/agent/notifications", methods=["GET"])
-@login_required(role="agent")
+
 def get_agent_notifications():
     agent_id = session.get("user_id")
     if not agent_id:
@@ -145,7 +145,7 @@ def get_agent_notifications():
         return jsonify({"error": str(e)}), 500
 
 @agent_bp.route("/api/agent/notifications/<int:notification_id>/read", methods=["PUT"])
-@login_required(role="agent")
+
 def mark_agent_notification_read(notification_id):
     agent_id = session.get("user_id")
     if not agent_id:
@@ -174,7 +174,7 @@ def mark_agent_notification_read(notification_id):
         return jsonify({"error": str(e)}), 500
 
 @agent_bp.route("/api/agent/notifications/read-all", methods=["PUT"])
-@login_required(role="agent")
+
 def mark_all_agent_notifications_read():
     agent_id = session.get("user_id")
     if not agent_id:

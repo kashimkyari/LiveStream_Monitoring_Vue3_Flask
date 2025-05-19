@@ -34,7 +34,6 @@ def cleanup_jobs():
 # Stream Management Endpoints
 # --------------------------------------------------------------------
 @stream_bp.route("/api/streams", methods=["GET"])
-@login_required
 def get_streams():
     platform = request.args.get("platform", "").strip().lower()
     streamer = request.args.get("streamer", "").strip().lower()
@@ -83,7 +82,7 @@ def get_streams():
     return jsonify(streams_data)
 
 @stream_bp.route("/api/streams", methods=["POST"])
-@login_required(role="admin")
+
 def create_stream():
     data = request.get_json()
     platform = data.get("platform", "Chaturbate").strip().lower()
@@ -188,7 +187,7 @@ def create_stream():
         return jsonify({"message": "Stream creation failed", "error": str(e)}), 500
 
 @stream_bp.route("/api/streams/<int:stream_id>", methods=["PUT"])
-@login_required(role="admin")
+
 def update_stream(stream_id):
     stream = Stream.query.get(stream_id)
     if not stream:
@@ -264,7 +263,7 @@ def update_stream(stream_id):
         return jsonify({"message": "Stream update failed", "error": str(e)}), 500
 
 @stream_bp.route("/api/streams/<int:stream_id>", methods=["DELETE"])
-@login_required(role="admin")
+
 def delete_stream(stream_id):
     stream = Stream.query.get(stream_id)
     if not stream:
@@ -318,7 +317,7 @@ def delete_stream(stream_id):
         return jsonify({"message": "Stream deletion failed", "error": str(e)}), 500
 
 @stream_bp.route("/api/streams/refresh/chaturbate", methods=["POST"])
-@login_required(role="admin")
+
 def refresh_chaturbate_route():
     data = request.get_json()
     room_slug = data.get("room_slug", "").strip()
@@ -348,7 +347,7 @@ def refresh_chaturbate_route():
     return jsonify({"message": "Failed to refresh stream"}), 500
 
 @stream_bp.route("/api/streams/refresh/stripchat", methods=["POST"])
-@login_required(role="admin")
+
 def refresh_stripchat_route():
     data = request.get_json()
     room_url = data.get("room_url", "").strip()
@@ -379,7 +378,7 @@ def refresh_stripchat_route():
     return jsonify({"message": "Failed to refresh stream"}), 500
 
 @stream_bp.route('/api/streams/<int:stream_id>/status', methods=['POST'])
-@login_required(role='admin')
+
 def update_stream_status(stream_id):
     stream = Stream.query.get(stream_id)
     if not stream:
@@ -445,7 +444,7 @@ def update_stream_status(stream_id):
         return jsonify({"message": "Stream status update failed", "error": str(e)}), 500
 
 @stream_bp.route("/api/streams/interactive", methods=["POST"])
-@login_required(role="admin")
+
 def interactive_create_stream():
     try:
         if not request.is_json:
@@ -578,7 +577,7 @@ def interactive_create_stream():
         }), 500
 
 @stream_bp.route("/api/streams/interactive/sse")
-@login_required(role="admin")
+
 def stream_creation_sse():
     job_id = request.args.get("job_id")
     if not job_id:
@@ -621,7 +620,7 @@ def stream_creation_sse():
     return Response(event_stream(), mimetype="text/event-stream")
 
 @stream_bp.route("/api/streams/interactive/status", methods=["GET"])
-@login_required(role="admin")
+
 def stream_creation_status():
     job_id = request.args.get("job_id")
     if not job_id:
@@ -641,7 +640,7 @@ def stream_creation_status():
     })
 
 @stream_bp.route("/api/streams/interactive/cleanup", methods=["POST"])
-@login_required(role="admin")
+
 def cleanup_jobs_route():
     cleanup_jobs()
     return jsonify({
@@ -650,7 +649,7 @@ def cleanup_jobs_route():
     })
 
 @stream_bp.route('/api/streams/refresh_selected', methods=['POST'])
-@login_required(role="admin")
+
 def refresh_selected_streams():
     data = request.get_json()
     stream_ids = data.get('stream_ids', [])

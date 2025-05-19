@@ -603,7 +603,7 @@ def update_profile():
 
 # backend/routes/auth_routes.py
 @auth_bp.route('/api/user/telegram', methods=['GET'])
-@login_required
+
 def get_telegram_details():
     user = db.session.get(User, session["user_id"])
     if not user:
@@ -615,7 +615,7 @@ def get_telegram_details():
     }), 200
 
 @auth_bp.route('/api/user/telegram', methods=['POST'])
-@login_required
+
 def update_telegram_details():
     data = request.get_json()
     telegram_username = data.get('telegram_username', '').strip() if data.get('telegram_username') else None
