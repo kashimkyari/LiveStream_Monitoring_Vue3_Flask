@@ -4,7 +4,7 @@ import logging
 import signal
 import json
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 from threading import Lock
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
@@ -121,11 +121,11 @@ def get_analytics_keyboard():
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 # API Helper Function
-async def api_request(method, endpoint, data=None, session_id=None, params=None):
+async def api_request(method, endpoint, data=None, session_id=None, cookies=None, params=None):
     """Make a request to the API."""
     url = f"{API_BASE_URL}/{endpoint}"
     headers = {'Content-Type': 'application/json'}
-    cookies = {'session': session_id} if session_id else None
+    cookies = cookies or {'session': session_id} if session_id else None
     
     try:
         if method.lower() == 'get':
@@ -139,26 +139,31 @@ async def api_request(method, endpoint, data=None, session_id=None, params=None)
         else:
             return {'error': 'Invalid HTTP method'}
         
-        # Extract session cookie if present
-        session_cookie = response.cookies.get('session')
-        if session_cookie:
-            logger.debug(f"Received session cookie: {session_cookie}")
+        # Extract and return cookies
+        response_cookies = {
+            'session': response.cookies.get('session'),
+            'user_role': response.cookies.get('user_role'),
+            'session_active': response.cookies.get('session_active')
+        }
+        logger.debug(f"Received cookies: {response_cookies}")
         
         if response.status_code >= 200 and response.status_code < 300:
             try:
-                return response.json()
+                json_response = response.json()
+                json_response['_cookies'] = response_cookies
+                return json_response
             except:
-                return {'message': response.text}
+                return {'message': response.text, '_cookies': response_cookies}
         else:
             try:
                 error_data = response.json()
-                return {'error': f"API Error ({response.status_code}): {error_data.get('message', error_data.get('error', response.text))}"}
+                return {'error': f"API Error ({response.status_code}): {error_data.get('message', error_data.get('error', response.text))}", '_cookies': response_cookies}
             except:
-                return {'error': f"API Error ({response.status_code}): {response.text}"}
+                return {'error': f"API Error ({response.status_code}): {response.text}", '_cookies': response_cookies}
     
     except Exception as e:
         logger.error(f"API request error: {str(e)}")
-        return {'error': f"Connection error: {str(e)}"}
+        return {'error': f"Connection error: {str(e)}", '_cookies': {}}
 
 # Command Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -172,7 +177,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     if session.get('logged_in', False):
         # Verify session with API
-        response = await api_request('get', 'api/session', session_id=session.get('session_id'))
+        response = await api_request('get', 'api/session', session_id=session.get('session_id'), cookies=session.get('cookies'))
         logger.debug(f"Session check response: {response}")
         if response.get('isLoggedIn', False):
             await update.message.reply_text(
@@ -261,7 +266,7 @@ async def getid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             'telegram_chat_id': str(chat_id),
             'receive_updates': True
         }
-        response = await api_request('post', 'api/user/telegram', data, session.get('session_id'))
+        response = await api_request('post', 'api/user/telegram', data, session.get('session_id'), session.get('cookies'))
         
         if 'error' not in response:
             id_message += "\n\n✅ Your chat ID has been linked to your account!"
@@ -276,7 +281,7 @@ async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         session = user_sessions[user_id]
         if session.get('logged_in'):
             # Call logout API
-            await api_request('post', 'api/logout', session_id=session.get('session_id'))
+            await api_request('post', 'api/logout', session_id=session.get('session_id'), cookies=session.get('cookies'))
         
         # Clear session
         user_sessions[user_id] = {'logged_in': False}
@@ -330,9 +335,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup=get_streams_keyboard()
         )
     elif text == "🔍 Detection Status":
-        await show_detection_status(update, user_id, session.get('session_id'))
+        await show_detection_status(update, user_id, session.get('session_id'), session.get('cookies'))
     elif text == "🔔 Notifications":
-        await show_notifications(update, user_id, session.get('session_id'))
+        await show_notifications(update, user_id, session.get('session_id'), session.get('cookies'))
     elif text == "🧰 Tools":
         await update.message.reply_text(
             "Select a tools option:",
@@ -350,7 +355,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
     # Streams submenu
     elif text == "🟢 My Streams":
-        await show_my_streams(update, user_id, session.get('session_id'), role)
+        await show_my_streams(update, user_id, session.get('session_id'), session.get('cookies'), role)
     elif text == "➕ Add Stream":
         await update.message.reply_text(
             "Enter the stream room URL (e.g., https://chaturbate.com/username/):",
@@ -359,9 +364,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return ADD_STREAM_URL
     # Tools submenu
     elif text == "📝 Keywords":
-        await show_keywords(update, user_id, session.get('session_id'), role)
+        await show_keywords(update, user_id, session.get('session_id'), session.get('cookies'), role)
     elif text == "🎯 Objects":
-        await show_objects(update, user_id, session.get('session_id'), role)
+        await show_objects(update, user_id, session.get('session_id'), session.get('cookies'), role)
     elif text == "➕ Add Keyword" and role == "admin":
         await update.message.reply_text(
             "Enter the keyword to add:",
@@ -386,7 +391,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif text == "✏️ Update Agent" and role == "admin":
         user_sessions[user_id]['action'] = "update_agent"
         save_sessions()
-        response = await api_request('get', 'api/agents', session_id=session.get('session_id'))
+        response = await api_request('get', 'api/agents', session_id=session.get('session_id'), cookies=session.get('cookies'))
         if 'error' in response:
             await update.message.reply_text(f"Failed to fetch agents: {response['error']}")
             return
@@ -400,7 +405,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif text == "🗑️ Delete Agent" and role == "admin":
         user_sessions[user_id]['action'] = "delete_agent"
         save_sessions()
-        response = await api_request('get', 'api/agents', session_id=session.get('session_id'))
+        response = await api_request('get', 'api/agents', session_id=session.get('session_id'), cookies=session.get('cookies'))
         if 'error' in response:
             await update.message.reply_text(f"Failed to fetch agents: {response['error']}")
             return
@@ -413,7 +418,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return ADD_STREAM_AGENT
     # Analytics submenu
     elif text == "📈 Agent Performance" and role == "agent":
-        await show_agent_performance(update, user_id, session.get('session_id'))
+        await show_agent_performance(update, user_id, session.get('session_id'), session.get('cookies'))
     elif text == "🔙 Back to Main Menu":
         await update.message.reply_text(
             "Returned to main menu.",
@@ -437,7 +442,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     if query.data == "login":
         if session.get('logged_in', False):
-            response = await api_request('get', 'api/session', session_id=session.get('session_id'))
+            response = await api_request('get', 'api/session', session_id=session.get('session_id'), cookies=session.get('cookies'))
             logger.debug(f"Session check response: {response}")
             if response.get('isLoggedIn', False):
                 await query.edit_message_text(
@@ -459,29 +464,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     elif query.data.startswith("stream_"):
         stream_id = query.data.split("_")[1]
-        await show_stream_details(query, user_id, stream_id, session.get('session_id'), session.get('role', 'agent'))
+        await show_stream_details(query, user_id, stream_id, session.get('session_id'), session.get('cookies'), session.get('role', 'agent'))
     
     elif query.data.startswith("start_") or query.data.startswith("stop_"):
         action = "stop" if query.data.startswith("stop_") else "start"
         stream_id = query.data.split("_")[1]
-        await trigger_detection(query, user_id, stream_id, action, session.get('session_id'))
+        await trigger_detection(query, user_id, stream_id, action, session.get('session_id'), session.get('cookies'))
     
     elif query.data.startswith("notification_"):
         notification_id = query.data.split("_")[1]
-        await show_notification_details(query, user_id, notification_id, session.get('session_id'), session.get('role', 'agent'))
+        await show_notification_details(query, user_id, notification_id, session.get('session_id'), session.get('cookies'), session.get('role', 'agent'))
     
     elif query.data == "read_all_notifications":
-        await mark_all_notifications_read(query, user_id, session.get('session_id'))
+        await mark_all_notifications_read(query, user_id, session.get('session_id'), session.get('cookies'))
     
     elif query.data == "notifications_list":
-        await show_notifications(query.message, user_id, session.get('session_id'))
+        await show_notifications(query.message, user_id, session.get('session_id'), session.get('cookies'))
     
     elif query.data == "streams_list":
-        await show_my_streams(query.message, user_id, session.get('session_id'), session.get('role', 'agent'))
+        await show_my_streams(query.message, user_id, session.get('session_id'), session.get('cookies'), session.get('role', 'agent'))
     
     elif query.data.startswith("forward_"):
         notification_id = query.data.split("_")[1]
-        response = await api_request('get', 'api/agents', session_id=session.get('session_id'))
+        response = await api_request('get', 'api/agents', session_id=session.get('session_id'), cookies=session.get('cookies'))
         if 'error' in response:
             await query.edit_message_text(f"Failed to fetch agents: {response['error']}")
             return ConversationHandler.END
@@ -513,7 +518,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def login_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle login conversation."""
     user_id = update.effective_user.id
-    message = update.message.text
+    message = update.message.text.strip()
+    
+    if not message:
+        await update.message.reply_text("Please enter a valid username or email:")
+        return LOGIN
     
     logger.debug(f"Login conversation - User ID: {user_id}, Message: {message}")
     
@@ -523,9 +532,7 @@ async def login_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data['username'] = message
     save_sessions()
     
-    await update.message.reply_text(
-        "Please enter your password:"
-    )
+    await update.message.reply_text("Please enter your password:")
     logger.info(f"User {user_id} transitioned to PASSWORD state")
     return PASSWORD
 
@@ -545,6 +552,8 @@ async def password_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     if not username:
         logger.error(f"No username found for user {user_id}")
+        user_sessions[user_id] = {'logged_in': False}
+        save_sessions()
         await update.message.reply_text(
             "Error: No username provided. Please start the login process again.",
             reply_markup=InlineKeyboardMarkup([
@@ -561,28 +570,41 @@ async def password_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     logger.debug(f"API login response: {response}")
     
-    if 'error' in response or response.get('message') != "Login successful":
-        error_message = response.get('error', response.get('message', 'Invalid credentials'))
+    if 'error' in response:
+        error_message = response.get('error', 'Invalid credentials')
         logger.error(f"Login failed for user {user_id}: {error_message}")
+        user_sessions[user_id] = {'logged_in': False}
+        save_sessions()
         await update.message.reply_text(
             f"Login failed: {error_message}\nPlease try again.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔑 Try Again", callback_data="login")]
             ])
         )
-        # Clear session data
-        user_sessions[user_id] = {'logged_in': False}
-        save_sessions()
         return ConversationHandler.END
     
-    # Store session details
+    if response.get('message') != "Login successful":
+        logger.error(f"Login failed for user {user_id}: {response.get('message', 'Unknown error')}")
+        user_sessions[user_id] = {'logged_in': False}
+        save_sessions()
+        await update.message.reply_text(
+            f"Login failed: {response.get('message', 'Unknown error')}\nPlease try again.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔑 Try Again", callback_data="login")]
+            ])
+        )
+        return ConversationHandler.END
+    
+    # Store session details and cookies
+    cookies = response.get('_cookies', {})
     user_sessions[user_id] = {
         'logged_in': True,
         'username': response.get('username'),
         'role': response.get('role'),
         'telegram_username': response.get('telegram_username'),
         'telegram_chat_id': response.get('telegram_chat_id'),
-        'session_id': str(update.message.chat_id)  # Placeholder; replace with actual session cookie
+        'session_id': cookies.get('session'),
+        'cookies': cookies
     }
     save_sessions()
     
@@ -665,7 +687,7 @@ async def add_stream_platform(update: Update, context: ContextTypes.DEFAULT_TYPE
         save_sessions()
         return await create_stream(update, context)
     
-    response = await api_request('get', 'api/agents', session_id=session.get('session_id'))
+    response = await api_request('get', 'api/agents', session_id=session.get('session_id'), cookies=session.get('cookies'))
     if 'error' in response:
         await update.message.reply_text(
             f"Failed to fetch agents: {response['error']}",
@@ -723,7 +745,7 @@ async def add_stream_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 'email': email.strip(),
                 'receive_updates': True
             }
-            response = await api_request('post', 'api/agents', data, session.get('session_id'))
+            response = await api_request('post', 'api/agents', data, session.get('session_id'), session.get('cookies'))
             if 'error' in response:
                 await update.message.reply_text(
                     f"Failed to create agent: {response['error']}",
@@ -754,7 +776,7 @@ async def add_stream_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 'email': email.strip(),
                 'receive_updates': receive_updates.lower() == 'true'
             }
-            response = await api_request('put', f'api/agents/{agent_id}', data, session.get('session_id'))
+            response = await api_request('put', f'api/agents/{agent_id}', data, session.get('session_id'), session.get('cookies'))
             if 'error' in response:
                 await update.message.reply_text(
                     f"Failed to update agent: {response['error']}",
@@ -779,7 +801,7 @@ async def add_stream_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if session.get('action') == "delete_agent":
         try:
             agent_id = int(text)
-            response = await api_request('delete', f'api/agents/{agent_id}', session_id=session.get('session_id'))
+            response = await api_request('delete', f'api/agents/{agent_id}', session_id=session.get('session_id'), session.get('cookies'))
             if 'error' in response:
                 await update.message.reply_text(
                     f"Failed to delete agent: {response['error']}",
@@ -808,7 +830,7 @@ async def add_stream_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     try:
         agent_id = int(text)
-        response = await api_request('get', 'api/agents', session_id=session.get('session_id'))
+        response = await api_request('get', 'api/agents', session_id=session.get('session_id'), cookies=session.get('cookies'))
         if 'error' in response:
             await update.message.reply_text(
                 f"Failed to verify agent: {response['error']}",
@@ -839,6 +861,7 @@ async def create_stream(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     user_id = update.effective_user.id
     session = user_sessions.get(user_id, {})
     session_id = session.get('session_id')
+    cookies = session.get('cookies')
     room_url = session.get('stream_url')
     platform = session.get('platform')
     agent_id = session.get('agent_id')
@@ -849,7 +872,7 @@ async def create_stream(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         'agent_id': agent_id
     }
     
-    response = await api_request('post', 'api/streams/interactive', data, session_id)
+    response = await api_request('post', 'api/streams/interactive', data, session_id, cookies)
     
     if 'error' in response:
         await update.message.reply_text(
@@ -875,7 +898,7 @@ async def create_stream(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     async def monitor_progress():
         last_progress = -1
         while True:
-            status_response = await api_request('get', 'api/streams/interactive/status', params={'job_id': job_id}, session_id=session_id)
+            status_response = await api_request('get', 'api/streams/interactive/status', params={'job_id': job_id}, session_id=session_id, cookies=cookies)
             if 'error' in status_response:
                 await context.bot.edit_message_text(
                     f"Stream creation failed: {status_response['error']}",
@@ -949,7 +972,7 @@ async def keyword_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return ConversationHandler.END
     
     data = {'keyword': text}
-    response = await api_request('post', 'api/keywords', data, session.get('session_id'))
+    response = await api_request('post', 'api/keywords', data, session.get('session_id'), session.get('cookies'))
     
     if 'error' in response:
         await update.message.reply_text(
@@ -984,7 +1007,7 @@ async def object_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return ConversationHandler.END
     
     data = {'object_name': text}
-    response = await api_request('post', 'api/objects', data, session.get('session_id'))
+    response = await api_request('post', 'api/objects', data, session.get('session_id'), session.get('cookies'))
     
     if 'error' in response:
         await update.message.reply_text(
@@ -1025,7 +1048,7 @@ async def assign_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     try:
         agent_id = int(text)
         data = {'agent_id': agent_id}
-        response = await api_request('post', f'api/notifications/{notification_id}/forward', data, session.get('session_id'))
+        response = await api_request('post', f'api/notifications/{notification_id}/forward', data, session.get('session_id'), session.get('cookies'))
         if 'error' in response:
             await update.message.reply_text(
                 f"Failed to forward notification: {response['error']}",
@@ -1073,7 +1096,7 @@ async def update_profile_handler(update: Update, context: ContextTypes.DEFAULT_T
             'telegram_username': telegram_username.strip(),
             'receive_updates': receive_updates.lower() == 'true'
         }
-        response = await api_request('post', 'api/user/telegram', data, session.get('session_id'))
+        response = await api_request('post', 'api/user/telegram', data, session.get('session_id'), session.get('cookies'))
         if 'error' in response:
             await update.message.reply_text(
                 f"Failed to update profile: {response['error']}",
@@ -1093,10 +1116,10 @@ async def update_profile_handler(update: Update, context: ContextTypes.DEFAULT_T
         return UPDATE_PROFILE
 
 # Utility Functions
-async def show_my_streams(update: Update, user_id: int, session_id: str, role: str) -> None:
+async def show_my_streams(update: Update, user_id: int, session_id: str, cookies: dict, role: str) -> None:
     """Show the user's assigned streams or all streams for admins."""
     endpoint = 'api/streams' if role == "admin" else 'api/agent/dashboard'
-    response = await api_request('get', endpoint, session_id=session_id)
+    response = await api_request('get', endpoint, session_id=session_id, cookies=cookies)
     
     if 'error' in response:
         await update.message.reply_text(
@@ -1131,9 +1154,9 @@ async def show_my_streams(update: Update, user_id: int, session_id: str, role: s
         reply_markup=InlineKeyboardMarkup(stream_buttons)
     )
 
-async def show_stream_details(query, user_id: int, stream_id: str, session_id: str, role: str) -> None:
+async def show_stream_details(query, user_id: int, stream_id: str, session_id: str, cookies: dict, role: str) -> None:
     """Show details of a specific stream."""
-    response = await api_request('get', f'api/detection-status/{stream_id}', session_id=session_id)
+    response = await api_request('get', f'api/detection-status/{stream_id}', session_id=session_id, cookies=cookies)
     
     if 'error' in response:
         await query.edit_message_text(f"Error getting stream details: {response['error']}")
@@ -1143,7 +1166,7 @@ async def show_stream_details(query, user_id: int, stream_id: str, session_id: s
     stream_url = response.get('stream_url', 'N/A')
     
     # Fetch stream assignments
-    assignments_response = await api_request('get', f'api/assignments/stream/{stream_id}', session_id=session_id)
+    assignments_response = await api_request('get', f'api/assignments/stream/{stream_id}', session_id=session_id, cookies=cookies)
     assignments_text = "None"
     if 'error' not in assignments_response and assignments_response.get('assigned_agents'):
         assignments_text = ", ".join(
@@ -1183,14 +1206,14 @@ async def show_stream_details(query, user_id: int, stream_id: str, session_id: s
         ])
     )
 
-async def trigger_detection(query, user_id: int, stream_id: str, action: str, session_id: str) -> None:
+async def trigger_detection(query, user_id: int, stream_id: str, action: str, session_id: str, cookies: dict) -> None:
     """Start or stop detection for a stream."""
     data = {
         'stream_id': int(stream_id),
         'stop': action == "stop"
     }
     
-    response = await api_request('post', 'api/trigger-detection', data, session_id)
+    response = await api_request('post', 'api/trigger-detection', data, session_id, cookies)
     
     if 'error' in response:
         await query.edit_message_text(f"Error controlling monitoring: {response['error']}")
@@ -1204,9 +1227,9 @@ async def trigger_detection(query, user_id: int, stream_id: str, action: str, se
         ])
     )
 
-async def show_detection_status(update: Update, user_id: int, session_id: str) -> None:
+async def show_detection_status(update: Update, user_id: int, session_id: str, cookies: dict) -> None:
     """Show detection status for all assigned streams."""
-    response = await api_request('get', 'api/agent/dashboard', session_id=session_id)
+    response = await api_request('get', 'api/agent/dashboard', session_id=session_id, cookies=cookies)
     
     if 'error' in response:
         await update.message.reply_text(
@@ -1226,7 +1249,7 @@ async def show_detection_status(update: Update, user_id: int, session_id: str) -
     status_text = "*Detection Status*\n\n"
     for stream in streams:
         stream_id = stream.get('id')
-        status_response = await api_request('get', f'api/detection-status/{stream_id}', session_id=session_id)
+        status_response = await api_request('get', f'api/detection-status/{stream_id}', session_id=session_id, cookies=cookies)
         if 'error' in status_response:
             status_text += f"Stream #{stream_id}: Error - {status_response['error']}\n"
         else:
@@ -1239,9 +1262,9 @@ async def show_detection_status(update: Update, user_id: int, session_id: str) -
         reply_markup=get_main_keyboard(user_sessions.get(user_id, {}).get('role', 'agent'))
     )
 
-async def show_notifications(update: Update, user_id: int, session_id: str) -> None:
+async def show_notifications(update: Update, user_id: int, session_id: str, cookies: dict) -> None:
     """Show notifications for the user."""
-    response = await api_request('get', 'api/notifications', session_id=session_id)
+    response = await api_request('get', 'api/notifications', session_id=session_id, cookies=cookies)
     
     if 'error' in response:
         await update.message.reply_text(
@@ -1290,9 +1313,9 @@ async def show_notifications(update: Update, user_id: int, session_id: str) -> N
         reply_markup=InlineKeyboardMarkup(notification_buttons)
     )
 
-async def show_notification_details(query, user_id: int, notification_id: str, session_id: str, role: str) -> None:
+async def show_notification_details(query, user_id: int, notification_id: str, session_id: str, cookies: dict, role: str) -> None:
     """Show detailed view of a notification."""
-    response = await api_request('get', f'api/notifications/{notification_id}', session_id=session_id)
+    response = await api_request('get', f'api/notifications/{notification_id}', session_id=session_id, cookies=cookies)
     
     if 'error' in response:
         await query.edit_message_text(f"Error fetching notification: {response['error']}")
@@ -1335,9 +1358,9 @@ async def show_notification_details(query, user_id: int, notification_id: str, s
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
-async def mark_notification_read(query, user_id: int, notification_id: str, session_id: str) -> None:
+async def mark_notification_read(query, user_id: int, notification_id: str, session_id: str, cookies: dict) -> None:
     """Mark a notification as read."""
-    response = await api_request('put', f'api/notifications/{notification_id}/read', session_id=session_id)
+    response = await api_request('put', f'api/notifications/{notification_id}/read', session_id=session_id, cookies=cookies)
     
     if 'error' in response:
         await query.edit_message_text(f"Error marking notification as read: {response['error']}")
@@ -1349,9 +1372,9 @@ async def mark_notification_read(query, user_id: int, notification_id: str, sess
             ])
         )
 
-async def mark_all_notifications_read(query, user_id: int, session_id: str) -> None:
+async def mark_all_notifications_read(query, user_id: int, session_id: str, cookies: dict) -> None:
     """Mark all notifications as read."""
-    response = await api_request('put', 'api/notifications/read-all', session_id=session_id)
+    response = await api_request('put', 'api/notifications/read-all', session_id=session_id, cookies=cookies)
     
     if 'error' in response:
         await query.edit_message_text(f"Error marking notifications as read: {response['error']}")
@@ -1363,9 +1386,9 @@ async def mark_all_notifications_read(query, user_id: int, session_id: str) -> N
             ])
         )
 
-async def show_keywords(update: Update, user_id: int, session_id: str, role: str) -> None:
+async def show_keywords(update: Update, user_id: int, session_id: str, cookies: dict, role: str) -> None:
     """Show list of monitored keywords."""
-    response = await api_request('get', 'api/keywords', session_id=session_id)
+    response = await api_request('get', 'api/keywords', session_id=session_id, cookies=cookies)
     
     if 'error' in response:
         await update.message.reply_text(
@@ -1398,9 +1421,9 @@ async def show_keywords(update: Update, user_id: int, session_id: str, role: str
         reply_markup=InlineKeyboardMarkup(buttons) if buttons else get_tools_keyboard(role)
     )
 
-async def show_objects(update: Update, user_id: int, session_id: str, role: str) -> None:
+async def show_objects(update: Update, user_id: int, session_id: str, cookies: dict, role: str) -> None:
     """Show list of monitored objects."""
-    response = await api_request('get', 'api/objects', session_id=session_id)
+    response = await api_request('get', 'api/objects', session_id=session_id, cookies=cookies)
     
     if 'error' in response:
         await update.message.reply_text(
@@ -1433,9 +1456,9 @@ async def show_objects(update: Update, user_id: int, session_id: str, role: str)
         reply_markup=InlineKeyboardMarkup(buttons) if buttons else get_tools_keyboard(role)
     )
 
-async def show_agent_performance(update: Update, user_id: int, session_id: str) -> None:
+async def show_agent_performance(update: Update, user_id: int, session_id: str, cookies: dict) -> None:
     """Show agent performance analytics."""
-    response = await api_request('get', 'api/analytics/agent-performance', session_id=session_id)
+    response = await api_request('get', 'api/analytics/agent-performance', session_id=session_id, cookies=cookies)
     
     if 'error' in response:
         await update.message.reply_text(
