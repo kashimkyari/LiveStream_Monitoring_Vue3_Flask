@@ -10,7 +10,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKe
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, ConversationHandler
 
-# Configure logging to match Flask app
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -28,7 +28,7 @@ TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '')
 SESSION_FILE = "user_sessions.json"
 
 # Conversation states
-REGISTER, LOGIN, PASSWORD, EMAIL, CHATID, STREAM_URL, KEYWORD, OBJECT_NAME, TRIGGER_MONITORING = range(9)
+LOGIN, PASSWORD, ADD_STREAM_URL, ADD_STREAM_PLATFORM, ADD_STREAM_AGENT, TRIGGER_STREAM, KEYWORD, OBJECT = range(8)
 
 # User session data
 user_sessions = {}
@@ -40,7 +40,6 @@ def load_sessions():
         if os.path.exists(SESSION_FILE):
             with open(SESSION_FILE, 'r') as f:
                 user_sessions = json.load(f)
-                # Convert string keys to integers
                 user_sessions = {int(k): v for k, v in user_sessions.items()}
                 logger.info("Loaded user sessions from file")
     except Exception as e:
@@ -63,17 +62,7 @@ def get_main_keyboard():
     """Create the main menu keyboard."""
     keyboard = [
         ["📺 Streams", "🔍 Detection Status"],
-        ["🏆 Achievements", "🔔 Notifications"],
-        ["🧰 Tools", "ℹ️ Help"]
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
-def get_tools_keyboard():
-    """Create the tools submenu keyboard."""
-    keyboard = [
-        ["📝 Keywords", "🎯 Objects"],
-        ["📊 My Stats", "🆔 Get My ID"],
-        ["🔙 Back to Main Menu"]
+        ["🔔 Notifications", "🧰 Tools"]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -81,17 +70,23 @@ def get_streams_keyboard():
     """Create the streams submenu keyboard."""
     keyboard = [
         ["🟢 My Streams", "➕ Add Stream"],
-        ["⚙️ Manage Streams", "📊 Stream Analytics"],
         ["🔙 Back to Main Menu"]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-def get_achievements_keyboard():
-    """Create the achievements submenu keyboard."""
+def get_tools_keyboard():
+    """Create the tools submenu keyboard."""
     keyboard = [
-        ["🏅 My Badges", "📈 Leaderboard"],
-        ["🎯 Challenges", "🔥 Streaks"],
+        ["📝 Keywords", "🎯 Objects"],
         ["🔙 Back to Main Menu"]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+def get_platform_keyboard():
+    """Create the platform selection keyboard."""
+    keyboard = [
+        ["Chaturbate", "Stripchat"],
+        ["🔙 Cancel"]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -100,24 +95,22 @@ def get_back_keyboard():
     keyboard = [["🔙 Back to Main Menu"]]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-# API Helper Functions
-async def api_request(method, endpoint, data=None, token=None, params=None):
+# API Helper Function
+async def api_request(method, endpoint, data=None, session_id=None, params=None):
     """Make a request to the API."""
     url = f"{API_BASE_URL}/{endpoint}"
     headers = {'Content-Type': 'application/json'}
-    
-    if token:
-        headers['Authorization'] = f"Bearer {token}"
+    cookies = {'session': session_id} if session_id else None
     
     try:
         if method.lower() == 'get':
-            response = requests.get(url, headers=headers, params=params, timeout=10)
+            response = requests.get(url, headers=headers, cookies=cookies, params=params, timeout=10)
         elif method.lower() == 'post':
-            response = requests.post(url, headers=headers, json=data, timeout=10)
+            response = requests.post(url, headers=headers, cookies=cookies, json=data, timeout=10)
         elif method.lower() == 'put':
-            response = requests.put(url, headers=headers, json=data, timeout=10)
+            response = requests.put(url, headers=headers, cookies=cookies, json=data, timeout=10)
         elif method.lower() == 'delete':
-            response = requests.delete(url, headers=headers, timeout=10)
+            response = requests.delete(url, headers=headers, cookies=cookies, timeout=10)
         else:
             return {'error': 'Invalid HTTP method'}
         
@@ -127,7 +120,10 @@ async def api_request(method, endpoint, data=None, token=None, params=None):
             except:
                 return {'message': response.text}
         else:
-            return {'error': f"API Error ({response.status_code}): {response.text}"}
+            try:
+                return {'error': f"API Error ({response.status_code}): {response.json().get('message', response.text)}"}
+            except:
+                return {'error': f"API Error ({response.status_code}): {response.text}"}
     
     except Exception as e:
         logger.error(f"API request error: {str(e)}")
@@ -141,11 +137,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
     
     # Check if user is already logged in
-    session = user_sessions.get(user_id, {'registered': False, 'logged_in': False})
+    session = user_sessions.get(user_id, {'logged_in': False})
     
     if session.get('logged_in', False):
         # Verify session with API
-        response = await api_request('get', 'agent/dashboard', token=session.get('token'))
+        response = await api_request('get', 'agent/dashboard', session_id=session.get('session_id'))
         if 'error' not in response:
             await update.message.reply_text(
                 f"👋 Welcome back, {user.first_name}! You're already logged in.\n\n"
@@ -157,23 +153,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
     
     # Initialize session for new user
-    user_sessions[user_id] = {'registered': False, 'logged_in': False}
+    user_sessions[user_id] = {'logged_in': False}
     save_sessions()
     
     welcome_message = (
         f"👋 Welcome, {user.first_name}! I'm your LiveStream Monitoring Bot.\n\n"
         f"Your chat ID is: `{chat_id}`\n"
         "Use this ID to set up notifications in the monitoring system.\n\n"
-        "I can help you monitor streams, detect content, and get notifications when events occur.\n\n"
+        "Please login to access all features:"
     )
     
     login_keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔑 Login", callback_data="login")],
-        [InlineKeyboardButton("📝 Register", callback_data="register")]
+        [InlineKeyboardButton("🔑 Login", callback_data="login")]
     ])
     
     await update.message.reply_text(
-        welcome_message + "Please login or register to access all features:", 
+        welcome_message, 
         reply_markup=login_keyboard,
         parse_mode=ParseMode.MARKDOWN
     )
@@ -200,18 +195,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• /getid - Get your chat ID for notifications\n"
         "• /logout - Log out from the system\n\n"
         "*Main Features:*\n"
-        "• 📺 *Streams* - Manage and monitor your streams\n"
-        "• 🔍 *Detection Status* - Check current detection status\n"
-        "• 🏆 *Achievements* - View your badges and leaderboard\n"
-        "• 🔔 *Notifications* - View your alerts and notifications\n"
-        "• 🧰 *Tools* - Access keywords, objects, and utilities\n\n"
-        "*Achievement System:*\n"
-        "Earn points and badges by:\n"
-        "• 🔎 Detecting content correctly\n"
-        "• ⏱ Responding quickly to alerts\n"
-        "• 📆 Maintaining daily streaks\n"
-        "• 🏅 Completing challenges\n\n"
-        "Use the menu buttons to navigate through different features."
+        "• 📺 *Streams* - View and manage your assigned streams\n"
+        "• 🔍 *Detection Status* - Check monitoring status of streams\n"
+        "• 🔔 *Notifications* - View alerts for detected events\n"
+        "• 🧰 *Tools* - Manage keywords and objects for detection\n\n"
+        "Use the menu buttons to navigate through features."
     )
     
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_keyboard())
@@ -230,10 +218,10 @@ async def getid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             'telegram_chat_id': str(chat_id),
             'receive_updates': True
         }
-        response = await api_request('post', 'user/telegram', data, session.get('token'))
+        response = await api_request('post', 'user/telegram', data, session.get('session_id'))
         
         if 'error' not in response:
-            id_message += "\n\n✅ Your chat ID has been automatically linked to your account!"
+            id_message += "\n\n✅ Your chat ID has been linked to your account!"
     
     await update.message.reply_text(id_message, parse_mode=ParseMode.MARKDOWN)
 
@@ -243,12 +231,12 @@ async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     if user_id in user_sessions:
         session = user_sessions[user_id]
-        if session.get('token'):
+        if session.get('logged_in'):
             # Call logout API
-            await api_request('post', 'logout', token=session.get('token'))
+            await api_request('post', 'logout', session_id=session.get('session_id'))
         
         # Clear session
-        user_sessions[user_id] = {'registered': False, 'logged_in': False}
+        user_sessions[user_id] = {'logged_in': False}
         save_sessions()
         
         await update.message.reply_text(
@@ -260,6 +248,62 @@ async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         await update.message.reply_text("You were not logged in.")
 
+# Message Handlers
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle text messages from the main menu and submenus."""
+    user_id = update.effective_user.id
+    text = update.message.text
+    session = user_sessions.get(user_id, {})
+    
+    if not session.get('logged_in', False):
+        await update.message.reply_text(
+            "Please login first. Use /start to begin.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔑 Login", callback_data="login")]
+            ])
+        )
+        return
+    
+    # Main menu options
+    if text == "📺 Streams":
+        await update.message.reply_text(
+            "Select a streams option:",
+            reply_markup=get_streams_keyboard()
+        )
+    elif text == "🔍 Detection Status":
+        await show_detection_status(update, user_id, session.get('session_id'))
+    elif text == "🔔 Notifications":
+        await show_notifications(update, user_id, session.get('session_id'))
+    elif text == "🧰 Tools":
+        await update.message.reply_text(
+            "Select a tools option:",
+            reply_markup=get_tools_keyboard()
+        )
+    # Streams submenu
+    elif text == "🟢 My Streams":
+        await show_my_streams(update, user_id, session.get('session_id'))
+    elif text == "➕ Add Stream":
+        await update.message.reply_text(
+            "Enter the stream room URL (e.g., https://chaturbate.com/username/):",
+            reply_markup=get_back_keyboard()
+        )
+        return ADD_STREAM_URL
+    # Tools submenu
+    elif text == "📝 Keywords":
+        await show_keywords(update, user_id, session.get('session_id'))
+    elif text == "🎯 Objects":
+        await show_objects(update, user_id, session.get('session_id'))
+    elif text == "🔙 Back to Main Menu":
+        await update.message.reply_text(
+            "Returned to main menu.",
+            reply_markup=get_main_keyboard()
+        )
+    else:
+        await update.message.reply_text(
+            "Unknown command. Please use the menu options.",
+            reply_markup=get_main_keyboard()
+        )
+
 # Conversation Handlers
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle button callbacks."""
@@ -269,14 +313,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Ensure user has a session
     if user_id not in user_sessions:
-        user_sessions[user_id] = {'registered': False, 'logged_in': False}
+        user_sessions[user_id] = {'logged_in': False}
         save_sessions()
     
     if query.data == "login":
         # Check if already logged in
         session = user_sessions.get(user_id, {})
         if session.get('logged_in', False):
-            response = await api_request('get', 'agent/dashboard', token=session.get('token'))
+            response = await api_request('get', 'agent/dashboard', session_id=session.get('session_id'))
             if 'error' not in response:
                 await query.edit_message_text(
                     "You're already logged in! Use the menu to continue.",
@@ -289,501 +333,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return LOGIN
     
-    elif query.data == "register":
-        await query.edit_message_text(
-            "Let's create your account.\n\nPlease enter a username (3-20 characters):"
-        )
-        return REGISTER
-    
     elif query.data.startswith("stream_"):
         stream_id = query.data.split("_")[1]
-        
-        # Get session token
-        session = user_sessions.get(user_id, {})
-        token = session.get('token')
-        
-        if not token:
-            await query.edit_message_text("Please login first. Use /start to begin.")
-            return ConversationHandler.END
-        
-        # Get stream details
-        response = await api_request('get', f'detection-status/{stream_id}', token=token)
-        
-        if 'error' in response:
-            await query.edit_message_text(f"Error getting stream details: {response['error']}")
-            return ConversationHandler.END
-        
-        stream_status = "🟢 Active" if response.get('active', False) else "⚫ Inactive"
-        stream_url = response.get('stream_url', 'N/A')
-        
-        # Create control buttons
-        control_buttons = []
-        if response.get('active', False):
-            control_buttons.append(InlineKeyboardButton("⏹️ Stop Monitoring", callback_data=f"stop_{stream_id}"))
-        else:
-            control_buttons.append(InlineKeyboardButton("▶️ Start Monitoring", callback_data=f"start_{stream_id}"))
-        
-        status_message = (
-            f"*Stream #{stream_id} Details*\n\n"
-            f"• Status: {stream_status}\n"
-            f"• URL: `{stream_url}`\n"
-            f"• Type: {response.get('stream_type', 'Unknown')}\n"
-            f"• Detections: {response.get('detection_count', 0)}\n\n"
-            f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
-        )
-        
-        await query.edit_message_text(
-            status_message,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup([
-                control_buttons,
-                [InlineKeyboardButton("🔄 Refresh", callback_data=f"stream_{stream_id}")],
-                [InlineKeyboardButton("🔙 Back to Streams", callback_data="streams_list")]
-            ])
-        )
+        await show_stream_details(query, user_id, stream_id, session.get('session_id'))
     
     elif query.data.startswith("start_") or query.data.startswith("stop_"):
         action = "stop" if query.data.startswith("stop_") else "start"
         stream_id = query.data.split("_")[1]
-        
-        # Get session token
-        session = user_sessions.get(user_id, {})
-        token = session.get('token')
-        
-        if not token:
-            await query.edit_message_text("Please login first. Use /start to begin.")
-            return ConversationHandler.END
-        
-        # Trigger monitoring via API
-        response = await api_request('post', 'trigger-detection', 
-                                    data={'stream_id': int(stream_id), 'stop': action == "stop"},
-                                    token=token)
-        
-        if 'error' in response:
-            await query.edit_message_text(f"Error controlling monitoring: {response['error']}")
-            return ConversationHandler.END
-        
-        status = "stopped" if action == "stop" else "started"
-        await query.edit_message_text(
-            f"✅ Monitoring {status} successfully for Stream #{stream_id}.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Back to Stream", callback_data=f"stream_{stream_id}")]
-            ])
-        )
-    
-    elif query.data == "streams_list":
-        await show_streams_list(query, user_id)
-    
-    elif query.data == "my_achievements":
-        await show_achievements(query, user_id)
-    
-    elif query.data == "read_all_notifications":
-        session = user_sessions.get(user_id, {})
-        token = session.get('token')
-        
-        if not token:
-            await query.edit_message_text("Please login first. Use /start to begin.")
-            return ConversationHandler.END
-        
-        response = await api_request('put', 'agent/notifications/read-all', token=token)
-        
-        if 'error' in response:
-            await query.edit_message_text(f"Error marking notifications as read: {response['error']}")
-        else:
-            count = response.get('count', 0)
-            await query.edit_message_text(
-                f"✅ Marked {count} notifications as read.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 Back to Notifications", callback_data="notifications_list")]
-                ])
-            )
-    
-    elif query.data == "notifications_list":
-        await show_notifications(query, user_id)
+        await trigger_detection(query, user_id, stream_id, action, session.get('session_id'))
     
     elif query.data.startswith("notification_"):
         notification_id = query.data.split("_")[1]
-        session = user_sessions.get(user_id, {})
-        token = session.get('token')
-        
-        if not token:
-            await query.edit_message_text("Please login first. Use /start to begin.")
-            return ConversationHandler.END
-        
-        response = await api_request('put', f'agent/notifications/{notification_id}/read', token=token)
-        
-        if 'error' in response:
-            await query.edit_message_text(f"Error marking notification as read: {response['error']}")
-        else:
-            await query.edit_message_text(
-                f"✅ Notification #{notification_id} marked as read.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 Back to Notifications", callback_data="notifications_list")]
-                ])
-            )
+        await mark_notification_read(query, user_id, notification_id, session.get('session_id'))
     
-    elif query.data == "keywords_list":
-        await show_keywords(query, user_id)
-    
-    elif query.data == "objects_list":
-        await show_objects(query, user_id)
-    
-    elif query.data == "my_stats":
-        await show_agent_stats(query, user_id)
+    elif query.data == "read_all_notifications":
+        await mark_all_notifications_read(query, user_id, session.get('session_id'))
     
     return ConversationHandler.END
-
-async def show_streams_list(query, user_id):
-    """Show list of streams for the user."""
-    session = user_sessions.get(user_id, {})
-    token = session.get('token')
-    
-    if not token:
-        await query.edit_message_text("Please login first. Use /start to begin.")
-        return
-    
-    # Get agent dashboard data
-    response = await api_request('get', 'agent/dashboard', token=token)
-    
-    if 'error' in response:
-        await query.edit_message_text(f"Error fetching streams: {response['error']}")
-        return
-    
-    # Format streams list
-    ongoing = response.get('ongoing_streams', 0)
-    assignments = response.get('assignments', [])
-    
-    if not assignments:
-        await query.edit_message_text(
-            "You don't have any streams assigned to you yet.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 Refresh", callback_data="streams_list")]
-            ])
-        )
-        return
-    
-    streams_text = f"*Your Assigned Streams* ({ongoing} ongoing)\n\n"
-    stream_buttons = []
-    
-    for assignment in assignments:
-        stream = assignment.get('stream', {})
-        stream_id = stream.get('id')
-        status = "🟢" if stream.get('active', False) else "⚫"
-        streams_text += f"{status} Stream #{stream_id}: {stream.get('name', 'Unnamed')}\n"
-        stream_buttons.append([InlineKeyboardButton(
-            f"{status} Stream #{stream_id}", 
-            callback_data=f"stream_{stream_id}"
-        )])
-    
-    stream_buttons.append([InlineKeyboardButton("🔄 Refresh List", callback_data="streams_list")])
-    
-    await query.edit_message_text(
-        streams_text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup(stream_buttons)
-    )
-
-async def show_notifications(query, user_id):
-    """Show list of notifications for the user."""
-    session = user_sessions.get(user_id, {})
-    token = session.get('token')
-    
-    if not token:
-        await query.edit_message_text("Please login first. Use /start to begin.")
-        return
-    
-    # Get notifications
-    response = await api_request('get', 'agent/notifications', token=token)
-    
-    if 'error' in response:
-        await query.edit_message_text(f"Error fetching notifications: {response['error']}")
-        return
-    
-    notifications = response.get('notifications', [])
-    
-    if not notifications:
-        await query.edit_message_text(
-            "You don't have any notifications.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 Refresh", callback_data="notifications_list")]
-            ])
-        )
-        return
-    
-    # Count unread notifications
-    unread_count = sum(1 for n in notifications if not n.get('read', False))
-    
-    notifications_text = f"*Your Notifications* ({unread_count} unread)\n\n"
-    notification_buttons = []
-    
-    # Show only the most recent 5 notifications
-    for notification in notifications[:5]:
-        notification_id = notification.get('id')
-        read_status = "✓" if notification.get('read', False) else "🔴"
-        timestamp = notification.get('timestamp', '')
-        if timestamp:
-            try:
-                dt = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%f")
-                timestamp = dt.strftime("%m-%d %H:%M")
-            except:
-                pass
-        
-        notifications_text += f"{read_status} #{notification_id}: {notification.get('message', 'No message')} ({timestamp})\n"
-        
-        if not notification.get('read', False):
-            notification_buttons.append([InlineKeyboardButton(
-                f"Mark #{notification_id} as Read", 
-                callback_data=f"notification_{notification_id}"
-            )])
-    
-    if unread_count > 0:
-        notification_buttons.append([InlineKeyboardButton("📖 Mark All as Read", callback_data="read_all_notifications")])
-    
-    notification_buttons.append([InlineKeyboardButton("🔄 Refresh", callback_data="notifications_list")])
-    
-    await query.edit_message_text(
-        notifications_text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup(notification_buttons)
-    )
-
-async def show_keywords(query, user_id):
-    """Show list of keywords for monitoring."""
-    session = user_sessions.get(user_id, {})
-    token = session.get('token')
-    
-    if not token:
-        await query.edit_message_text("Please login first. Use /start to begin.")
-        return
-    
-    # Get keywords
-    response = await api_request('get', 'keywords', token=token)
-    
-    if 'error' in response:
-        await query.edit_message_text(f"Error fetching keywords: {response['error']}")
-        return
-    
-    keywords = response
-    
-    if not keywords:
-        await query.edit_message_text(
-            "No keywords found in the system.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 Refresh", callback_data="keywords_list")]
-            ])
-        )
-        return
-    
-    keywords_text = f"*Monitored Keywords* ({len(keywords)})\n\n"
-    
-    # Group keywords in batches of 5 to make it readable
-    for i in range(0, len(keywords), 5):
-        batch = keywords[i:i+5]
-        keywords_text += "• " + ", ".join(item.get('keyword', 'Unknown') for item in batch) + "\n"
-    
-    await query.edit_message_text(
-        keywords_text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔄 Refresh", callback_data="keywords_list")]
-        ])
-    )
-
-async def show_objects(query, user_id):
-    """Show list of objects for monitoring."""
-    session = user_sessions.get(user_id, {})
-    token = session.get('token')
-    
-    if not token:
-        await query.edit_message_text("Please login first. Use /start to begin.")
-        return
-    
-    # Get objects
-    response = await api_request('get', 'objects', token=token)
-    
-    if 'error' in response:
-        await query.edit_message_text(f"Error fetching objects: {response['error']}")
-        return
-    
-    objects = response
-    
-    if not objects:
-        await query.edit_message_text(
-            "No objects found in the system.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 Refresh", callback_data="objects_list")]
-            ])
-        )
-        return
-    
-    objects_text = f"*Monitored Objects* ({len(objects)})\n\n"
-    
-    # Group objects in batches of 5 to make it readable
-    for i in range(0, len(objects), 5):
-        batch = objects[i:i+5]
-        objects_text += "• " + ", ".join(item.get('object_name', 'Unknown') for item in batch) + "\n"
-    
-    await query.edit_message_text(
-        objects_text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔄 Refresh", callback_data="objects_list")]
-        ])
-    )
-
-async def show_agent_stats(query, user_id):
-    """Show agent performance statistics."""
-    session = user_sessions.get(user_id, {})
-    token = session.get('token')
-    
-    if not token:
-        await query.edit_message_text("Please login first. Use /start to begin.")
-        return
-    
-    # Get agent performance stats
-    response = await api_request('get', 'analytics/agent-performance', token=token)
-    
-    if 'error' in response:
-        await query.edit_message_text(f"Error fetching stats: {response['error']}")
-        return
-    
-    resolution_rate = response.get('resolutionRate', 0)
-    avg_response_time = response.get('avgResponseTime', 0)
-    detection_breakdown = response.get('detectionBreakdown', [])
-    activity_timeline = response.get('activityTimeline', [])
-    
-    # Calculate XP and level based on activity
-    total_detections = sum(item.get('count', 0) for item in detection_breakdown)
-    xp = total_detections * 10 + resolution_rate * 5
-    level = 1 + (xp // 100)
-    next_level_xp = (level) * 100
-    xp_progress = xp % 100
-    
-    stats_text = (
-        f"*Your Agent Stats* (Level {level})\n\n"
-        f"• XP: {xp} ({xp_progress}% to Level {level+1})\n"
-        f"• Resolution Rate: {resolution_rate}%\n"
-        f"• Avg Response Time: {avg_response_time:.1f} min\n\n"
-        f"*Detection Breakdown:*\n"
-    )
-    
-    # Add detection breakdown
-    for item in detection_breakdown:
-        stats_text += f"• {item.get('type', 'Unknown')}: {item.get('count', 0)}\n"
-    
-    # Add achievements
-    stats_text += "\n*Recent Achievements:*\n"
-    
-    # Generate some fake achievements based on stats
-    achievements = []
-    if resolution_rate > 90:
-        achievements.append("🏆 Quick Responder")
-    if total_detections > 50:
-        achievements.append("🔍 Eagle Eye")
-    if avg_response_time < 5:
-        achievements.append("⚡ Lightning Fast")
-    
-    if achievements:
-        for achievement in achievements:
-            stats_text += f"• {achievement}\n"
-    else:
-        stats_text += "• No achievements yet. Keep monitoring!\n"
-    
-    await query.edit_message_text(
-        stats_text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔄 Refresh Stats", callback_data="my_stats")]
-        ])
-    )
-
-async def show_achievements(query, user_id):
-    """Show user achievements and gamification status."""
-    session = user_sessions.get(user_id, {})
-    token = session.get('token')
-    
-    if not token:
-        await query.edit_message_text("Please login first. Use /start to begin.")
-        return
-    
-    # Get agent performance stats for basing achievements on
-    response = await api_request('get', 'analytics/agent-performance', token=token)
-    
-    if 'error' in response:
-        await query.edit_message_text(f"Error fetching achievements: {response['error']}")
-        return
-    
-    # Extract data for gamification
-    resolution_rate = response.get('resolutionRate', 0)
-    avg_response_time = response.get('avgResponseTime', 0)
-    detection_breakdown = response.get('detectionBreakdown', [])
-    activity_timeline = response.get('activityTimeline', [])
-    
-    # Calculate XP and level
-    total_detections = sum(item.get('count', 0) for item in detection_breakdown)
-    xp = total_detections * 10 + resolution_rate * 5
-    level = 1 + (xp // 100)
-    next_level_xp = (level) * 100
-    xp_progress = xp % 100
-    
-    # Create progress bar for XP
-    progress_bar = "["
-    progress_blocks = int(xp_progress / 10)
-    for i in range(10):
-        if i < progress_blocks:
-            progress_bar += "█"
-        else:
-            progress_bar += "▒"
-    progress_bar += "]"
-    
-    # Generate badges based on metrics
-    badges = []
-    
-    if resolution_rate > 90:
-        badges.append("🏆 Quick Responder")
-    if total_detections > 50:
-        badges.append("🔍 Eagle Eye")
-    if avg_response_time < 5:
-        badges.append("⚡ Lightning Fast")
-    if len(activity_timeline) > 7:
-        badges.append("📆 Weekly Warrior")
-    if total_detections > 100:
-        badges.append("💯 Century Club")
-    
-    achievements_text = (
-        f"*Your Achievements*\n\n"
-        f"👤 Level {level} Monitor\n"
-        f"⭐ XP: {xp}/{next_level_xp} {progress_bar}\n"
-        f"🔥 Daily Streak: {min(len(activity_timeline), 30)} days\n\n"
-        f"*Badges Earned:*\n"
-    )
-    
-    if badges:
-        for badge in badges:
-            achievements_text += f"• {badge}\n"
-    else:
-        achievements_text += "• No badges yet. Keep monitoring!\n"
-    
-    # Add challenges
-    achievements_text += "\n*Current Challenges:*\n"
-    
-    challenges = [
-        f"• 🎯 Respond to 5 more alerts (Progress: {min(5, total_detections)}/5)",
-        f"• 🔍 Find 3 objects in streams (Progress: {min(3, total_detections//2)}/3)",
-        f"• ⏱ Maintain < 2 min response time for a day"
-    ]
-    
-    for challenge in challenges:
-        achievements_text += f"{challenge}\n"
-    
-    await query.edit_message_text(
-        achievements_text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("📊 View Stats", callback_data="my_stats")],
-            [InlineKeyboardButton("🏅 View Leaderboard", callback_data="leaderboard")]
-        ])
-    )
 
 async def login_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle login conversation."""
@@ -805,18 +371,18 @@ async def password_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     password = update.message.text
     username = user_sessions[user_id].get('username', '')
     
-    # For security, delete the message with the password if possible
+    # For security, delete the password message
     try:
         await update.message.delete()
     except Exception as e:
         logger.error(f"Error deleting password message: {str(e)}")
     
-    # Attempt login using /api/login endpoint
+    # Attempt login
     data = {
         'username': username,
         'password': password
     }
-    response = await api_request('post', 'api/login', data=data)
+    response = await api_request('post', 'api/login', data)
     
     if 'error' in response or response.get('message') != "Login successful":
         await update.message.reply_text(
@@ -827,15 +393,15 @@ async def password_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
         return ConversationHandler.END
     
-    # Store user details in session
+    # Store session details
+    session_id = response.get('session_id')  # Note: Adjust based on actual API response; currently using cookies
     user_sessions[user_id] = {
-        'registered': True,
         'logged_in': True,
         'username': response.get('username'),
         'role': response.get('role'),
         'telegram_username': response.get('telegram_username'),
         'telegram_chat_id': response.get('telegram_chat_id'),
-        'token': response.get('token')  # Note: Current /api/login doesn't return token; adjust if needed
+        'session_id': update.message.chat_id  # Store chat_id as session_id placeholder
     }
     save_sessions()
     
@@ -844,6 +410,456 @@ async def password_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         reply_markup=get_main_keyboard()
     )
     return ConversationHandler.END
+
+async def add_stream_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle stream URL input."""
+    user_id = update.effective_user.id
+    session = user_sessions.get(user_id, {})
+    if not session.get('logged_in', False):
+        await update.message.reply_text(
+            "Please login first. Use /start to begin.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔑 Login", callback_data="login")]
+            ])
+        )
+        return ConversationHandler.END
+    
+    text = update.message.text
+    if text == "🔙 Back to Main Menu":
+        await update.message.reply_text(
+            "Returned to main menu.",
+            reply_markup=get_main_keyboard()
+        )
+        return ConversationHandler.END
+    
+    user_sessions[user_id]['stream_url'] = text
+    save_sessions()
+    
+    await update.message.reply_text(
+        "Select the platform for the stream:",
+        reply_markup=get_platform_keyboard()
+    )
+    return ADD_STREAM_PLATFORM
+
+async def add_stream_platform(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle platform selection."""
+    user_id = update.effective_user.id
+    session = user_sessions.get(user_id, {})
+    if not session.get('logged_in', False):
+        await update.message.reply_text(
+            "Please login first. Use /start to begin.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔑 Login", callback_data="login")]
+            ])
+        )
+        return ConversationHandler.END
+    
+    text = update.message.text
+    if text == "🔙 Cancel":
+        await update.message.reply_text(
+            "Stream creation cancelled.",
+            reply_markup=get_main_keyboard()
+        )
+        return ConversationHandler.END
+    
+    if text not in ["Chaturbate", "Stripchat"]:
+        await update.message.reply_text(
+            "Please select a valid platform (Chaturbate or Stripchat).",
+            reply_markup=get_platform_keyboard()
+        )
+        return ADD_STREAM_PLATFORM
+    
+    user_sessions[user_id]['platform'] = text.lower()
+    save_sessions()
+    
+    # Fetch agents
+    response = await api_request('get', 'agents', session_id=session.get('session_id'))
+    if 'error' in response:
+        await update.message.reply_text(
+            f"Failed to fetch agents: {response['error']}",
+            reply_markup=get_main_keyboard()
+        )
+        return ConversationHandler.END
+    
+    agents = response
+    if not agents:
+        await update.message.reply_text(
+            "No agents available. Creating stream without agent assignment.",
+            reply_markup=get_back_keyboard()
+        )
+        user_sessions[user_id]['agent_id'] = None
+        save_sessions()
+        return await create_stream(update, context)
+    
+    agent_list = "\n".join([f"{agent['id']}: {agent['username']}" for agent in agents])
+    await update.message.reply_text(
+        f"Enter the agent ID to assign the stream (or type 'none' for no assignment):\n{agent_list}",
+        reply_markup=get_back_keyboard()
+    )
+    return ADD_STREAM_AGENT
+
+async def add_stream_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle agent ID input."""
+    user_id = update.effective_user.id
+    session = user_sessions.get(user_id, {})
+    if not session.get('logged_in', False):
+        await update.message.reply_text(
+            "Please login first. Use /start to begin.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔑 Login", callback_data="login")]
+            ])
+        )
+        return ConversationHandler.END
+    
+    text = update.message.text
+    if text == "🔙 Back to Main Menu":
+        await update.message.reply_text(
+            "Returned to main menu.",
+            reply_markup=get_main_keyboard()
+        )
+        return ConversationHandler.END
+    
+    if text.lower() == 'none':
+        user_sessions[user_id]['agent_id'] = None
+        save_sessions()
+        return await create_stream(update, context)
+    
+    try:
+        agent_id = int(text)
+        response = await api_request('get', 'agents', session_id=session.get('session_id'))
+        if 'error' in response:
+            await update.message.reply_text(
+                f"Failed to verify agent: {response['error']}",
+                reply_markup=get_main_keyboard()
+            )
+            return ConversationHandler.END
+        
+        agents = response
+        if not any(agent['id'] == agent_id for agent in agents):
+            await update.message.reply_text(
+                "Invalid agent ID. Please enter a valid ID or 'none'.",
+                reply_markup=get_back_keyboard()
+            )
+            return ADD_STREAM_AGENT
+        
+        user_sessions[user_id]['agent_id'] = agent_id
+        save_sessions()
+        return await create_stream(update, context)
+    except ValueError:
+        await update.message.reply_text(
+            "Please enter a valid agent ID (number) or 'none'.",
+            reply_markup=get_back_keyboard()
+        )
+        return ADD_STREAM_AGENT
+
+async def create_stream(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Create the stream via API."""
+    user_id = update.effective_user.id
+    session = user_sessions.get(user_id, {})
+    session_id = session.get('session_id')
+    room_url = session.get('stream_url')
+    platform = session.get('platform')
+    agent_id = session.get('agent_id')
+    
+    data = {
+        'room_url': room_url,
+        'platform': platform,
+        'agent_id': agent_id
+    }
+    
+    response = await api_request('post', 'streams', data, session_id)
+    
+    if 'error' in response:
+        await update.message.reply_text(
+            f"Failed to create stream: {response['error']}",
+            reply_markup=get_main_keyboard()
+        )
+    else:
+        stream = response.get('stream', {})
+        await update.message.reply_text(
+            f"✅ Stream created successfully!\n"
+            f"ID: {stream.get('id')}\n"
+            f"URL: {stream.get('room_url')}\n"
+            f"Platform: {stream.get('type')}",
+            reply_markup=get_main_keyboard()
+        )
+    
+    # Clear temporary session data
+    user_sessions[user_id].pop('stream_url', None)
+    user_sessions[user_id].pop('platform', None)
+    user_sessions[user_id].pop('agent_id', None)
+    save_sessions()
+    
+    return ConversationHandler.END
+
+# Utility Functions
+async def show_my_streams(update: Update, user_id: int, session_id: str) -> None:
+    """Show the user's assigned streams."""
+    response = await api_request('get', 'agent/dashboard', session_id=session_id)
+    
+    if 'error' in response:
+        await update.message.reply_text(
+            f"Failed to fetch streams: {response['error']}",
+            reply_markup=get_streams_keyboard()
+        )
+        return
+    
+    streams = response.get('assignments', [])
+    if not streams:
+        await update.message.reply_text(
+            "You have no assigned streams.",
+            reply_markup=get_streams_keyboard()
+        )
+        return
+    
+    streams_text = "*Your Assigned Streams*\n\n"
+    stream_buttons = []
+    
+    for stream in streams:
+        status = "🟢" if stream.get('status') == 'online' else "⚫"
+        stream_id = stream.get('id')
+        streams_text += f"{status} Stream #{stream_id}: {stream.get('streamer_username', 'Unnamed')} ({stream.get('type')})\n"
+        stream_buttons.append([InlineKeyboardButton(
+            f"{status} Stream #{stream_id}", 
+            callback_data=f"stream_{stream_id}"
+        )])
+    
+    await update.message.reply_text(
+        streams_text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(stream_buttons)
+    )
+
+async def show_stream_details(query, user_id: int, stream_id: str, session_id: str) -> None:
+    """Show details of a specific stream."""
+    response = await api_request('get', f'detection-status/{stream_id}', session_id=session_id)
+    
+    if 'error' in response:
+        await query.edit_message_text(f"Error getting stream details: {response['error']}")
+        return
+    
+    stream_status = "🟢 Active" if response.get('active', False) else "⚫ Inactive"
+    stream_url = response.get('stream_url', 'N/A')
+    
+    # Create control buttons
+    control_buttons = []
+    if response.get('active', False):
+        control_buttons.append(InlineKeyboardButton("⏹️ Stop Monitoring", callback_data=f"stop_{stream_id}"))
+    else:
+        control_buttons.append(InlineKeyboardButton("▶️ Start Monitoring", callback_data=f"start_{stream_id}"))
+    
+    status_message = (
+        f"*Stream #{stream_id} Details*\n\n"
+        f"• Status: {stream_status}\n"
+        f"• URL: `{stream_url}`\n"
+        f"• Type: {response.get('platform', 'Unknown')}\n"
+        f"• Last updated: {datetime.now().strftime('%H:%M:%S')}"
+    )
+    
+    await query.edit_message_text(
+        status_message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup([
+            control_buttons,
+            [InlineKeyboardButton("🔄 Refresh", callback_data=f"stream_{stream_id}")],
+            [InlineKeyboardButton("🔙 Back to Streams", callback_data="streams_list")]
+        ])
+    )
+
+async def trigger_detection(query, user_id: int, stream_id: str, action: str, session_id: str) -> None:
+    """Start or stop detection for a stream."""
+    data = {
+        'stream_id': int(stream_id),
+        'stop': action == "stop"
+    }
+    
+    response = await api_request('post', 'trigger-detection', data, session_id)
+    
+    if 'error' in response:
+        await query.edit_message_text(f"Error controlling monitoring: {response['error']}")
+        return
+    
+    status = "stopped" if action == "stop" else "started"
+    await query.edit_message_text(
+        f"✅ Monitoring {status} successfully for Stream #{stream_id}.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Back to Stream", callback_data=f"stream_{stream_id}")]
+        ])
+    )
+
+async def show_detection_status(update: Update, user_id: int, session_id: str) -> None:
+    """Show detection status for all assigned streams."""
+    response = await api_request('get', 'agent/dashboard', session_id=session_id)
+    
+    if 'error' in response:
+        await update.message.reply_text(
+            f"Failed to fetch detection status: {response['error']}",
+            reply_markup=get_main_keyboard()
+        )
+        return
+    
+    streams = response.get('assignments', [])
+    if not streams:
+        await update.message.reply_text(
+            "You have no assigned streams to monitor.",
+            reply_markup=get_main_keyboard()
+        )
+        return
+    
+    status_text = "*Detection Status*\n\n"
+    for stream in streams:
+        stream_id = stream.get('id')
+        status_response = await api_request('get', f'detection-status/{stream_id}', session_id=session_id)
+        if 'error' in status_response:
+            status_text += f"Stream #{stream_id}: Error - {status_response['error']}\n"
+        else:
+            status = "🟢 Active" if status_response.get('active', False) else "⚫ Inactive"
+            status_text += f"Stream #{stream_id}: {status} ({stream.get('streamer_username', 'Unnamed')})\n"
+    
+    await update.message.reply_text(
+        status_text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=get_main_keyboard()
+    )
+
+async def show_notifications(update: Update, user_id: int, session_id: str) -> None:
+    """Show notifications for the user."""
+    response = await api_request('get', 'notifications', session_id=session_id)
+    
+    if 'error' in response:
+        await update.message.reply_text(
+            f"Failed to fetch notifications: {response['error']}",
+            reply_markup=get_main_keyboard()
+        )
+        return
+    
+    notifications = response
+    if not notifications:
+        await update.message.reply_text(
+            "You have no notifications.",
+            reply_markup=get_main_keyboard()
+        )
+        return
+    
+    unread_count = sum(1 for n in notifications if not n.get('read', False))
+    notifications_text = f"*Your Notifications* ({unread_count} unread)\n\n"
+    notification_buttons = []
+    
+    for notification in notifications[:5]:
+        notification_id = notification.get('id')
+        read_status = "✓" if notification.get('read', False) else "🔴"
+        timestamp = notification.get('timestamp', '')
+        if timestamp:
+            try:
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                timestamp = dt.strftime("%m-%d %H:%M")
+            except:
+                pass
+        
+        notifications_text += f"{read_status} #{notification_id}: {notification.get('event_type')} ({timestamp})\n"
+        
+        if not notification.get('read', False):
+            notification_buttons.append([InlineKeyboardButton(
+                f"Mark #{notification_id} as Read", 
+                callback_data=f"notification_{notification_id}"
+            )])
+    
+    if unread_count > 0:
+        notification_buttons.append([InlineKeyboardButton("📖 Mark All as Read", callback_data="read_all_notifications")])
+    
+    await update.message.reply_text(
+        notifications_text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(notification_buttons)
+    )
+
+async def mark_notification_read(query, user_id: int, notification_id: str, session_id: str) -> None:
+    """Mark a notification as read."""
+    response = await api_request('put', f'notifications/{notification_id}/read', session_id=session_id)
+    
+    if 'error' in response:
+        await query.edit_message_text(f"Error marking notification as read: {response['error']}")
+    else:
+        await query.edit_message_text(
+            f"✅ Notification #{notification_id} marked as read.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back to Notifications", callback_data="notifications_list")]
+            ])
+        )
+
+async def mark_all_notifications_read(query, user_id: int, session_id: str) -> None:
+    """Mark all notifications as read."""
+    response = await api_request('put', 'notifications/read-all', session_id=session_id)
+    
+    if 'error' in response:
+        await query.edit_message_text(f"Error marking notifications as read: {response['error']}")
+    else:
+        await query.edit_message_text(
+            "✅ All notifications marked as read.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back to Notifications", callback_data="notifications_list")]
+            ])
+        )
+
+async def show_keywords(update: Update, user_id: int, session_id: str) -> None:
+    """Show list of monitored keywords."""
+    response = await api_request('get', 'keywords', session_id=session_id)
+    
+    if 'error' in response:
+        await update.message.reply_text(
+            f"Failed to fetch keywords: {response['error']}",
+            reply_markup=get_tools_keyboard()
+        )
+        return
+    
+    keywords = response
+    if not keywords:
+        await update.message.reply_text(
+            "No keywords found in the system.",
+            reply_markup=get_tools_keyboard()
+        )
+        return
+    
+    keywords_text = f"*Monitored Keywords* ({len(keywords)})\n\n"
+    for i in range(0, len(keywords), 5):
+        batch = keywords[i:i+5]
+        keywords_text += "• " + ", ".join(item.get('keyword', 'Unknown') for item in batch) + "\n"
+    
+    await update.message.reply_text(
+        keywords_text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=get_tools_keyboard()
+    )
+
+async def show_objects(update: Update, user_id: int, session_id: str) -> None:
+    """Show list of monitored objects."""
+    response = await api_request('get', 'objects', session_id=session_id)
+    
+    if 'error' in response:
+        await update.message.reply_text(
+            f"Failed to fetch objects: {response['error']}",
+            reply_markup=get_tools_keyboard()
+        )
+        return
+    
+    objects = response
+    if not objects:
+        await update.message.reply_text(
+            "No objects found in the system.",
+            reply_markup=get_tools_keyboard()
+        )
+        return
+    
+    objects_text = f"*Monitored Objects* ({len(objects)})\n\n"
+    for i in range(0, len(objects), 5):
+        batch = objects[i:i+5]
+        objects_text += "• " + ", ".join(item.get('object_name', 'Unknown') for item in batch) + "\n"
+    
+    await update.message.reply_text(
+        objects_text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=get_tools_keyboard()
+    )
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancel the current conversation."""
@@ -861,44 +877,48 @@ async def main():
             logger.error("TELEGRAM_TOKEN not set in environment variables")
             return
         
-        # Create the Application and pass the bot's token
+        # Create the Application
         application = Application.builder().token(token).build()
 
         # Define conversation handler
         conv_handler = ConversationHandler(
-            entry_points=[CallbackQueryHandler(button_callback, pattern="^(login|register)$")],
+            entry_points=[
+                CallbackQueryHandler(button_callback, pattern="^login$"),
+                MessageHandler(filters.Regex("^(➕ Add Stream)$"), handle_message)
+            ],
             states={
                 LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_conversation)],
                 PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, password_handler)],
+                ADD_STREAM_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_stream_url)],
+                ADD_STREAM_PLATFORM: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_stream_platform)],
+                ADD_STREAM_AGENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_stream_agent)]
             },
             fallbacks=[CommandHandler("cancel", cancel)]
         )
 
-        # Register command handlers
+        # Register handlers
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
         application.add_handler(CommandHandler("getid", getid))
         application.add_handler(CommandHandler("logout", logout))
-        
-        # Register conversation and callback handlers
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         application.add_handler(conv_handler)
         application.add_handler(CallbackQueryHandler(button_callback))
 
         # Start the bot
         logger.info("Telegram bot starting")
         
-        # Set up signal handlers for graceful shutdown
+        # Set up signal handlers
         loop = asyncio.get_running_loop()
         for s in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(s, lambda: asyncio.create_task(shutdown(application)))
         
-        # Start polling mode
         await application.initialize()
         await application.start()
         await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
         logger.info("Telegram bot started successfully")
         
-        # Keep the bot running until a signal is received
+        # Keep running until stopped
         stop_signal = asyncio.Future()
         await stop_signal
     
@@ -908,11 +928,10 @@ async def main():
 async def shutdown(application):
     """Shut down the application gracefully."""
     logger.info("Shutting down...")
-    save_sessions()  # Save sessions before shutdown
+    save_sessions()
     await application.updater.stop()
     await application.stop()
     await application.shutdown()
-    # Set the stop signal to stop the main loop
     for task in asyncio.all_tasks():
         if task is not asyncio.current_task():
             task.cancel()
