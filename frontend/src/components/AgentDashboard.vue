@@ -988,7 +988,8 @@ export default {
           fetchActiveStreams(),
           fetchRecentLogs(),
           fetchTasks(),
-          fetchUnreadMessageCount()
+          fetchUnreadMessageCount(),
+          fetchCurrentUser()
         ])
         
         // Update stats based on retrieved data
@@ -1447,24 +1448,13 @@ export default {
     }
     
     // Setup and cleanup
-    onMounted(async () => {
+    onMounted(() => {
       console.log('AgentDashboard mounted, theme:', appTheme.value);
-      
-      // Fetch user data
-      await fetchCurrentUser()
-      
-      // Initial data fetch
-      await fetchDashboardData()
       
       // Setup initial animations
       nextTick(() => {
         setupInitialAnimations()
       })
-      
-      // Start refresh interval for dashboard
-      refreshInterval.value = setInterval(() => {
-        refreshDashboard()
-      }, 5 * 60 * 1000) // 5 minutes refresh
       
       // Add resize listener
       window.addEventListener('resize', checkMobile)

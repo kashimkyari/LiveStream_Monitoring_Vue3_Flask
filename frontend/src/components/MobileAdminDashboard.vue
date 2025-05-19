@@ -369,8 +369,8 @@ export default {
       }
     }
 
-    onMounted(async () => {
-      await fetchDashboardData()
+    onMounted(() => {
+      // Remove auto-fetch
       document.addEventListener('click', registerUserActivity)
       document.addEventListener('touchstart', registerUserActivity)
     })

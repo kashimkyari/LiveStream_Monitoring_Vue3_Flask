@@ -136,7 +136,7 @@ const startPollingForStatus = (jobId) => {
   
   const pollInterval = setInterval(async () => {
     try {
-      const response = await axios.get(`/api/streams/interactive/status?job_id=${jobId}`)
+      const response = await axios.get(`/api/streams/interactive/sse?job_id=${jobId}`)
       const data = response.data
       
       streamCreationState.value.progress = data.progress
