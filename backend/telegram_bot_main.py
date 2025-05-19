@@ -146,25 +146,79 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user = db_session.query(User).filter_by(telegram_chat_id=str(chat_id)).first()
         if user:
+            # Escape special characters for Markdown V2
+            username = user.username.replace('_', r'\_').replace('*', r'\*').replace('`', r'\`')
+            role = user.role.replace('_', r'\_').replace('*', r'\*').replace('`', r'\`')
             user_sessions[chat_id] = {
                 'logged_in': True,
                 'username': user.username,
                 'role': user.role,
-                'token': user.id  # Using user.id as a token placeholder; adjust if API requires a specific token
+                'token': user.id  # Using user.id as a token placeholder
             }
             await update.message.reply_text(
-                f"Welcome back, {user.username}! You are logged in as {user.role}.",
-                reply_markup=get_main_keyboard(user.role)
+                f"Welcome back, {username}\! You are logged in as {role}\.",
+                reply_markup=get_main_keyboard(user.role),
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
             await update.message.reply_text(
-                "Your Telegram account is not linked to any user. Please contact an administrator to link your account."
+                "Your Telegram account is not linked to any user\. Please contact an administrator to link your account\.",
+                parse_mode=ParseMode.MARKDOWN_V2
             )
     except Exception as e:
         logger.error(f"Database error: {e}")
         await update.message.reply_text(
-            "An error occurred while checking your account. Please try again later."
+            "An error occurred while checking your account\. Please try again later\.",
+            parse_mode=ParseMode.MARKDOWN_V2
         )
+
+async def getid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.message.chat_id
+    await update.message.reply_text(
+        f"Your chat ID is: `{chat_id}`\n\nUse this ID to set up notifications\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.message.chat_id
+    session = user_sessions.get(chat_id, {})
+    
+    if not session.get('logged_in', False):
+        await update.message.reply_text(
+            "Your Telegram account is not linked\. Please contact an administrator to link your account\.",
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        return
+    
+    role = session.get('role', 'agent')
+    help_text = (
+        "🔹 *LiveStream Monitoring Bot Help* 🔹\n\n"
+        "*Main Commands:*\n"
+        "• /start - Start the bot\n"
+        "• /help - Show this help message\n"
+        "• /getid - Get your chat ID\n"
+        "• /logout - Log out\n"
+        "• /health - Check API health\n"
+        "• /link_telegram - Link your Telegram account\n\n"
+        "*Features:*\n"
+        "• 📺 *Streams* - Manage and monitor streams\n"
+        "• 🔍 *Detection Status* - Check detection status\n"
+        "• 🔔 *Notifications* - View alerts\n"
+        "• 💬 *Messages* - Send and receive messages\n"
+        "• 🧰 *Tools* - Access keywords and objects\n"
+    )
+    if role == "admin":
+        help_text += (
+            "• 👥 *Agents* - Manage agents\n"
+            "• 📊 *Dashboard* - View analytics\n"
+        )
+    # Escape special characters in help_text
+    help_text = help_text.replace('_', r'\_').replace('*', r'\*').replace('`', r'\`').replace('[', r'\[')
+    await update.message.reply_text(
+        help_text,
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=get_main_keyboard(role)
+    )
 
 async def link_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
