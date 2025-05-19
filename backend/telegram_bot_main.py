@@ -22,13 +22,41 @@ load_dotenv()
 
 # API Configuration
 API_BASE_URL = os.getenv('API_BASE_URL', 'https://monitor-backend.jetcamstudio.com:5000')
-API_ADMIN_TOKEN = os.getenv('TELEGRAM_TOKEN', '')
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '')
+
+# Session persistence file
+SESSION_FILE = "user_sessions.json"
 
 # Conversation states
 REGISTER, LOGIN, PASSWORD, EMAIL, CHATID, STREAM_URL, KEYWORD, OBJECT_NAME, TRIGGER_MONITORING = range(9)
 
 # User session data
 user_sessions = {}
+
+def load_sessions():
+    """Load user sessions from file."""
+    global user_sessions
+    try:
+        if os.path.exists(SESSION_FILE):
+            with open(SESSION_FILE, 'r') as f:
+                user_sessions = json.load(f)
+                # Convert string keys to integers
+                user_sessions = {int(k): v for k, v in user_sessions.items()}
+                logger.info("Loaded user sessions from file")
+    except Exception as e:
+        logger.error(f"Error loading sessions: {str(e)}")
+
+def save_sessions():
+    """Save user sessions to file."""
+    try:
+        with open(SESSION_FILE, 'w') as f:
+            json.dump(user_sessions, f)
+        logger.info("Saved user sessions to file")
+    except Exception as e:
+        logger.error(f"Error saving sessions: {str(e)}")
+
+# Load sessions at startup
+load_sessions()
 
 # Define keyboard layouts
 def get_main_keyboard():
@@ -112,8 +140,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = user.id
     chat_id = update.message.chat_id
     
-    # Reset session data for this user
+    # Check if user is already logged in
+    session = user_sessions.get(user_id, {'registered': False, 'logged_in': False})
+    
+    if session.get('logged_in', False):
+        # Verify session with API
+        response = await api_request('get', 'agent/dashboard', token=session.get('token'))
+        if 'error' not in response:
+            await update.message.reply_text(
+                f"👋 Welcome back, {user.first_name}! You're already logged in.\n\n"
+                f"Your chat ID is: `{chat_id}`\n"
+                "Use the menu to manage your streams and notifications.",
+                reply_markup=get_main_keyboard(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+    
+    # Initialize session for new user
     user_sessions[user_id] = {'registered': False, 'logged_in': False}
+    save_sessions()
     
     welcome_message = (
         f"👋 Welcome, {user.first_name}! I'm your LiveStream Monitoring Bot.\n\n"
@@ -122,7 +167,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "I can help you monitor streams, detect content, and get notifications when events occur.\n\n"
     )
     
-    # Check if user has registered with the system
     login_keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔑 Login", callback_data="login")],
         [InlineKeyboardButton("📝 Register", callback_data="register")]
@@ -205,6 +249,7 @@ async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
         # Clear session
         user_sessions[user_id] = {'registered': False, 'logged_in': False}
+        save_sessions()
         
         await update.message.reply_text(
             "You have been logged out successfully.",
@@ -225,8 +270,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Ensure user has a session
     if user_id not in user_sessions:
         user_sessions[user_id] = {'registered': False, 'logged_in': False}
+        save_sessions()
     
     if query.data == "login":
+        # Check if already logged in
+        session = user_sessions.get(user_id, {})
+        if session.get('logged_in', False):
+            response = await api_request('get', 'agent/dashboard', token=session.get('token'))
+            if 'error' not in response:
+                await query.edit_message_text(
+                    "You're already logged in! Use the menu to continue.",
+                    reply_markup=get_main_keyboard()
+                )
+                return ConversationHandler.END
+        
         await query.edit_message_text(
             "Please enter your username or email to login:"
         )
@@ -735,6 +792,7 @@ async def login_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # Store username and ask for password
     user_sessions[user_id]['username'] = message
+    save_sessions()
     
     await update.message.reply_text(
         "Please enter your password:"
@@ -777,8 +835,9 @@ async def password_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         'role': response.get('role'),
         'telegram_username': response.get('telegram_username'),
         'telegram_chat_id': response.get('telegram_chat_id'),
-        'token': None  # /api/login doesn't return a token; session is managed server-side
+        'token': response.get('token')  # Note: Current /api/login doesn't return token; adjust if needed
     }
+    save_sessions()
     
     await update.message.reply_text(
         "✅ Login successful! Use the menu to manage your streams and notifications.",
@@ -797,7 +856,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def main():
     """Main function to run the Telegram bot."""
     try:
-        token = os.getenv('TELEGRAM_TOKEN')
+        token = TELEGRAM_TOKEN
         if not token:
             logger.error("TELEGRAM_TOKEN not set in environment variables")
             return
@@ -849,6 +908,7 @@ async def main():
 async def shutdown(application):
     """Shut down the application gracefully."""
     logger.info("Shutting down...")
+    save_sessions()  # Save sessions before shutdown
     await application.updater.stop()
     await application.stop()
     await application.shutdown()
