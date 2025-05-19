@@ -1,7 +1,7 @@
 # routes/agent_routes.py
 from flask import Blueprint, request, jsonify, session
 from extensions import db
-from models import User, Assignment, PasswordReset
+from models import User, Assignment, PasswordReset, PasswordResetToken, DetectionLog, MessageAttachment, ChatMessage
 from utils import login_required
 
 agent_bp = Blueprint('agent', __name__)
@@ -29,6 +29,8 @@ def create_agent():
         username=data["username"],
         password=data["password"],
         role="agent",
+        email=data.get("email", ""),
+        receive_updates=data.get("receive_updates", False)
     )
     db.session.add(agent)
     db.session.commit()
@@ -53,6 +55,12 @@ def update_agent(agent_id):
     if "online" in data:
         agent.online = bool(data["online"])
     
+    if "email" in data:
+        agent.email = data["email"]
+    
+    if "receive_updates" in data:
+        agent.receive_updates = bool(data["receive_updates"])
+    
     db.session.commit()
     return jsonify({"message": "Agent updated", "agent": agent.serialize()})
 
@@ -63,13 +71,30 @@ def delete_agent(agent_id):
     if not agent:
         return jsonify({"message": "Agent not found"}), 404
     
-    # Delete related password resets first
-    PasswordReset.query.filter_by(user_id=agent_id).delete()
-    
-    # Now delete the agent
-    db.session.delete(agent)
-    db.session.commit()
-    return jsonify({"message": "Agent deleted"})
+    try:
+        # Unassign detection logs (set assigned_agent to null)
+        DetectionLog.query.filter_by(assigned_agent=agent_id).update({"assigned_agent": None})
+        
+        # Delete related message attachments
+        MessageAttachment.query.filter_by(user_id=agent_id).delete()
+        
+        # Delete related chat messages (where agent is sender or receiver)
+        ChatMessage.query.filter((ChatMessage.sender_id == agent_id) | (ChatMessage.receiver_id == agent_id)).delete()
+        
+        # Delete related password resets
+        PasswordReset.query.filter_by(user_id=agent_id).delete()
+        
+        # Delete related password reset tokens
+        PasswordResetToken.query.filter_by(user_id=agent_id).delete()
+        
+        # Delete the agent (assignments are cascaded automatically due to cascade="all, delete")
+        db.session.delete(agent)
+        db.session.commit()
+        
+        return jsonify({"message": "Agent deleted successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": f"Failed to delete agent: {str(e)}"}), 500
 
 # Add a new endpoint to get streams assigned to an agent
 @agent_bp.route("/api/agents/<int:agent_id>/assignments", methods=["GET"])
@@ -81,9 +106,6 @@ def get_agent_assignments(agent_id):
     
     assignments = agent.assignments
     return jsonify([assignment.serialize() for assignment in assignments])
-
-
-# Add to agent_routes.py
 
 @agent_bp.route("/api/agent/notifications", methods=["GET"])
 @login_required(role="agent")

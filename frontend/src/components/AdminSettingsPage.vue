@@ -1,7 +1,5 @@
-<!-- eslint-disable vue/no-parsing-error -->
 <template>
   <div class="admin-settings-container" :data-theme="isDarkTheme ? 'dark' : 'light'">
-
     <div class="settings-sidebar">
       <h3 class="sidebar-title">Settings</h3>
       <ul class="settings-menu">
@@ -18,7 +16,6 @@
             <font-awesome-icon :icon="section.icon" class="menu-icon" />
             <span>{{ section.name }}</span>
           </div>
-          <!-- Nested submenu for Tracking -->
           <ul v-if="activeSection === section.id && section.id === 'tracking'" class="submenu">
             <li
               v-for="sub in ['keywords', 'objects']"
@@ -35,7 +32,6 @@
     </div>
 
     <main class="settings-content">
-      <!-- Logout Button -->
       <div class="action-buttons">
         <button
           class="btn-danger"
@@ -50,7 +46,6 @@
           {{ isLoggingOut ? 'Logging out...' : 'Logout' }}
         </button>
       </div>
-      <!-- Logout Confirmation Modal -->
       <transition name="modal-fade">
         <div v-if="showLogoutConfirmation" class="modal-overlay" @click="showLogoutConfirmation = false">
           <div class="modal-container" @click.stop>
@@ -80,8 +75,6 @@
           </div>
         </div>
       </transition>
-
-      <!-- Logout Animation -->
       <div v-if="showLogoutAnimation" class="logout-animation-overlay">
         <div class="logout-animation-container" ref="logoutAnimationContainer">
           <font-awesome-icon icon="sign-out-alt" class="logout-icon" ref="logoutIcon" />
@@ -91,14 +84,11 @@
           </div>
         </div>
       </div>
-
       <div class="settings-header">
         <h2>{{ sections.find(s => s.id === activeSection)?.name || 'Settings' }}</h2>
       </div>
-
       <transition name="section-fade">
         <div class="settings-body" :key="activeSection + subSection">
-          <!-- General Settings -->
           <section v-if="activeSection === 'general'" class="settings-section">
             <h3>Notifications</h3>
             <div class="settings-options">
@@ -136,7 +126,6 @@
                 </div>
               </div>
             </div>
-
             <h3>Appearance</h3>
             <div class="theme-options">
               <div
@@ -159,14 +148,13 @@
               </div>
             </div>
           </section>
-
-          <!-- Agent Management -->
           <section v-if="activeSection === 'agents'" class="settings-section">
             <h3>Manage Agents</h3>
             <div class="form-group">
               <h4>Add New Agent</h4>
               <form @submit.prevent="addAgent">
                 <input v-model="newAgent.username" placeholder="Enter Username" required :disabled="isAddingAgent" />
+                <input v-model="newAgent.email" placeholder="Enter Email" required :disabled="isAddingAgent" />
                 <input v-model="newAgent.password" type="password" placeholder="Enter Password" required :disabled="isAddingAgent" />
                 <button type="submit" class="btn-primary" :disabled="isAddingAgent">
                   <font-awesome-icon v-if="isAddingAgent" icon="spinner" spin />
@@ -206,8 +194,6 @@
               </form>
             </div>
           </section>
-
-          <!-- Assignment Management -->
           <section v-if="activeSection === 'assignments'" class="settings-section">
             <h3>Manage Assignments</h3>
             <div class="form-group">
@@ -233,7 +219,7 @@
                 <select v-model="deleteAssignmentId" required :disabled="isRemovingAssignment" aria-label="Select an assignment to remove">
                   <option value="" disabled>Select an Assignment</option>
                   <option v-for="assignment in assignments" :key="assignment.id" :value="assignment.id">
-                    {{ assignment.agent_username }} - {{ assignment.stream_url }}
+                    {{ assignment.agent.username }} - {{ assignment.stream_url }}
                   </option>
                 </select>
                 <button type="submit" class="btn-danger" :disabled="isRemovingAssignment">
@@ -243,8 +229,6 @@
               </form>
             </div>
           </section>
-
-          <!-- Stream Management -->
           <section v-if="activeSection === 'streams'" class="settings-section">
             <h3>Manage Streams</h3>
             <div class="form-group">
@@ -317,8 +301,6 @@
               </form>
             </div>
           </section>
-
-          <!-- Notification Management -->
           <section v-if="activeSection === 'notifications'" class="settings-section">
             <h3>Manage Alerts</h3>
             <div class="form-group">
@@ -372,8 +354,6 @@
               </form>
             </div>
           </section>
-
-          <!-- Tracking: Keywords -->
           <section v-if="activeSection === 'tracking' && subSection === 'keywords'" class="settings-section">
             <h3>Manage Keywords</h3>
             <div class="form-group">
@@ -414,8 +394,6 @@
               </form>
             </div>
           </section>
-
-          <!-- Tracking: Objects -->
           <section v-if="activeSection === 'tracking' && subSection === 'objects'" class="settings-section">
             <h3>Manage Objects</h3>
             <div class="form-group">
@@ -456,8 +434,6 @@
               </form>
             </div>
           </section>
-
-          <!-- Detection -->
           <section v-if="activeSection === 'detection'" class="settings-section">
             <h3>Manage Detection</h3>
             <div class="form-group">
@@ -480,8 +456,6 @@
           </section>
         </div>
       </transition>
-
-      <!-- Telegram Onboarding -->
       <TelegramOnboarding
         :is-visible="showTelegramModal"
         :existing-username="telegramUsername"
@@ -492,7 +466,6 @@
     </main>
   </div>
 </template>
-
 <script setup>
 import { defineProps, defineEmits, ref, onMounted, nextTick, watch } from 'vue'
 import anime from 'animejs/lib/anime.es.js'
@@ -541,7 +514,7 @@ const sections = [
 const setActiveSection = (sectionId) => {
   activeSection.value = sectionId
   if (sectionId === 'tracking' && !subSection.value) {
-    subSection.value = 'objects'
+    subSection.value = 'keywords'
   }
 }
 
@@ -549,7 +522,7 @@ const setSubSection = (sub) => {
   subSection.value = sub
 }
 
-const isDarkTheme = ref(localStorage.getItem('theme') === 'dark' || true)
+const isDarkTheme = ref(localStorage.getItem('theme') === 'dark')
 
 const toggleTheme = (dark) => {
   isDarkTheme.value = dark
@@ -566,7 +539,6 @@ onMounted(() => {
 })
 
 const agents = ref([])
-const availableUsernames = ref([])
 const streams = ref([])
 const assignments = ref([])
 const notifications = ref([])
@@ -593,7 +565,7 @@ const isUpdatingObject = ref(false)
 const isRemovingObject = ref(false)
 const isControllingDetection = ref(false)
 
-const newAgent = ref({ username: '', password: '' })
+const newAgent = ref({ username: '', email: '', password: '' })
 const updateAgentData = ref({ id: '', password: '', online: false })
 const deleteAgentId = ref('')
 const newAssignment = ref({ agent_id: '', stream_id: '' })
@@ -613,23 +585,22 @@ const updateObjectData = ref({ id: '', object_name: '' })
 const deleteObjectId = ref('')
 const detectionData = ref({ stream_id: '', stop: 'false' })
 
-const getCachedData = (key) => {
-  const data = localStorage.getItem(key)
-  return data ? JSON.parse(data) : null
-}
-
-const setCachedData = (key, data) => {
-  localStorage.setItem(key, JSON.stringify(data))
-}
-
-const apiCall = async (method, url, data = null, loadingState = null) => {
+const apiCall = async (method, url, data = null, loadingState = null, showSuccessToast = true) => {
   if (loadingState) loadingState.value = true
   try {
-    const response = await axios({ method, url, data })
-    toast.success(response.data.message || 'Success!')
+    const response = await axios({
+      method,
+      url: `https://monitor-backend.jetcamstudio.com:5000${url}`,
+      data,
+      withCredentials: true
+    })
+    if (showSuccessToast && response.data.message) {
+      toast.success(response.data.message)
+    }
     return response.data
   } catch (error) {
-    toast.error(error.response?.data?.message || 'Something went wrong')
+    const message = error.response?.data?.message || 'Something went wrong'
+    toast.error(message)
     throw error
   } finally {
     if (loadingState) loadingState.value = false
@@ -637,113 +608,55 @@ const apiCall = async (method, url, data = null, loadingState = null) => {
 }
 
 const fetchAgents = async () => {
-  const cached = getCachedData('agents')
-  if (cached) {
-    agents.value = cached
-    return
-  }
   try {
-    const response = await axios.get('/api/agents')
-    agents.value = response.data
-    setCachedData('agents', response.data)
+    const response = await apiCall('get', '/api/agents', null, null, false)
+    agents.value = response
   } catch (error) {
-    toast.error('Failed to load agents')
     agents.value = []
   }
 }
 
-const fetchAvailableUsernames = async () => {
-  const cached = getCachedData('availableUsernames')
-  if (cached) {
-    availableUsernames.value = cached
-    return
-  }
-  try {
-    const response = await axios.get('/api/agents')
-    availableUsernames.value = response.data
-    setCachedData('availableUsernames', response.data)
-  } catch (error) {
-    toast.error('Failed to load available usernames')
-    availableUsernames.value = []
-  }
-}
-
 const fetchStreams = async () => {
-  const cached = getCachedData('streams')
-  if (cached) {
-    streams.value = cached
-    return
-  }
   try {
-    const response = await axios.get('/api/streams')
-    streams.value = response.data
-    setCachedData('streams', response.data)
+    const response = await apiCall('get', '/api/streams', null, null, false)
+    streams.value = response
   } catch (error) {
-    toast.error('Failed to load streams')
     streams.value = []
   }
 }
 
 const fetchAssignments = async () => {
-  const cached = getCachedData('assignments')
-  if (cached) {
-    assignments.value = cached
-    return
-  }
   try {
-    const response = await axios.get('/api/assignments')
-    assignments.value = response.data
-    setCachedData('assignments', response.data)
+    const response = await apiCall('get', '/api/assignments', null, null, false)
+    assignments.value = response
   } catch (error) {
-    toast.error('Failed to load assignments')
     assignments.value = []
   }
 }
 
 const fetchNotifications = async () => {
-  const cached = getCachedData('notifications')
-  if (cached) {
-    notifications.value = cached
-    return
-  }
   try {
-    const response = await axios.get('/api/notifications')
-    notifications.value = response.data
-    setCachedData('notifications', response.data)
+    const response = await apiCall('get', '/api/notifications', null, null, false)
+    notifications.value = response
   } catch (error) {
-    toast.error('Failed to load notifications')
     notifications.value = []
   }
 }
 
 const fetchKeywords = async () => {
-  const cached = getCachedData('keywords')
-  if (cached) {
-    keywords.value = cached
-    return
-  }
   try {
-    const response = await axios.get('/api/keywords')
-    keywords.value = response.data
-    setCachedData('keywords', response.data)
+    const response = await apiCall('get', '/api/keywords', null, null, false)
+    keywords.value = response
   } catch (error) {
-    toast.error('Failed to load keywords')
     keywords.value = []
   }
 }
 
 const fetchObjects = async () => {
-  const cached = getCachedData('objects')
-  if (cached) {
-    objects.value = cached
-    return
-  }
   try {
-    const response = await axios.get('/api/objects')
-    objects.value = response.data
-    setCachedData('objects', response.data)
+    const response = await apiCall('get', '/api/objects', null, null, false)
+    objects.value = response
   } catch (error) {
-    toast.error('Failed to load objects')
     objects.value = []
   }
 }
@@ -751,7 +664,6 @@ const fetchObjects = async () => {
 const fetchAllData = async () => {
   await Promise.all([
     fetchAgents(),
-    fetchAvailableUsernames(),
     fetchStreams(),
     fetchAssignments(),
     fetchNotifications(),
@@ -764,7 +676,6 @@ onMounted(fetchAllData)
 
 window.addEventListener('beforeunload', () => {
   localStorage.removeItem('agents')
-  localStorage.removeItem('availableUsernames')
   localStorage.removeItem('streams')
   localStorage.removeItem('assignments')
   localStorage.removeItem('notifications')
@@ -773,125 +684,311 @@ window.addEventListener('beforeunload', () => {
 })
 
 const addAgent = async () => {
-  await apiCall('post', '/api/agents', newAgent.value, isAddingAgent)
-  newAgent.value = { username: '', password: '' }
-  await Promise.all([fetchAgents(), fetchAvailableUsernames()])
+  if (!newAgent.value.username || !newAgent.value.email || !newAgent.value.password) {
+    toast.error('Username, email, and password are required')
+    return
+  }
+  try {
+    const response = await apiCall('post', '/api/register', {
+      username: newAgent.value.username,
+      email: newAgent.value.email,
+      password: newAgent.value.password,
+      receiveUpdates: false
+    }, isAddingAgent, true)
+    newAgent.value = { username: '', email: '', password: '' }
+    await fetchAgents()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const updateAgent = async () => {
-  const data = { ...updateAgentData.value }
-  if (!data.password) delete data.password
-  await apiCall('put', `/api/agents/${data.id}`, data, isUpdatingAgent)
-  updateAgentData.value = { id: '', password: '', online: false }
-  await fetchAgents()
+  if (!updateAgentData.value.id) {
+    toast.error('Please select an agent to update')
+    return
+  }
+  const data = {
+    password: updateAgentData.value.password || undefined,
+    online: updateAgentData.value.online
+  }
+  try {
+    const response = await apiCall('put', `/api/agents/${updateAgentData.value.id}`, data, isUpdatingAgent, true)
+    updateAgentData.value = { id: '', password: '', online: false }
+    await fetchAgents()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const removeAgent = async () => {
-  await apiCall('delete', `/api/agents/${deleteAgentId.value}`, null, isRemovingAgent)
-  deleteAgentId.value = ''
-  await Promise.all([fetchAgents(), fetchAvailableUsernames()])
+  if (!deleteAgentId.value) {
+    toast.error('Please select an agent to remove')
+    return
+  }
+  try {
+    const response = await apiCall('delete', `/api/agents/${deleteAgentId.value}`, null, isRemovingAgent, true)
+    deleteAgentId.value = ''
+    await fetchAgents()
+    await fetchAssignments()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const assignAgentToStream = async () => {
-  await apiCall('post', '/api/assign', newAssignment.value, isAddingAssignment)
-  newAssignment.value = { agent_id: '', stream_id: '' }
-  await fetchAssignments()
+  if (!newAssignment.value.agent_id || !newAssignment.value.stream_id) {
+    toast.error('Please select an agent and a stream')
+    return
+  }
+  try {
+    const response = await apiCall('post', '/api/assign', newAssignment.value, isAddingAssignment, true)
+    newAssignment.value = { agent_id: '', stream_id: '' }
+    await fetchAssignments()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const removeAssignment = async () => {
-  await apiCall('delete', `/api/assignments/${deleteAssignmentId.value}`, null, isRemovingAssignment)
-  deleteAssignmentId.value = ''
-  await fetchAssignments()
+  if (!deleteAssignmentId.value) {
+    toast.error('Please select an assignment to remove')
+    return
+  }
+  try {
+    const response = await apiCall('delete', `/api/assignments/${deleteAssignmentId.value}`, null, isRemovingAssignment, true)
+    deleteAssignmentId.value = ''
+    await fetchAssignments()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const addStream = async () => {
-  await apiCall('post', '/api/streams', newStream.value, isAddingStream)
-  newStream.value = { platform: '', room_url: '', priority: 'normal' }
-  await fetchStreams()
+  if (!newStream.value.platform || !newStream.value.room_url) {
+    toast.error('Platform and stream URL are required')
+    return
+  }
+  try {
+    const response = await apiCall('post', '/api/streams', newStream.value, isAddingStream, true)
+    newStream.value = { platform: '', room_url: '', priority: 'normal' }
+    await fetchStreams()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const updateStream = async () => {
-  const data = { ...updateStreamData.value }
-  if (!data.room_url) delete data.room_url
-  await apiCall('put', `/api/streams/${data.id}`, data, isUpdatingStream)
-  updateStreamData.value = { id: '', room_url: '', priority: 'normal' }
-  await fetchStreams()
+  if (!updateStreamData.value.id) {
+    toast.error('Please select a stream to update')
+    return
+  }
+  const data = {
+    room_url: updateStreamData.value.room_url || undefined,
+    priority: updateStreamData.value.priority
+  }
+  try {
+    const response = await apiCall('put', `/api/streams/${updateStreamData.value.id}`, data, isUpdatingStream, true)
+    updateStreamData.value = { id: '', room_url: '', priority: 'normal' }
+    await fetchStreams()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const removeStream = async () => {
-  await apiCall('delete', `/api/streams/${deleteStreamId.value}`, null, isRemovingStream)
-  deleteStreamId.value = ''
-  await fetchStreams()
+  if (!deleteStreamId.value) {
+    toast.error('Please select a stream to remove')
+    return
+  }
+  try {
+    const response = await apiCall('delete', `/api/streams/${deleteStreamId.value}`, null, isRemovingStream, true)
+    deleteStreamId.value = ''
+    await fetchStreams()
+    await fetchAssignments()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const updateStreamStatus = async () => {
-  await apiCall('post', `/api/streams/${streamStatus.value.id}/status`, { status: streamStatus.value.status }, isUpdatingStreamStatus)
-  streamStatus.value = { id: '', status: 'online' }
-  await fetchStreams()
+  if (!streamStatus.value.id) {
+    toast.error('Please select a stream to update status')
+    return
+  }
+  try {
+    const response = await apiCall('post', `/api/streams/${streamStatus.value.id}/status`, { status: streamStatus.value.status }, isUpdatingStreamStatus, true)
+    streamStatus.value = { id: '', status: 'online' }
+    await fetchStreams()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const createNotification = async () => {
-  const data = { ...newNotification.value }
-  data.room_url = streams.value.find(s => s.id === data.stream_id)?.room_url || ''
-  delete data.stream_id
-  await apiCall('post', '/api/notifications', data, isCreatingNotification)
-  newNotification.value = { event_type: '', stream_id: '', message: '' }
-  await fetchNotifications()
+  if (!newNotification.value.event_type || !newNotification.value.stream_id || !newNotification.value.message) {
+    toast.error('All notification fields are required')
+    return
+  }
+  const data = {
+    event_type: newNotification.value.event_type,
+    room_url: streams.value.find(s => s.id === newNotification.value.stream_id)?.room_url || '',
+    message: newNotification.value.message
+  }
+  try {
+    const response = await apiCall('post', '/api/notifications', data, isCreatingNotification, true)
+    newNotification.value = { event_type: '', stream_id: '', message: '' }
+    await fetchNotifications()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const markNotificationRead = async () => {
-  await apiCall('put', `/api/notifications/${updateNotificationId.value}/read`, null, isMarkingNotificationRead)
-  updateNotificationId.value = ''
-  await fetchNotifications()
+  if (!updateNotificationId.value) {
+    toast.error('Please select a notification to mark as read')
+    return
+  }
+  try {
+    const response = await apiCall('put', `/api/notifications/${updateNotificationId.value}/read`, null, isMarkingNotificationRead, true)
+    updateNotificationId.value = ''
+    await fetchNotifications()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const removeNotification = async () => {
-  await apiCall('delete', `/api/notifications/${deleteNotificationId.value}`, null, isRemovingNotification)
-  deleteNotificationId.value = ''
-  await fetchNotifications()
+  if (!deleteNotificationId.value) {
+    toast.error('Please select a notification to remove')
+    return
+  }
+  try {
+    const response = await apiCall('delete', `/api/notifications/${deleteNotificationId.value}`, null, isRemovingNotification, true)
+    deleteNotificationId.value = ''
+    await fetchNotifications()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const addKeyword = async () => {
-  await apiCall('post', '/api/keywords', newKeyword.value, isAddingKeyword)
-  newKeyword.value = { keyword: '' }
-  await fetchKeywords()
+  if (!newKeyword.value.keyword) {
+    toast.error('Keyword is required')
+    return
+  }
+  try {
+    const response = await apiCall('post', '/api/keywords', newKeyword.value, isAddingKeyword, true)
+    newKeyword.value = { keyword: '' }
+    await fetchKeywords()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const updateKeyword = async () => {
-  await apiCall('put', `/api/keywords/${updateKeywordData.value.id}`, updateKeywordData.value, isUpdatingKeyword)
-  updateKeywordData.value = { id: '', keyword: '' }
-  await fetchKeywords()
+  if (!updateKeywordData.value.id || !updateKeywordData.value.keyword) {
+    toast.error('Please select a keyword and provide a new value')
+    return
+  }
+  try {
+    const response = await apiCall('put', `/api/keywords/${updateKeywordData.value.id}`, { keyword: updateKeywordData.value.keyword }, isUpdatingKeyword, true)
+    updateKeywordData.value = { id: '', keyword: '' }
+    await fetchKeywords()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const removeKeyword = async () => {
-  await apiCall('delete', `/api/keywords/${deleteKeywordId.value}`, null, isRemovingKeyword)
-  deleteKeywordId.value = ''
-  await fetchKeywords()
+  if (!deleteKeywordId.value) {
+    toast.error('Please select a keyword to remove')
+    return
+  }
+  try {
+    const response = await apiCall('delete', `/api/keywords/${deleteKeywordId.value}`, null, isRemovingKeyword, true)
+    deleteKeywordId.value = ''
+    await fetchKeywords()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const addObject = async () => {
-  await apiCall('post', '/api/objects', newObject.value, isAddingObject)
-  newObject.value = { object_name: '' }
-  await fetchObjects()
+  if (!newObject.value.object_name) {
+    toast.error('Object name is required')
+    return
+  }
+  try {
+    const response = await apiCall('post', '/api/objects', newObject.value, isAddingObject, true)
+    newObject.value = { object_name: '' }
+    await fetchObjects()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const updateObject = async () => {
-  await apiCall('put', `/api/objects/${updateObjectData.value.id}`, updateObjectData.value, isUpdatingObject)
-  updateObjectData.value = { id: '', object_name: '' }
-  await fetchObjects()
+  if (!updateObjectData.value.id || !updateObjectData.value.object_name) {
+    toast.error('Please select an object and provide a new name')
+    return
+  }
+  try {
+    const response = await apiCall('put', `/api/objects/${updateObjectData.value.id}`, { object_name: updateObjectData.value.object_name }, isUpdatingObject, true)
+    updateObjectData.value = { id: '', object_name: '' }
+    await fetchObjects()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const removeObject = async () => {
-  await apiCall('delete', `/api/objects/${deleteObjectId.value}`, null, isRemovingObject)
-  deleteObjectId.value = ''
-  await fetchObjects()
+  if (!deleteObjectId.value) {
+    toast.error('Please select an object to remove')
+    return
+  }
+  try {
+    const response = await apiCall('delete', `/api/objects/${deleteObjectId.value}`, null, isRemovingObject, true)
+    deleteObjectId.value = ''
+    await fetchObjects()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const controlDetection = async () => {
-  const data = { ...detectionData.value, stop: detectionData.value.stop === 'true' }
-  await apiCall('post', '/api/trigger-detection', data, isControllingDetection)
-  detectionData.value = { stream_id: '', stop: 'false' }
-  await fetchStreams()
+  if (!detectionData.value.stream_id) {
+    toast.error('Please select a stream for detection')
+    return
+  }
+  try {
+    const response = await apiCall('post', '/api/trigger-detection', {
+      stream_id: detectionData.value.stream_id,
+      stop: detectionData.value.stop === 'true'
+    }, isControllingDetection, true)
+    detectionData.value = { stream_id: '', stop: 'false' }
+    await fetchStreams()
+    return response
+  } catch (error) {
+    // Error handled in apiCall
+  }
 }
 
 const showLogoutAnimation = ref(false)
@@ -900,87 +997,92 @@ const logoutIcon = ref(null)
 const logoutMessage = ref(null)
 const logoutSpinner = ref(null)
 
-const playLogoutAnimation = () => {
+const playLogoutAnimation = async () => {
   showLogoutAnimation.value = true
   
-  nextTick(() => {
-    if (logoutAnimationContainer.value) {
-      anime({
-        targets: logoutAnimationContainer.value,
-        opacity: [0, 1],
-        scale: [0.8, 1],
-        duration: 600,
-        easing: 'easeOutCubic'
-      })
-    }
-    
-    if (logoutIcon.value) {
-      anime({
-        targets: logoutIcon.value,
-        scale: [0, 1],
-        opacity: [0, 1],
-        duration: 500,
-        easing: 'easeOutBack'
-      })
-    }
-    
-    if (logoutMessage.value) {
-      anime({
-        targets: logoutMessage.value,
-        opacity: [0, 1],
-        translateY: [20, 0],
-        delay: 200,
-        duration: 400,
-        easing: 'easeOutQuad'
-      })
-    }
-    
-    if (logoutSpinner.value) {
-      const spinnerCircles = logoutSpinner.value.querySelectorAll('.spinner-circle')
-      anime({
-        targets: spinnerCircles,
-        scale: [0, 1],
-        opacity: [0, 1],
-        delay: anime.stagger(50),
-        duration: 400,
-        easing: 'easeOutExpo',
-        complete: () => {
-          if (logoutSpinner.value) {
-            anime({
-              targets: logoutSpinner.value,
-              rotate: '360deg',
-              duration: 1500,
-              loop: true,
-              easing: 'linear'
-            })
-          }
+  await nextTick()
+  
+  if (logoutAnimationContainer.value) {
+    anime({
+      targets: logoutAnimationContainer.value,
+      opacity: [0, 1],
+      scale: [0.8, 1],
+      duration: 600,
+      easing: 'easeOutCubic'
+    })
+  }
+  
+  if (logoutIcon.value) {
+    anime({
+      targets: logoutIcon.value,
+      scale: [0, 1],
+      opacity: [0, 1],
+      duration: 500,
+      easing: 'easeOutBack'
+    })
+  }
+  
+  if (logoutMessage.value) {
+    anime({
+      targets: logoutMessage.value,
+      opacity: [0, 1],
+      translateY: [20, 0],
+      delay: 200,
+      duration: 400,
+      easing: 'easeOutQuad'
+    })
+  }
+  
+  if (logoutSpinner.value) {
+    const spinnerCircles = logoutSpinner.value.querySelectorAll('.spinner-circle')
+    anime({
+      targets: spinnerCircles,
+      scale: [0, 1],
+      opacity: [0, 1],
+      delay: anime.stagger(50),
+      duration: 400,
+      easing: 'easeOutExpo',
+      complete: () => {
+        if (logoutSpinner.value) {
+          anime({
+            targets: logoutSpinner.value,
+            rotate: '360deg',
+            duration: 1500,
+            loop: true,
+            easing: 'linear'
+          })
         }
-      })
-    }
-    
-    setTimeout(() => {
-      completeLogout()
-    }, 2000)
-  })
+      }
+    })
+  }
+  
+  setTimeout(() => {
+    completeLogout()
+  }, 2000)
 }
 
-const completeLogout = () => {
-  anime({
-    targets: logoutAnimationContainer.value,
-    opacity: 0,
-    scale: 0.8,
-    duration: 400,
-    easing: 'easeInQuad',
-    complete: () => {
-      showLogoutAnimation.value = false
-      emit('logout')
-      localStorage.removeItem('userSettings')
-      window.location.href = '/dashboard'
-    }
-  })
+const completeLogout = async () => {
+  try {
+    await apiCall('post', '/api/logout', null, null, false)
+    anime({
+      targets: logoutAnimationContainer.value,
+      opacity: 0,
+      scale: 0.8,
+      duration: 400,
+      easing: 'easeInQuad',
+      complete: () => {
+        showLogoutAnimation.value = false
+        emit('logout')
+        localStorage.removeItem('userSettings')
+        window.location.href = '/dashboard'
+      }
+    })
+  } catch (error) {
+    toast.error('Failed to logout. Please try again.')
+    showLogoutAnimation.value = false
+  }
 }
 </script>
-
 <style scoped>
 @import '../styles/shared.css';
 
@@ -1381,7 +1483,6 @@ select {
   justify-content: flex-end;
 }
 
-/* Modal transitions */
 .modal-fade-enter-active,
 .modal-fade-leave-active {
   transition: opacity 0.3s ease;
@@ -1392,7 +1493,6 @@ select {
   opacity: 0;
 }
 
-/* Logout Animation Styles */
 .logout-animation-overlay {
   position: fixed;
   top: 0;
@@ -1484,7 +1584,6 @@ select {
   transform: translateY(20px);
 }
 
-/* Toast styles */
 :deep(.Vue-Toastification__toast--success) {
   background-color: var(--primary-color);
   color: white;

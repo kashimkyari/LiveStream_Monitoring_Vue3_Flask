@@ -159,6 +159,8 @@ def check_session():
         db.session.rollback()
         return jsonify({"isLoggedIn": False, "message": "Server error"}), 500
 
+        
+
 # --------------------------------------------------------------------
 # Registration and Account Management Endpoints
 # --------------------------------------------------------------------
