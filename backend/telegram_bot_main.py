@@ -5,6 +5,7 @@ import signal
 import json
 import requests
 from datetime import datetime, timedelta
+from threading import Lock
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.constants import ParseMode
@@ -16,6 +17,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+logging.getLogger('telegram.ext').setLevel(logging.DEBUG)
 
 # Load environment variables
 load_dotenv()
@@ -28,31 +30,34 @@ TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '')
 SESSION_FILE = "user_sessions.json"
 
 # Conversation states
-LOGIN, PASSWORD, ADD_STREAM_URL, ADD_STREAM_PLATFORM, ADD_STREAM_AGENT, TRIGGER_STREAM, KEYWORD, OBJECT, ASSIGN_AGENT, UPDATE_PROFILE = range(10)
+LOGIN, PASSWORD, ADD_STREAM_URL, ADD_STREAM_PLATFORM, ADD_STREAM_AGENT, KEYWORD, OBJECT, ASSIGN_AGENT, UPDATE_PROFILE = range(9)
 
 # User session data
 user_sessions = {}
+session_lock = Lock()
 
 def load_sessions():
     """Load user sessions from file."""
     global user_sessions
-    try:
-        if os.path.exists(SESSION_FILE):
-            with open(SESSION_FILE, 'r') as f:
-                user_sessions = json.load(f)
-                user_sessions = {int(k): v for k, v in user_sessions.items()}
-                logger.info("Loaded user sessions from file")
-    except Exception as e:
-        logger.error(f"Error loading sessions: {str(e)}")
+    with session_lock:
+        try:
+            if os.path.exists(SESSION_FILE):
+                with open(SESSION_FILE, 'r') as f:
+                    user_sessions = json.load(f)
+                    user_sessions = {int(k): v for k, v in user_sessions.items()}
+                    logger.info("Loaded user sessions from file")
+        except Exception as e:
+            logger.error(f"Error loading sessions: {str(e)}")
 
 def save_sessions():
     """Save user sessions to file."""
-    try:
-        with open(SESSION_FILE, 'w') as f:
-            json.dump(user_sessions, f)
-        logger.info("Saved user sessions to file")
-    except Exception as e:
-        logger.error(f"Error saving sessions: {str(e)}")
+    with session_lock:
+        try:
+            with open(SESSION_FILE, 'w') as f:
+                json.dump(user_sessions, f)
+            logger.info("Saved user sessions to file")
+        except Exception as e:
+            logger.error(f"Error saving sessions: {str(e)}")
 
 # Load sessions at startup
 load_sessions()
@@ -134,6 +139,11 @@ async def api_request(method, endpoint, data=None, session_id=None, params=None)
         else:
             return {'error': 'Invalid HTTP method'}
         
+        # Extract session cookie if present
+        session_cookie = response.cookies.get('session')
+        if session_cookie:
+            logger.debug(f"Received session cookie: {session_cookie}")
+        
         if response.status_code >= 200 and response.status_code < 300:
             try:
                 return response.json()
@@ -163,6 +173,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if session.get('logged_in', False):
         # Verify session with API
         response = await api_request('get', 'api/session', session_id=session.get('session_id'))
+        logger.debug(f"Session check response: {response}")
         if response.get('isLoggedIn', False):
             await update.message.reply_text(
                 f"👋 Welcome back, {user.first_name}! You're already logged in as {response['user']['username']} ({response['user']['role']}).\n\n"
@@ -295,7 +306,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     text = update.message.text
     session = user_sessions.get(user_id, {})
     
+    # Check if user is in a conversation state
+    if session.get('conversation_state') in ['LOGIN', 'PASSWORD']:
+        logger.debug(f"User {user_id} is in {session.get('conversation_state')} state, ignoring message: {text}")
+        return
+    
     if not session.get('logged_in', False):
+        logger.debug(f"User {user_id} not logged in, prompting login")
         await update.message.reply_text(
             "Please login first. Use /start to begin.",
             reply_markup=InlineKeyboardMarkup([
@@ -359,12 +376,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return OBJECT
     # Admin submenu
     elif text == "👤 Create Agent" and role == "admin":
+        user_sessions[user_id]['action'] = "create_agent"
+        save_sessions()
         await update.message.reply_text(
             "Enter the new agent's username, password, and email (format: username:password:email):",
             reply_markup=get_back_keyboard()
         )
-        return ADD_STREAM_AGENT  # Reusing state for agent creation
+        return ADD_STREAM_AGENT
     elif text == "✏️ Update Agent" and role == "admin":
+        user_sessions[user_id]['action'] = "update_agent"
+        save_sessions()
         response = await api_request('get', 'api/agents', session_id=session.get('session_id'))
         if 'error' in response:
             await update.message.reply_text(f"Failed to fetch agents: {response['error']}")
@@ -375,8 +396,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"Enter the agent ID and updated details (format: id:username:password:email:receive_updates):\n{agent_list}",
             reply_markup=get_back_keyboard()
         )
-        return ADD_STREAM_AGENT  # Reusing state for agent update
+        return ADD_STREAM_AGENT
     elif text == "🗑️ Delete Agent" and role == "admin":
+        user_sessions[user_id]['action'] = "delete_agent"
+        save_sessions()
         response = await api_request('get', 'api/agents', session_id=session.get('session_id'))
         if 'error' in response:
             await update.message.reply_text(f"Failed to fetch agents: {response['error']}")
@@ -387,7 +410,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"Enter the agent ID to delete:\n{agent_list}",
             reply_markup=get_back_keyboard()
         )
-        return ADD_STREAM_AGENT  # Reusing state for agent deletion
+        return ADD_STREAM_AGENT
     # Analytics submenu
     elif text == "📈 Agent Performance" and role == "agent":
         await show_agent_performance(update, user_id, session.get('session_id'))
@@ -408,11 +431,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
-    session = user_sessions.get(user_id, {})
+    session = user_sessions.get(user_id, {'logged_in': False})
+    
+    logger.debug(f"Callback query: {query.data}, User ID: {user_id}, Session: {session}")
     
     if query.data == "login":
         if session.get('logged_in', False):
             response = await api_request('get', 'api/session', session_id=session.get('session_id'))
+            logger.debug(f"Session check response: {response}")
             if response.get('isLoggedIn', False):
                 await query.edit_message_text(
                     f"You're already logged in as {response['user']['username']} ({response['user']['role']})! Use the menu to continue.",
@@ -420,9 +446,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 )
                 return ConversationHandler.END
         
+        # Clear any existing conversation data to avoid conflicts
+        context.user_data.clear()
+        user_sessions[user_id] = {'logged_in': False}
+        save_sessions()
+        
         await query.edit_message_text(
             "Please enter your username or email to login:"
         )
+        logger.info(f"User {user_id} entered LOGIN state")
         return LOGIN
     
     elif query.data.startswith("stream_"):
@@ -483,19 +515,27 @@ async def login_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = update.effective_user.id
     message = update.message.text
     
+    logger.debug(f"Login conversation - User ID: {user_id}, Message: {message}")
+    
+    # Store username in session and context
     user_sessions[user_id]['username'] = message
+    user_sessions[user_id]['conversation_state'] = 'PASSWORD'
+    context.user_data['username'] = message
     save_sessions()
     
     await update.message.reply_text(
         "Please enter your password:"
     )
+    logger.info(f"User {user_id} transitioned to PASSWORD state")
     return PASSWORD
 
 async def password_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle password input."""
     user_id = update.effective_user.id
     password = update.message.text
-    username = user_sessions[user_id].get('username', '')
+    username = user_sessions.get(user_id, {}).get('username', context.user_data.get('username', ''))
+    
+    logger.debug(f"Password handler - User ID: {user_id}, Username: {username}")
     
     # Delete password message for security
     try:
@@ -503,29 +543,46 @@ async def password_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     except Exception as e:
         logger.error(f"Error deleting password message: {str(e)}")
     
-    data = {
-        'username': username,
-        'password': password
-    }
-    response = await api_request('post', 'api/login', data)
-    
-    if 'error' in response or response.get('message') != "Login successful":
+    if not username:
+        logger.error(f"No username found for user {user_id}")
         await update.message.reply_text(
-            f"Login failed: {response.get('error', response.get('message', 'Invalid credentials'))}\nPlease try again.",
+            "Error: No username provided. Please start the login process again.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔑 Try Again", callback_data="login")]
             ])
         )
         return ConversationHandler.END
     
-    # Store session details (assuming session_id is in cookies; adjust if API returns it differently)
+    data = {
+        'username': username,
+        'password': password
+    }
+    response = await api_request('post', 'api/login', data)
+    
+    logger.debug(f"API login response: {response}")
+    
+    if 'error' in response or response.get('message') != "Login successful":
+        error_message = response.get('error', response.get('message', 'Invalid credentials'))
+        logger.error(f"Login failed for user {user_id}: {error_message}")
+        await update.message.reply_text(
+            f"Login failed: {error_message}\nPlease try again.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔑 Try Again", callback_data="login")]
+            ])
+        )
+        # Clear session data
+        user_sessions[user_id] = {'logged_in': False}
+        save_sessions()
+        return ConversationHandler.END
+    
+    # Store session details
     user_sessions[user_id] = {
         'logged_in': True,
         'username': response.get('username'),
         'role': response.get('role'),
         'telegram_username': response.get('telegram_username'),
         'telegram_chat_id': response.get('telegram_chat_id'),
-        'session_id': str(update.message.chat_id)  # Placeholder; replace with actual session cookie if available
+        'session_id': str(update.message.chat_id)  # Placeholder; replace with actual session cookie
     }
     save_sessions()
     
@@ -533,6 +590,13 @@ async def password_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         f"✅ Login successful! Welcome, {response.get('username')} ({response.get('role')}). Use the menu to manage your streams and notifications.",
         reply_markup=get_main_keyboard(response.get('role'))
     )
+    logger.info(f"User {user_id} logged in successfully as {response.get('username')}")
+    
+    # Clear conversation data
+    context.user_data.clear()
+    user_sessions[user_id].pop('conversation_state', None)
+    save_sessions()
+    
     return ConversationHandler.END
 
 async def add_stream_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -645,6 +709,8 @@ async def add_stream_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             "Returned to main menu.",
             reply_markup=get_main_keyboard(session.get('role', 'agent'))
         )
+        user_sessions[user_id].pop('action', None)
+        save_sessions()
         return ConversationHandler.END
     
     # Handle agent creation
@@ -1401,6 +1467,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         "Operation cancelled.",
         reply_markup=get_main_keyboard(session.get('role', 'agent'))
     )
+    user_sessions[user_id].pop('conversation_state', None)
+    user_sessions[user_id].pop('action', None)
+    save_sessions()
     return ConversationHandler.END
 
 async def main():
@@ -1431,7 +1500,12 @@ async def main():
                 ASSIGN_AGENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, assign_agent)],
                 UPDATE_PROFILE: [MessageHandler(filters.TEXT & ~filters.COMMAND, update_profile_handler)],
             },
-            fallbacks=[CommandHandler("cancel", cancel)]
+            fallbacks=[
+                CommandHandler("cancel", cancel),
+                MessageHandler(filters.Regex("^🔙 Back to Main Menu$"), cancel)
+            ],
+            allow_reentry=True,
+            conversation_timeout=300
         )
 
         # Register handlers
