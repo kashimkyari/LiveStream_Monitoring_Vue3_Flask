@@ -22,7 +22,7 @@ load_dotenv()
 
 # API Configuration
 API_BASE_URL = os.getenv('API_BASE_URL', 'https://monitor-backend.jetcamstudio.com:5000')
-TELEGRAM_TOKEN = os.getenv('API_ADMIN_TOKEN', '')
+API_ADMIN_TOKEN = os.getenv('TELEGRAM_TOKEN', '')
 
 # Conversation states
 REGISTER, LOGIN, PASSWORD, EMAIL, CHATID, STREAM_URL, KEYWORD, OBJECT_NAME, TRIGGER_MONITORING = range(9)
@@ -110,12 +110,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handler for the /start command."""
     user = update.effective_user
     user_id = user.id
+    chat_id = update.message.chat_id
     
     # Reset session data for this user
     user_sessions[user_id] = {'registered': False, 'logged_in': False}
     
     welcome_message = (
         f"👋 Welcome, {user.first_name}! I'm your LiveStream Monitoring Bot.\n\n"
+        f"Your chat ID is: `{chat_id}`\n"
+        "Use this ID to set up notifications in the monitoring system.\n\n"
         "I can help you monitor streams, detect content, and get notifications when events occur.\n\n"
     )
     
@@ -127,7 +130,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     await update.message.reply_text(
         welcome_message + "Please login or register to access all features:", 
-        reply_markup=login_keyboard
+        reply_markup=login_keyboard,
+        parse_mode=ParseMode.MARKDOWN
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
