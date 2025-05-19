@@ -6,8 +6,8 @@ This module provides scraping functions for Chaturbate and Stripchat streams.
 The updated Chaturbate scraper uses a POST request to retrieve the HLS URL 
 via free proxies. SSL verification is disabled due to known proxy issues.
 """
-import gevent.monkey
-gevent.monkey.patch_all()  # Apply at the start of the application
+# import gevent.monkey
+# gevent.monkey.patch_all()  # Apply at the start of the application
 from asyncio import as_completed
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC

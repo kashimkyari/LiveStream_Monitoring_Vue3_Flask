@@ -1,26 +1,13 @@
-# monitoring.py - Simplified Version without FFmpeg for Audio Detection
 import os
 import time
 import logging
 import numpy as np
-import json
-import base64
-import cv2
-import requests
 from datetime import datetime, timedelta
-import io
-from PIL import Image
-import whisper  # Updated import
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-import torch
 import av
-import re
-import librosa
-from urllib.parse import urlparse
 from flask import current_app
 from models import (
     ChatKeyword, FlaggedObject, DetectionLog, Stream, User, Assignment,
-    ChaturbateStream, StripchatStream, Log
+    ChaturbateStream, StripchatStream
 )
 from extensions import db
 from utils.notifications import emit_notification, emit_stream_update
@@ -28,6 +15,9 @@ from sqlalchemy.orm import joinedload
 import gevent
 from gevent.pool import Pool
 from gevent.lock import Semaphore
+from audio_processing import process_audio_segment, log_audio_detection
+from video_processing import process_video_frame, log_video_detection
+from chat_processing import fetch_chat_messages, process_chat_messages, log_chat_detection
 
 # Configure logging
 logging.basicConfig(
@@ -36,10 +26,6 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
-
-torch.backends.nnpack.enabled = False
-
-_app = None
 
 # =============== ENVIRONMENT VARIABLE CONFIGURATION ===============
 WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL_SIZE", "base")
@@ -57,21 +43,13 @@ _whisper_model = None
 _whisper_lock = Semaphore()
 _yolo_model = None
 _yolo_lock = Semaphore()
-_sentiment_analyzer = SentimentIntensityAnalyzer()
-
-# Tracking variables
+_sentiment_analyzer = None
 last_visual_alerts = {}
 last_chat_alerts = {}
-
-# Stream processing buffers
 stream_processors = {}
-
-# Agent cache for usernames
 agent_cache = {}
 all_agents_fetched = False
-
-# Gevent thread pool
-gevent_pool = Pool(5)  # Max 5 workers
+gevent_pool = Pool(5)
 
 # =============== MODEL LOADING ===============
 def load_whisper_model():
@@ -83,6 +61,7 @@ def load_whisper_model():
     with _whisper_lock:
         if _whisper_model is None:
             try:
+                import whisper
                 logger.info(f"Loading Whisper model: {WHISPER_MODEL_SIZE}")
                 _whisper_model = whisper.load_model(WHISPER_MODEL_SIZE)
                 logger.info(f"Whisper model '{WHISPER_MODEL_SIZE}' loaded successfully")
@@ -108,7 +87,7 @@ def load_yolo_model():
         logger.info("Video monitoring disabled; skipping YOLO model loading")
         return None
     global _yolo_model
-    with _whisper_lock:
+    with _yolo_lock:
         if _yolo_model is None:
             try:
                 from ultralytics import YOLO
@@ -119,6 +98,14 @@ def load_yolo_model():
                 logger.error(f"Error loading YOLO model: {e}")
                 _yolo_model = None
     return _yolo_model
+
+def load_sentiment_analyzer():
+    """Load the VADER sentiment analyzer"""
+    global _sentiment_analyzer
+    if _sentiment_analyzer is None:
+        from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+        _sentiment_analyzer = SentimentIntensityAnalyzer()
+    return _sentiment_analyzer
 
 # =============== DATA RETRIEVAL FUNCTIONS ===============
 def refresh_flagged_keywords():
@@ -196,7 +183,7 @@ def fetch_agent_username(agent_id):
             return agent_cache[agent_id]
 
 def get_stream_assignment(stream_url):
-    """Get assignment info for a stream, mimicking /api/assignments endpoint logic"""
+    """Get assignment info for a stream"""
     with current_app.app_context():
         stream = Stream.query.filter_by(room_url=stream_url).first()
         if not stream:
@@ -228,12 +215,11 @@ def get_stream_assignment(stream_url):
         fetch_agent_username(agent_id)
         return assignment.id, agent_id
 
-# =============== AUDIO AND VIDEO PROCESSING ===============
+# =============== MAIN PROCESSING LOOP ===============
 def process_combined_detection(app, stream_url, cancel_event):
     """Main monitoring loop processing audio, video, and chat from M3U8 stream"""
     with app.app_context():
         logger.info(f"Starting monitoring for {stream_url}")
-        # Get stream object to check status
         stream = Stream.query.filter_by(room_url=stream_url).first()
         if not stream:
             cb_stream = ChaturbateStream.query.filter_by(chaturbate_m3u8_url=stream_url).first()
@@ -249,7 +235,6 @@ def process_combined_detection(app, stream_url, cancel_event):
             return
 
         while not cancel_event.is_set():
-            # Check stream status
             if stream.status == 'offline':
                 logger.info(f"Stopping monitoring for offline stream: {stream.id}")
                 stop_monitoring(stream)
@@ -299,324 +284,14 @@ def process_combined_detection(app, stream_url, cancel_event):
                     if ENABLE_CHAT_MONITORING:
                         current_time = time.time()
                         if last_chat_process_time is None or current_time - last_chat_process_time >= 30:
-                            messages = fetch_chat_messages(stream_url)
-                            chat_detections = process_chat_messages(messages, stream_url)
-                            log_chat_detection(chat_detections, stream_url)
+                            messages = fetch_chat_messages(stream.room_url)
+                            chat_detections = process_chat_messages(messages, stream.room_url)
+                            log_chat_detection(chat_detections, stream.room_url)
                             last_chat_process_time = current_time
             except Exception as e:
                 logger.error(f"Stream error: {e}")
                 gevent.sleep(10)
         logger.info(f"Stopped monitoring {stream_url}")
-
-def process_audio_segment(audio_data, original_sample_rate, stream_url):
-    """Process an audio segment for transcription and analysis"""
-    if not ENABLE_AUDIO_MONITORING:
-        logger.info(f"Audio monitoring disabled for {stream_url}")
-        return []
-    model = load_whisper_model()
-    if model is None:
-        logger.warning(f"Skipping audio processing for {stream_url} due to unavailable Whisper model")
-        return []
-    try:
-        target_sr = 16000
-        if original_sample_rate != target_sr:
-            audio_data = librosa.resample(audio_data, orig_sr=original_sample_rate, target_sr=target_sr)
-        logger.info(f"Transcribing audio for {stream_url}")
-        result = model.transcribe(audio_data, fp16=False)
-        transcript = result.get("text", "").strip()
-        logger.info(f"Transcription for {stream_url}: {transcript[:100]}...")
-        if not transcript:
-            return []
-        keywords = refresh_flagged_keywords()
-        detected_keywords = [kw for kw in keywords if kw in transcript.lower()]
-        if detected_keywords:
-            detection = {
-                "timestamp": datetime.now().isoformat(),
-                "transcript": transcript,
-                "keyword": detected_keywords
-            }
-            return [detection]
-        return []
-    except Exception as e:
-        logger.error(f"Error processing audio for {stream_url}: {e}")
-        return []
-
-def process_video_frame(frame, stream_url):
-    """Detect objects in video frame"""
-    if not ENABLE_VIDEO_MONITORING:
-        logger.info(f"Video monitoring disabled for {stream_url}")
-        return []
-    model = load_yolo_model()
-    if not model:
-        return []
-    flagged = refresh_flagged_objects()
-    if not flagged:
-        return []
-    try:
-        results = model(frame)
-        detections = []
-        now = datetime.now()
-        for result in results:
-            for box in result.boxes:
-                bbox = box.xyxy[0].cpu().numpy()
-                conf = float(box.conf[0].cpu().numpy())
-                cls_id = int(box.cls[0].cpu().numpy())
-                cls_name = model.names.get(cls_id, str(cls_id)).lower()
-                if cls_name not in flagged or conf < flagged[cls_name]:
-                    continue
-                if cls_name in last_visual_alerts.get(stream_url, {}):
-                    last_alert = last_visual_alerts[stream_url][cls_name]
-                    if (now - last_alert).total_seconds() < VISUAL_ALERT_COOLDOWN:
-                        continue
-                last_visual_alerts.setdefault(stream_url, {})[cls_name] = now
-                detections.append({
-                    "class": cls_name,
-                    "confidence": conf,
-                    "bbox": bbox.tolist(),
-                    "timestamp": now.isoformat()
-                })
-        return detections
-    except Exception as e:
-        logger.error(f"Video processing error: {e}")
-        return []
-
-def annotate_frame(frame, detections):
-    """Draw detection boxes on frame"""
-    annotated = frame.copy()
-    for det in detections:
-        x1, y1, x2, y2 = map(int, det["bbox"])
-        label = f'{det["class"]} {det["confidence"]*100:.1f}%'
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 0, 255), 2)
-        cv2.putText(annotated, label, (x1, y1-10),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-    return annotated
-
-def log_audio_detection(detection, stream_url):
-    """Log audio detections to database"""
-    if not ENABLE_AUDIO_MONITORING:
-        return
-    platform, streamer = get_stream_info(stream_url)
-    assignment_id, agent_id = get_stream_assignment(stream_url)
-    details = {
-        "keyword": detection.get("keyword"),
-        "transcript": detection.get("transcript"),
-        "timestamp": detection.get("timestamp"),
-        "streamer_name": streamer,
-        "platform": platform,
-        "assigned_agent": agent_id
-    }
-    with current_app.app_context():
-        log_entry = DetectionLog(
-            room_url=stream_url,
-            event_type="audio_detection",
-            details=details,
-            timestamp=datetime.now(),
-            assigned_agent=agent_id,
-            assignment_id=assignment_id,
-            read=False
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-        notification_data = {
-            "id": log_entry.id,
-            "event_type": log_entry.event_type,
-            "timestamp": log_entry.timestamp.isoformat(),
-            "details": log_entry.details,
-            "read": log_entry.read,
-            "room_url": log_entry.room_url,
-            "streamer": streamer,
-            "platform": platform,
-            "assigned_agent": agent_cache.get(agent_id, "Unassigned") if agent_id else "Unassigned"
-        }
-        emit_notification(notification_data)
-
-def log_video_detection(detections, frame, stream_url):
-    """Log video detections with annotated frame"""
-    if not ENABLE_VIDEO_MONITORING or not detections:
-        return
-    platform, streamer = get_stream_info(stream_url)
-    assignment_id, agent_id = get_stream_assignment(stream_url)
-    annotated = annotate_frame(frame, detections)
-    success, buffer = cv2.imencode('.jpg', annotated)
-    if not success:
-        logger.error("Frame encoding failed")
-        return
-    image_b64 = base64.b64encode(buffer).decode('utf-8')
-    details = {
-        "detections": detections,
-        "timestamp": datetime.now().isoformat(),
-        "streamer_name": streamer,
-        "platform": platform,
-        "annotated_image": image_b64,
-        "assigned_agent": agent_id
-    }
-    with current_app.app_context():
-        log_entry = DetectionLog(
-            room_url=stream_url,
-            event_type="object_detection",
-            details=details,
-            detection_image=buffer.tobytes(),
-            timestamp=datetime.now(),
-            assigned_agent=agent_id,
-            assignment_id=assignment_id,
-            read=False
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-        notification_data = {
-            "id": log_entry.id,
-            "event_type": log_entry.event_type,
-            "timestamp": log_entry.timestamp.isoformat(),
-            "details": log_entry.details,
-            "read": log_entry.read,
-            "room_url": log_entry.room_url,
-            "streamer": streamer,
-            "platform": platform,
-            "assigned_agent": agent_cache.get(agent_id, "Unassigned") if agent_id else "Unassigned"
-        }
-        emit_notification(notification_data)
-
-# =============== CHAT PROCESSING ===============
-def fetch_chat_messages(stream_url):
-    """Fetch chat messages based on platform"""
-    if not ENABLE_CHAT_MONITORING:
-        logger.info(f"Chat monitoring disabled for {stream_url}")
-        return []
-    platform, streamer = get_stream_info(stream_url)
-    try:
-        if platform == "chaturbate":
-            return fetch_chaturbate_chat(stream_url, streamer)
-        elif platform == "stripchat":
-            return fetch_stripchat_chat(stream_url, streamer)
-        else:
-            logger.warning(f"Unsupported platform {platform}")
-            return []
-    except Exception as e:
-        logger.error(f"Chat fetch error: {e}")
-        return []
-
-def fetch_chaturbate_chat(stream_url, streamer):
-    """Fetch Chaturbate chat messages"""
-    try:
-        from scraping import fetch_chaturbate_chat_history
-        room_slug = re.search(r'chaturbate\.com/([^/]+)', stream_url).group(1)
-        chat_data = fetch_chaturbate_chat_history(room_slug)
-        messages = []
-        for msg in chat_data:
-            msg_data = msg.get("RoomMessageTopic#RoomMessageTopic:0YJW2WC", {})
-            if msg_data:
-                messages.append({
-                    "username": msg_data.get("from_user", {}).get("username", "unknown"),
-                    "message": msg_data.get("message", ""),
-                    "timestamp": datetime.now().isoformat()
-                })
-        return messages
-    except Exception as e:
-        logger.error(f"Chaturbate chat error: {e}")
-        return []
-
-def fetch_stripchat_chat(stream_url, streamer):
-    """Fetch Stripchat chat messages"""
-    try:
-        from scraping import fetch_stripchat_chat_history
-        chat_data = fetch_stripchat_chat_history(stream_url)
-        return [{
-            "username": msg.get("username", "unknown"),
-            "message": msg.get("text", ""),
-            "timestamp": msg.get("timestamp", datetime.now().isoformat())
-        } for msg in chat_data]
-    except Exception as e:
-        logger.error(f"Stripchat chat error: {e}")
-        return []
-
-def process_chat_messages(messages, stream_url):
-    """Analyze chat messages for keywords and sentiment"""
-    if not ENABLE_CHAT_MONITORING:
-        logger.info(f"Chat monitoring disabled for {stream_url}")
-        return []
-    keywords = refresh_flagged_keywords()
-    if not keywords:
-        return []
-    detected = []
-    now = datetime.now()
-    for msg in messages:
-        text = msg.get("message", "").lower()
-        user = msg.get("username", "unknown")
-        timestamp = msg.get("timestamp", now.isoformat())
-        for keyword in keywords:
-            if keyword in text:
-                if keyword in last_chat_alerts.get(stream_url, {}):
-                    last_alert = last_chat_alerts[stream_url][keyword]
-                    if (now - last_alert).total_seconds() < CHAT_ALERT_COOLDOWN:
-                        continue
-                last_chat_alerts.setdefault(stream_url, {})[keyword] = now
-                detected.append({
-                    "type": "keyword",
-                    "keyword": keyword,
-                    "message": text,
-                    "username": user,
-                    "timestamp": timestamp
-                })
-        sentiment = _sentiment_analyzer.polarity_scores(text)
-        if sentiment['compound'] <= NEGATIVE_SENTIMENT_THRESHOLD:
-            sentiment_key = f"_negative_sentiment_{user}"
-            if sentiment_key in last_chat_alerts.get(stream_url, {}):
-                last_alert = last_chat_alerts[stream_url][sentiment_key]
-                if (now - last_alert).total_seconds() < CHAT_ALERT_COOLDOWN:
-                    continue
-            last_chat_alerts.setdefault(stream_url, {})[sentiment_key] = now
-            detected.append({
-                "type": "sentiment",
-                "message": text,
-                "username": user,
-                "sentiment_score": sentiment['compound'],
-                "timestamp": timestamp
-            })
-    return detected
-
-def log_chat_detection(detections, stream_url):
-    """Log chat detections grouped by type"""
-    if not ENABLE_CHAT_MONITORING or not detections:
-        return
-    platform, streamer = get_stream_info(stream_url)
-    assignment_id, agent_id = get_stream_assignment(stream_url)
-    grouped = {}
-    for det in detections:
-        type_key = det.get("type", "unknown")
-        grouped.setdefault(type_key, []).append(det)
-    for type_key, group in grouped.items():
-        details = {
-            "detections": group,
-            "timestamp": datetime.now().isoformat(),
-            "streamer_name": streamer,
-            "platform": platform,
-            "assigned_agent": agent_id
-        }
-        event_type = "chat_sentiment_detection" if type_key == "sentiment" else "chat_detection"
-        with current_app.app_context():
-            log_entry = DetectionLog(
-                room_url=stream_url,
-                event_type=event_type,
-                details=details,
-                timestamp=datetime.now(),
-                assigned_agent=agent_id,
-                assignment_id=assignment_id,
-                read=False
-            )
-            db.session.add(log_entry)
-            db.session.commit()
-            notification_data = {
-                "id": log_entry.id,
-                "event_type": log_entry.event_type,
-                "timestamp": log_entry.timestamp.isoformat(),
-                "details": log_entry.details,
-                "read": log_entry.read,
-                "room_url": log_entry.room_url,
-                "streamer": streamer,
-                "platform": platform,
-                "assigned_agent": agent_cache.get(agent_id, "Unassigned") if agent_id else "Unassigned"
-            }
-            emit_notification(notification_data)
 
 # =============== MAIN MONITORING CONTROL ===============
 def start_monitoring(stream):
@@ -627,7 +302,6 @@ def start_monitoring(stream):
     if not CONTINUOUS_MONITORING:
         logger.info(f"Continuous monitoring disabled; skipping stream {stream.room_url}")
         return False
-    # Check if stream is offline
     if stream.status == 'offline':
         logger.info(f"Cannot start monitoring for offline stream: {stream.id}")
         return False
