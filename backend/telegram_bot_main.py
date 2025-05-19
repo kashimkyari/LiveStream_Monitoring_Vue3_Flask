@@ -4,8 +4,7 @@ import logging
 import signal
 import json
 import requests
-import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.constants import ParseMode
@@ -23,10 +22,10 @@ load_dotenv()
 
 # API Configuration
 API_BASE_URL = os.getenv('API_BASE_URL', 'https://monitor-backend.jetcamstudio.com:5000')
-API_ADMIN_TOKEN = os.getenv('API_ADMIN_TOKEN', '')
+API_ADMIN_TOKEN = os.getenv('TELEGRAM_TOKEN', '')
 
 # Conversation states
-REGISTER, LOGIN, PASSWORD, EMAIL, CHATID, STREAM_URL, KEYWORD, OBJECT_NAME = range(8)
+REGISTER, LOGIN, PASSWORD, EMAIL, CHATID, STREAM_URL, KEYWORD, OBJECT_NAME, TRIGGER_MONITORING = range(9)
 
 # User session data
 user_sessions = {}
@@ -212,7 +211,7 @@ async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         await update.message.reply_text("You were not logged in.")
 
-# Login and Registration Handlers
+# Conversation Handlers
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle button callbacks."""
     query = update.callback_query
@@ -259,9 +258,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Create control buttons
         control_buttons = []
         if response.get('active', False):
-            control_buttons.append(InlineKeyboardButton("⏹️ Stop Detection", callback_data=f"stop_{stream_id}"))
+            control_buttons.append(InlineKeyboardButton("⏹️ Stop Monitoring", callback_data=f"stop_{stream_id}"))
         else:
-            control_buttons.append(InlineKeyboardButton("▶️ Start Detection", callback_data=f"start_{stream_id}"))
+            control_buttons.append(InlineKeyboardButton("▶️ Start Monitoring", callback_data=f"start_{stream_id}"))
         
         status_message = (
             f"*Stream #{stream_id} Details*\n\n"
@@ -294,18 +293,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.edit_message_text("Please login first. Use /start to begin.")
             return ConversationHandler.END
         
-        # Trigger detection
+        # Trigger monitoring via API
         response = await api_request('post', 'trigger-detection', 
                                     data={'stream_id': int(stream_id), 'stop': action == "stop"},
                                     token=token)
         
         if 'error' in response:
-            await query.edit_message_text(f"Error controlling detection: {response['error']}")
+            await query.edit_message_text(f"Error controlling monitoring: {response['error']}")
             return ConversationHandler.END
         
         status = "stopped" if action == "stop" else "started"
         await query.edit_message_text(
-            f"Detection {status} successfully for Stream #{stream_id}.",
+            f"✅ Monitoring {status} successfully for Stream #{stream_id}.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back to Stream", callback_data=f"stream_{stream_id}")]
             ])
@@ -318,7 +317,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await show_achievements(query, user_id)
     
     elif query.data == "read_all_notifications":
-        # Mark all notifications as read
         session = user_sessions.get(user_id, {})
         token = session.get('token')
         
@@ -351,7 +349,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.edit_message_text("Please login first. Use /start to begin.")
             return ConversationHandler.END
         
-        # Mark notification as read
         response = await api_request('put', f'agent/notifications/{notification_id}/read', token=token)
         
         if 'error' in response:
@@ -692,14 +689,11 @@ async def show_achievements(query, user_id):
     if total_detections > 100:
         badges.append("💯 Century Club")
     
-    # Daily streak
-    streak_days = min(len(activity_timeline), 30)
-    
     achievements_text = (
         f"*Your Achievements*\n\n"
         f"👤 Level {level} Monitor\n"
         f"⭐ XP: {xp}/{next_level_xp} {progress_bar}\n"
-        f"🔥 Daily Streak: {streak_days} days\n\n"
+        f"🔥 Daily Streak: {min(len(activity_timeline), 30)} days\n\n"
         f"*Badges Earned:*\n"
     )
     
@@ -756,120 +750,38 @@ async def password_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         logger.error(f"Error deleting password message: {str(e)}")
     
     # Attempt login
-import os
-import asyncio
-import logging
-import signal
-from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-
-# Configure logging to match Flask app
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Load environment variables
-load_dotenv()
-
-# Define keyboard layouts
-def get_main_keyboard():
-    """Create the main menu keyboard."""
-    keyboard = [
-        ["📺 Check Stream Status", "🔔 Set Notifications"],
-        ["ℹ️ Help", "🆔 Get My ID"]
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handler for the /start command."""
-    user_name = update.effective_user.first_name
-    welcome_message = (
-        f"👋 Welcome, {user_name}! I'm your LiveStream Monitoring Bot.\n\n"
-        "I can help you monitor your streams and send notifications when status changes.\n\n"
-        "Use the buttons below to interact with me:"
-    )
-    await update.message.reply_text(welcome_message, reply_markup=get_main_keyboard())
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handler for the /help command."""
-    help_text = (
-        "🔹 *LiveStream Monitoring Bot Help* 🔹\n\n"
-        "*Commands:*\n"
-        "• /start - Start the bot and show main menu\n"
-        "• /help - Show this help message\n"
-        "• /getid - Get your chat ID for notifications\n\n"
-        "*Buttons:*\n"
-        "• 📺 Check Stream Status - View current stream status\n"
-        "• 🔔 Set Notifications - Configure your notification preferences\n"
-        "• ℹ️ Help - Show this help message\n"
-        "• 🆔 Get My ID - Get your chat ID for notifications"
-    )
-    await update.message.reply_text(help_text, parse_mode="Markdown")
-
-async def getid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handler for the /getid command."""
-    chat_id = update.message.chat_id
-    await update.message.reply_text(f"Your chat ID is: `{chat_id}`\n\nUse this ID to set up notifications in the monitoring system.", parse_mode="Markdown")
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle text messages and keyboard button clicks."""
-    text = update.message.text
+    data = {
+        'username': username,
+        'password': password
+    }
+    response = await api_request('post', 'login', data=data)
     
-    if text == "📺 Check Stream Status":
-        # This would connect to your monitoring system
+    if 'error' in response:
         await update.message.reply_text(
-            "🔄 Checking stream status...\n\n"
-            "This feature will connect to your monitoring system to show current stream status.",
+            f"Login failed: {response['error']}\nPlease try again.",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Refresh Status", callback_data="refresh_status")]
+                [InlineKeyboardButton("🔑 Try Again", callback_data="login")]
             ])
         )
+        return ConversationHandler.END
     
-    elif text == "🔔 Set Notifications":
-        # Notification settings
-        notification_keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Enable All", callback_data="enable_all")],
-            [InlineKeyboardButton("⚠️ Errors Only", callback_data="errors_only")],
-            [InlineKeyboardButton("❌ Disable All", callback_data="disable_all")]
-        ])
-        await update.message.reply_text(
-            "Choose your notification preferences:",
-            reply_markup=notification_keyboard
-        )
+    # Store token and mark as logged in
+    user_sessions[user_id]['token'] = response.get('token')
+    user_sessions[user_id]['logged_in'] = True
     
-    elif text == "ℹ️ Help":
-        await help_command(update, context)
-    
-    elif text == "🆔 Get My ID":
-        await getid(update, context)
-    
-    else:
-        await update.message.reply_text(
-            "Please use the menu buttons to interact with me.",
-            reply_markup=get_main_keyboard()
-        )
+    await update.message.reply_text(
+        "✅ Login successful! Use the menu to manage your streams and notifications.",
+        reply_markup=get_main_keyboard()
+    )
+    return ConversationHandler.END
 
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle button callbacks."""
-    query = update.callback_query
-    await query.answer()  # Answer the callback query
-    
-    if query.data == "refresh_status":
-        await query.edit_message_text(
-            "🔄 Updated status: All systems operational\n"
-            "Last checked: Just now"
-        )
-    
-    elif query.data in ["enable_all", "errors_only", "disable_all"]:
-        settings = {
-            "enable_all": "all notifications enabled",
-            "errors_only": "only error notifications enabled",
-            "disable_all": "all notifications disabled"
-        }
-        await query.edit_message_text(f"✅ Settings updated: {settings[query.data]}")
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancel the current conversation."""
+    await update.message.reply_text(
+        "Operation cancelled.",
+        reply_markup=get_main_keyboard()
+    )
+    return ConversationHandler.END
 
 async def main():
     """Main function to run the Telegram bot."""
@@ -882,13 +794,24 @@ async def main():
         # Create the Application and pass the bot's token
         application = Application.builder().token(token).build()
 
+        # Define conversation handler
+        conv_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(button_callback, pattern="^(login|register)$")],
+            states={
+                LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_conversation)],
+                PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, password_handler)],
+            },
+            fallbacks=[CommandHandler("cancel", cancel)]
+        )
+
         # Register command handlers
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
         application.add_handler(CommandHandler("getid", getid))
+        application.add_handler(CommandHandler("logout", logout))
         
-        # Register message and callback handlers
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        # Register conversation and callback handlers
+        application.add_handler(conv_handler)
         application.add_handler(CallbackQueryHandler(button_callback))
 
         # Start the bot
