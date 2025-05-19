@@ -22,7 +22,7 @@ load_dotenv()
 
 # API Configuration
 API_BASE_URL = os.getenv('API_BASE_URL', 'https://monitor-backend.jetcamstudio.com:5000')
-API_ADMIN_TOKEN = os.getenv('TELEGRAM_TOKEN', '')
+TELEGRAM_TOKEN = os.getenv('API_ADMIN_TOKEN', '')
 
 # Conversation states
 REGISTER, LOGIN, PASSWORD, EMAIL, CHATID, STREAM_URL, KEYWORD, OBJECT_NAME, TRIGGER_MONITORING = range(9)
@@ -749,25 +749,32 @@ async def password_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     except Exception as e:
         logger.error(f"Error deleting password message: {str(e)}")
     
-    # Attempt login
+    # Attempt login using /api/login endpoint
     data = {
         'username': username,
         'password': password
     }
-    response = await api_request('post', 'login', data=data)
+    response = await api_request('post', 'api/login', data=data)
     
-    if 'error' in response:
+    if 'error' in response or response.get('message') != "Login successful":
         await update.message.reply_text(
-            f"Login failed: {response['error']}\nPlease try again.",
+            f"Login failed: {response.get('error', response.get('message', 'Invalid credentials'))}\nPlease try again.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔑 Try Again", callback_data="login")]
             ])
         )
         return ConversationHandler.END
     
-    # Store token and mark as logged in
-    user_sessions[user_id]['token'] = response.get('token')
-    user_sessions[user_id]['logged_in'] = True
+    # Store user details in session
+    user_sessions[user_id] = {
+        'registered': True,
+        'logged_in': True,
+        'username': response.get('username'),
+        'role': response.get('role'),
+        'telegram_username': response.get('telegram_username'),
+        'telegram_chat_id': response.get('telegram_chat_id'),
+        'token': None  # /api/login doesn't return a token; session is managed server-side
+    }
     
     await update.message.reply_text(
         "✅ Login successful! Use the menu to manage your streams and notifications.",
