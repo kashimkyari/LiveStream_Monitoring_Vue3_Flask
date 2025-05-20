@@ -41,7 +41,7 @@ last_chat_alerts = {}
 def initialize_chat_globals(sentiment_analyzer=None, enable_chat_monitoring=None, chat_alert_cooldown=None, negative_sentiment_threshold=None):
     """Initialize global variables from environment"""
     global _sentiment_analyzer, ENABLE_CHAT_MONITORING, CHAT_ALERT_COOLDOWN, NEGATIVE_SENTIMENT_THRESHOLD
-    ENABLE_CHAT_MONITORING = enable_chat_monitoring if enable_chat_monitoring is not None else os.getenv('ENABLE_CHAT_MONITORING', 'false').lower() == 'true'
+    ENABLE_CHAT_MONITORING = enable_chat_monitoring if enable_chat_monitoring is not None else os.getenv('ENABLE_CHAT_MONITORING', 'true').lower() == 'true'
     CHAT_ALERT_COOLDOWN = chat_alert_cooldown if chat_alert_cooldown is not None else int(os.getenv('CHAT_ALERT_COOLDOWN', 60))
     NEGATIVE_SENTIMENT_THRESHOLD = negative_sentiment_threshold if negative_sentiment_threshold is not None else float(os.getenv('NEGATIVE_SENTIMENT_THRESHOLD', -0.5))
     _sentiment_analyzer = sentiment_analyzer if sentiment_analyzer is not None else load_sentiment_analyzer()

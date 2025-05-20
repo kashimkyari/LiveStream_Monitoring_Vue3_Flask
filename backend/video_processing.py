@@ -33,7 +33,7 @@ def initialize_video_globals(yolo_model=None, yolo_lock=None):
     global _yolo_model, _yolo_lock, ENABLE_VIDEO_MONITORING, VISUAL_ALERT_COOLDOWN
     _yolo_model = yolo_model
     _yolo_lock = yolo_lock
-    ENABLE_VIDEO_MONITORING = os.getenv('ENABLE_VIDEO_MONITORING', 'false').lower() == 'true'
+    ENABLE_VIDEO_MONITORING = os.getenv('ENABLE_VIDEO_MONITORING', 'true').lower() == 'true'
     VISUAL_ALERT_COOLDOWN = int(os.getenv('VISUAL_ALERT_COOLDOWN', 60))
 
 def load_yolo_model():
