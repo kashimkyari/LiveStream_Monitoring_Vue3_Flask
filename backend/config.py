@@ -2,11 +2,9 @@ import os
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
-
 from extensions import db
 from services.notification_service import NotificationService
 
-# Load .env into environment (must be in project root)
 load_dotenv()
 
 class Config:
@@ -22,32 +20,55 @@ class Config:
         masked_uri = db_uri[:db_uri.find('://') + 3] + '****:****@' + db_uri[db_uri.find('@') + 1:]
         print(f"Using Supabase database: {masked_uri}")
         
+        # Handle SSL parameters
+        ssl_params = []
         if 'sslmode' not in db_uri:
-            db_uri = f"{db_uri}?sslmode=verify-ca"
+            ssl_params.append('sslmode=require')
         
         root_cert_path = os.getenv('PG_ROOT_CERT_PATH')
         if root_cert_path and os.path.exists(root_cert_path):
             print(f"Using SSL root certificate: {root_cert_path}")
-            SQLALCHEMY_DATABASE_URI = f"{db_uri}&sslrootcert={root_cert_path}"
+            ssl_params.append(f'sslrootcert={root_cert_path}')
         else:
-            print(f"SSL root certificate not found at: {root_cert_path}. Attempting connection without it.")
-            SQLALCHEMY_DATABASE_URI = db_uri
+            print("Using SSL without certificate verification")
+            if 'sslmode' not in db_uri:
+                ssl_params.append('sslmode=require')
+        
+        if ssl_params:
+            connector = '&' if '?' in db_uri else '?'
+            db_uri = f"{db_uri}{connector}{'&'.join(ssl_params)}"
+        
+        SQLALCHEMY_DATABASE_URI = db_uri
     else:
         SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL')
+    
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_size': 10,
+        'pool_recycle': 300,
+        'pool_pre_ping': True,
+        'max_overflow': 2,
+        'connect_args': {
+            'keepalives': 1,
+            'keepalives_idle': 30,
+            'keepalives_interval': 10,
+            'keepalives_count': 5
+        }
+    }
 
     # ─── CORS ────────────────────────────────────────────────────────────
     CORS_SUPPORTS_CREDENTIALS = True
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', 'https://monitor.jetcamstudio.com,*')
 
-    # ─── Notification Service ────────────────────────────────────────────
-    STREAM_STATUS_CHECK_INTERVAL = int(os.getenv('STREAM_STATUS_CHECK_INTERVAL', 60))  # Seconds
-    VIEWER_COUNT_INTERVAL = int(os.getenv('VIEWER_COUNT_INTERVAL', 30))  # Seconds
-    NOTIFICATION_DEBOUNCE = int(os.getenv('NOTIFICATION_DEBOUNCE', 300))  # Seconds
+    # ─── Monitoring Intervals ────────────────────────────────────────────
+    STREAM_STATUS_CHECK_INTERVAL = int(os.getenv('STREAM_STATUS_CHECK_INTERVAL', 60))
+    VIEWER_COUNT_INTERVAL = int(os.getenv('VIEWER_COUNT_INTERVAL', 30))
+    NOTIFICATION_DEBOUNCE = int(os.getenv('NOTIFICATION_DEBOUNCE', 300))
 
 def create_app(config_class=Config):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class)
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = config_class.SQLALCHEMY_ENGINE_OPTIONS
 
     try:
         os.makedirs(app.instance_path, exist_ok=True)
@@ -66,16 +87,18 @@ def create_app(config_class=Config):
     try:
         db.init_app(app)
     except Exception as e:
-        app.logger.error(f"Extension init failed: {e}")
+        app.logger.error(f"Database init failed: {e}")
         raise
 
-    # ─── Initialize Socket.IO ───────────────────────────────────────────
+    # ─── Initialize Notification Service ────────────────────────────────
     with app.app_context():
-          # Initialize NotificationService with Flask app and SocketIO
+        try:
             NotificationService.init(app)
-
-    # Start the background scheduler
             NotificationService.start_scheduler()
+            app.logger.info("Notification service initialized")
+        except Exception as e:
+            app.logger.error(f"Notification service init failed: {e}")
+            raise
 
     # ─── Register Blueprints ─────────────────────────────────────────────
     from routes.auth_routes import auth_bp

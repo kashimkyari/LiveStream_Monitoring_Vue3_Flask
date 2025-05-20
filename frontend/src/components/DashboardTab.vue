@@ -543,7 +543,7 @@ export default {
 }
 
 .modal-content {
-  background: var(--modal-bg, white);
+  background: var(--modal-bg, black);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   width: 90%;
@@ -641,7 +641,7 @@ export default {
   overflow-y: auto;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  background: var(--modal-bg, white);
+  background: var(--input-bg);
 }
 
 .stream-list-header {
@@ -669,15 +669,17 @@ export default {
 }
 
 .stream-item:nth-child(odd) {
-  background: var(--input-bg);
+  background: var(--secondary-rgb);
 }
 
 .stream-item:last-child {
   border-bottom: none;
+  background: var(--secondary-rgb);
 }
 
 .stream-item:hover {
-  background: rgba(var(--primary-color-rgb), 0.05);
+  background: rgba(var(--secondary-rgb), 0.05);
+  
 }
 
 .stream-item input {
@@ -689,7 +691,7 @@ export default {
 
 .stream-item input:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.2);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
 }
 
 .stream-details {

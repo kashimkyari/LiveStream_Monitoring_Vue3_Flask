@@ -1,3 +1,4 @@
 backend/dotenv
 backend/user_sessions.json
 backend/test_audio.py
+chat endpoints.txt

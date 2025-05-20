@@ -36,6 +36,14 @@
           Mark All as Read
         </button>
         <button 
+          @click="markAllAsUnread"
+          :disabled="notifications.length === 0 || markingAllUnread"
+          :class="{ 'disabled': notifications.length === 0 || markingAllUnread }"
+        >
+          <font-awesome-icon v-if="markingAllUnread" icon="spinner" spin class="icon" />
+          Mark All as Unread
+        </button>
+        <button 
           @click="confirmDeleteAll"
           :disabled="notifications.length === 0 || deletingAll"
           :class="{ 'disabled': notifications.length === 0 || deletingAll }"
@@ -142,6 +150,14 @@
                   <font-awesome-icon icon="check" />
                 </button>
                 <button 
+                  v-if="notification.read" 
+                  class="action-btn unread-btn" 
+                  @click.stop="markAsUnread(notification.id)"
+                  title="Mark as Unread"
+                >
+                  <font-awesome-icon icon="envelope-open" />
+                </button>
+                <button 
                   class="action-btn delete-btn" 
                   @click.stop="deleteNotification(notification.id)"
                   title="Delete"
@@ -175,6 +191,13 @@
                 @click="markAsRead(selectedNotification.id)"
               >
                 Mark as Read
+              </button>
+              <button 
+                v-if="selectedNotification.read" 
+                class="action-btn" 
+                @click="markAsUnread(selectedNotification.id)"
+              >
+                Mark as Unread
               </button>
               <button 
                 class="action-btn" 
@@ -488,9 +511,9 @@ import { io } from 'socket.io-client'
 import { formatDistanceToNow, parseISO } from 'date-fns'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
-import { faSync, faEllipsisV, faBellSlash, faClipboard, faArrowLeft, faCheck, faTrash, faTimes, faSpinner } from '@fortawesome/free-solid-svg-icons'
+import { faSync, faEllipsisV, faBellSlash, faClipboard, faArrowLeft, faCheck, faTrash, faTimes, faSpinner, faEnvelopeOpen } from '@fortawesome/free-solid-svg-icons'
 
-library.add(faSync, faEllipsisV, faBellSlash, faClipboard, faArrowLeft, faCheck, faTrash, faTimes, faSpinner)
+library.add(faSync, faEllipsisV, faBellSlash, faClipboard, faArrowLeft, faCheck, faTrash, faTimes, faSpinner, faEnvelopeOpen)
 
 export default {
   name: 'AdminNotificationsPage',
@@ -515,6 +538,7 @@ export default {
     const isEditMode = ref(false)
     const submittingForm = ref(false)
     const markingAllRead = ref(false)
+    const markingAllUnread = ref(false)
     const deletingAll = ref(false)
     const deletingSingle = ref(false)
     const notificationForm = ref({
@@ -585,7 +609,7 @@ export default {
       }
 
       try {
-        socket.value = io('  https://monitor-backend.jetcamstudio.com:5000/notifications', {
+        socket.value = io('https://monitor-backend.jetcamstudio.com:5000/notifications', {
           path: '/ws',
           transports: ['websocket', 'polling'],
           reconnection: false,
@@ -664,6 +688,9 @@ export default {
       if (type === 'read') {
         const n = notifications.value.find(x => x.id === id)
         if (n) n.read = true
+      } else if (type === 'unread') {
+        const n = notifications.value.find(x => x.id === id)
+        if (n) n.read = false
       } else if (type === 'deleted') {
         notifications.value = notifications.value.filter(x => x.id !== id)
         if (selectedNotification.value?.id === id) selectedNotification.value = null
@@ -786,6 +813,20 @@ export default {
       }
     }
 
+    const markAsUnread = async (id) => {
+      try {
+        await axios.put(`/api/notifications/${id}/unread`)
+        const n = notifications.value.find(x => x.id === id)
+        if (n) {
+          n.read = false
+          safeSocketEmit('notification_update', { id, type: 'unread' })
+        }
+        showToast('Notification marked as unread', 'success')
+      } catch {
+        showToast('Failed to mark as unread', 'error')
+      }
+    }
+
     const markAllAsRead = async () => {
       if (markingAllRead.value) return
       markingAllRead.value = true
@@ -802,6 +843,25 @@ export default {
         showToast('Failed to mark all as read', 'error')
       } finally {
         markingAllRead.value = false
+      }
+    }
+
+    const markAllAsUnread = async () => {
+      if (markingAllUnread.value) return
+      markingAllUnread.value = true
+      try {
+        await axios.put('/api/notifications/unread-all')
+        notifications.value.forEach(n => {
+          if (n.read) {
+            n.read = false
+            safeSocketEmit('notification_update', { id: n.id, type: 'unread' })
+          }
+        })
+        showToast('All notifications marked as unread', 'success')
+      } catch {
+        showToast('Failed to mark all as unread', 'error')
+      } finally {
+        markingAllUnread.value = false
       }
     }
 
@@ -986,6 +1046,7 @@ export default {
       isEditMode,
       submittingForm,
       markingAllRead,
+      markingAllUnread,
       deletingAll,
       deletingSingle,
       notificationForm,
@@ -1009,7 +1070,9 @@ export default {
       truncateUrl,
       handleNotificationClick,
       markAsRead,
+      markAsUnread,
       markAllAsRead,
+      markAllAsUnread,
       confirmDelete,
       confirmDeleteAll,
       deleteNotification,
@@ -1031,7 +1094,7 @@ export default {
 <style scoped>
 /* Use AdminDashboard's CSS variables */
 :root {
-  --primary-rgb: 59, 130, 246;
+  --primary-rgb: 96, 165, 250;
   --secondary-rgb: 156, 163, 175;
   --success-rgb: 16, 185, 129;
   --danger-rgb: 239, 68, 68;
@@ -1055,7 +1118,7 @@ export default {
   --info-rgb: 56, 189, 248;
   --bg-color: #121212;
   --text-color: #f0f0f0;
-  --input-bg: #1e1e1e;
+  --input-bg: #141313;
   --input-border: #333;
   --hover-bg: #333;
   --error-bg: #4c1d24;
@@ -1069,7 +1132,7 @@ export default {
   background-color: var(--bg-color);
   color: var(--text-color);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  margin-left: 60px;
+  margin-left: 50px;
 }
 
 /* Top Navigation Bar */
@@ -1077,7 +1140,7 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 20px;
+  padding: 10px 18px;
   background-color: var(--input-bg);
   border-bottom: 1px solid var(--input-border);
   z-index: 10;
@@ -1382,7 +1445,7 @@ export default {
 }
 
 .action-btn {
-  width: 24px;
+  width: auto;
   height: 24px;
   border-radius: 4px;
   border: none;
@@ -1533,6 +1596,7 @@ export default {
   font-size: 0.9rem;
   color: var(--text-color);
   transition: all 0.2s ease;
+  width: max-content;
 }
 
 .detail-actions button:hover {
@@ -1542,6 +1606,7 @@ export default {
 .detail-actions .delete-btn {
   color: rgb(var(--danger-rgb));
   border-color: rgb(var(--danger-rgb));
+  width: max-content;
 }
 
 .detail-actions .delete-btn:hover {
@@ -1551,6 +1616,7 @@ export default {
 .detail-actions .forward-btn {
   color: rgb(var(--primary-rgb));
   border-color: rgb(var(--primary-rgb));
+  width: max-content;
 }
 
 .detail-actions .forward-btn:hover {
