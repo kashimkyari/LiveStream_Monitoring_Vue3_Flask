@@ -5,3 +5,4 @@ app.log
 audio_detection/
 proxies.txt
 *.pyc
+transcriptions/

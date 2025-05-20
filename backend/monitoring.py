@@ -4,6 +4,8 @@ import logging
 import numpy as np
 from datetime import datetime, timedelta
 import av
+import json
+import hashlib
 from flask import current_app
 from models import (
     ChatKeyword, FlaggedObject, DetectionLog, Stream, User, Assignment,
@@ -27,18 +29,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# =============== ENVIRONMENT VARIABLE CONFIGURATION ===============
-WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL_SIZE", "base")
-AUDIO_SAMPLE_DURATION = int(os.environ.get("AUDIO_SAMPLE_DURATION", "10"))
-VISUAL_ALERT_COOLDOWN = int(os.environ.get("VISUAL_ALERT_COOLDOWN", "30"))
-CHAT_ALERT_COOLDOWN = int(os.environ.get("CHAT_ALERT_COOLDOWN", "45"))
-NEGATIVE_SENTIMENT_THRESHOLD = float(os.environ.get("NEGATIVE_SENTIMENT_THRESHOLD", "-0.5"))
-CONTINUOUS_MONITORING = os.environ.get("CONTINUOUS_MONITORING", "true").lower() == "true"
-ENABLE_AUDIO_MONITORING = os.environ.get("ENABLE_AUDIO_MONITORING", "true").lower() == "true"
-ENABLE_VIDEO_MONITORING = os.environ.get("ENABLE_VIDEO_MONITORING", "true").lower() == "true"
-ENABLE_CHAT_MONITORING = os.environ.get("ENABLE_CHAT_MONITORING", "true").lower() == "true"
-
-# =============== GLOBAL VARIABLES ===============
+# Global variables
 _whisper_model = None
 _whisper_lock = Semaphore()
 _yolo_model = None
@@ -51,10 +42,24 @@ agent_cache = {}
 all_agents_fetched = False
 gevent_pool = Pool(5)
 
-# =============== MODEL LOADING ===============
+# Directory for saving transcriptions
+TRANSCRIPTION_DIR = "./transcriptions/"
+
+# Initialize monitoring globals
+def initialize_monitoring():
+    """Initialize global variables for monitoring"""
+    global _whisper_model, _whisper_lock
+    from audio_processing import initialize_audio_globals
+    initialize_audio_globals(
+        whisper_model=_whisper_model,
+        whisper_lock=_whisper_lock
+    )
+
+# Model loading
 def load_whisper_model():
     """Load the OpenAI Whisper model with configurable size and fallback"""
-    if not ENABLE_AUDIO_MONITORING:
+    enable_audio_monitoring = current_app.config.get('ENABLE_AUDIO_MONITORING', True)
+    if not enable_audio_monitoring:
         logger.info("Audio monitoring disabled; skipping Whisper model loading")
         return None
     global _whisper_model
@@ -62,9 +67,10 @@ def load_whisper_model():
         if _whisper_model is None:
             try:
                 import whisper
-                logger.info(f"Loading Whisper model: {WHISPER_MODEL_SIZE}")
-                _whisper_model = whisper.load_model(WHISPER_MODEL_SIZE)
-                logger.info(f"Whisper model '{WHISPER_MODEL_SIZE}' loaded successfully")
+                model_size = current_app.config.get('WHISPER_MODEL_SIZE', 'base')
+                logger.info(f"Loading Whisper model: {model_size}")
+                _whisper_model = whisper.load_model(model_size)
+                logger.info(f"Whisper model '{model_size}' loaded successfully")
             except AttributeError as e:
                 logger.error(f"Whisper attribute error: {e}. Ensure 'openai-whisper' is installed correctly.")
                 try:
@@ -83,7 +89,8 @@ def load_whisper_model():
 
 def load_yolo_model():
     """Load the YOLO object detection model"""
-    if not ENABLE_VIDEO_MONITORING:
+    enable_video_monitoring = current_app.config.get('ENABLE_VIDEO_MONITORING', True)
+    if not enable_video_monitoring:
         logger.info("Video monitoring disabled; skipping YOLO model loading")
         return None
     global _yolo_model
@@ -107,7 +114,7 @@ def load_sentiment_analyzer():
         _sentiment_analyzer = SentimentIntensityAnalyzer()
     return _sentiment_analyzer
 
-# =============== DATA RETRIEVAL FUNCTIONS ===============
+# Data retrieval functions
 def refresh_flagged_keywords():
     """Retrieve current flagged keywords from database"""
     with current_app.app_context():
@@ -215,7 +222,40 @@ def get_stream_assignment(stream_url):
         fetch_agent_username(agent_id)
         return assignment.id, agent_id
 
-# =============== MAIN PROCESSING LOOP ===============
+def save_transcription_to_json(stream_url, transcript, detected_keywords):
+    """Save transcription to a JSON file with metadata"""
+    try:
+        # Create transcriptions directory if it doesn't exist
+        os.makedirs(TRANSCRIPTION_DIR, exist_ok=True)
+        
+        # Generate a short hash of the stream_url for filename
+        url_hash = hashlib.md5(stream_url.encode()).hexdigest()[:8]
+        
+        # Generate timestamp for filename (format: YYYYMMDD_HHMMSS)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Create filename
+        filename = f"transcription_{url_hash}_{timestamp}.json"
+        filepath = os.path.join(TRANSCRIPTION_DIR, filename)
+        
+        # Prepare JSON data
+        data = {
+            "stream_url": stream_url,
+            "timestamp": datetime.now().isoformat(),
+            "transcription": transcript,
+            "detected_keywords": detected_keywords
+        }
+        
+        # Write to JSON file
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+        
+        logger.info(f"Saved transcription to {filepath}")
+        
+    except Exception as e:
+        logger.error(f"Error saving transcription to JSON for {stream_url}: {e}")
+
+# Main processing loop
 def process_combined_detection(app, stream_url, cancel_event):
     """Main monitoring loop processing audio, video, and chat from M3U8 stream"""
     with app.app_context():
@@ -235,17 +275,20 @@ def process_combined_detection(app, stream_url, cancel_event):
             return
 
         while not cancel_event.is_set():
+            # Refresh stream to check status
+            db.session.refresh(stream)
             if stream.status == 'offline':
                 logger.info(f"Stopping monitoring for offline stream: {stream.id}")
                 stop_monitoring(stream)
                 break
 
             try:
-                container = av.open(stream_url, timeout=30)
-                video_stream = next((s for s in container.streams if s.type == 'video'), None) if ENABLE_VIDEO_MONITORING else None
-                audio_stream = next((s for s in container.streams if s.type == 'audio'), None) if ENABLE_AUDIO_MONITORING else None
+                container = av.open(stream_url, timeout=60)
+                logger.info(f"Stream opened successfully: {stream_url}")
+                video_stream = next((s for s in container.streams if s.type == 'video'), None) if current_app.config.get('ENABLE_VIDEO_MONITORING', True) else None
+                audio_stream = next((s for s in container.streams if s.type == 'audio'), None) if current_app.config.get('ENABLE_AUDIO_MONITORING', True) else None
                 
-                if not (video_stream or audio_stream or ENABLE_CHAT_MONITORING):
+                if not (video_stream or audio_stream or current_app.config.get('ENABLE_CHAT_MONITORING', True)):
                     logger.error(f"No enabled monitoring types for {stream_url}")
                     gevent.sleep(10)
                     continue
@@ -255,11 +298,12 @@ def process_combined_detection(app, stream_url, cancel_event):
                 sample_rate = audio_stream.rate if audio_stream else 16000
                 last_process_time = None
                 last_chat_process_time = None
+                keywords = refresh_flagged_keywords()
 
                 for packet in container.demux():
                     if cancel_event.is_set():
                         break
-                    if ENABLE_VIDEO_MONITORING and packet.stream == video_stream:
+                    if current_app.config.get('ENABLE_VIDEO_MONITORING', True) and packet.stream == video_stream:
                         for frame in packet.decode():
                             frame_time = frame.pts * float(video_stream.time_base)
                             if last_process_time is None or frame_time - last_process_time >= 5:
@@ -268,38 +312,100 @@ def process_combined_detection(app, stream_url, cancel_event):
                                 if detections:
                                     log_video_detection(detections, img, stream_url)
                                 last_process_time = frame_time
-                    elif ENABLE_AUDIO_MONITORING and packet.stream == audio_stream:
-                        for frame in packet.decode():
-                            audio_data = frame.to_ndarray().flatten().astype(np.float32) / 32768.0
-                            frame_duration = frame.samples / sample_rate
-                            audio_buffer.append(audio_data)
-                            total_audio_duration += frame_duration
-                            if total_audio_duration >= AUDIO_SAMPLE_DURATION:
-                                combined_audio = np.concatenate(audio_buffer)
-                                detections = process_audio_segment(combined_audio, sample_rate, stream_url)
-                                for detection in detections:
-                                    log_audio_detection(detection, stream_url)
-                                audio_buffer = []
-                                total_audio_duration = 0
-                    if ENABLE_CHAT_MONITORING:
+                    elif current_app.config.get('ENABLE_AUDIO_MONITORING', True) and packet.stream == audio_stream:
+                        try:
+                            for frame in packet.decode():
+                                audio_data = frame.to_ndarray().flatten().astype(np.float32) / 32768.0
+                                frame_duration = frame.samples / sample_rate
+                                audio_buffer.append(audio_data)
+                                total_audio_duration += frame_duration
+                                if total_audio_duration >= current_app.config.get('AUDIO_SAMPLE_DURATION', 10):
+                                    combined_audio = np.concatenate(audio_buffer)
+                                    detections, transcript = process_audio_segment(combined_audio, sample_rate, stream_url)
+                                    # Log transcription
+                                    logger.info(f"Transcription for {stream_url} at {datetime.now().isoformat()}:\n{transcript}")
+                                    # Check for keywords
+                                    detected_keywords = []
+                                    if keywords and transcript:
+                                        detected_keywords = [kw for kw in keywords if kw in transcript.lower()]
+                                        if detected_keywords:
+                                            logger.info(f"Keywords detected in transcription: {detected_keywords}")
+                                    # Save transcription to JSON
+                                    save_transcription_to_json(stream_url, transcript, detected_keywords)
+                                    # Handle detections
+                                    for detection in detections:
+                                        log_audio_detection(detection, stream_url)
+                                        platform, streamer = get_stream_info(stream_url)
+                                        notification_data = {
+                                            "event_type": "audio_keyword_alert",
+                                            "timestamp": detection["timestamp"],
+                                            "details": {
+                                                "keyword": detection["keyword"],
+                                                "transcript": detection["transcript"],
+                                                "streamer_name": streamer,
+                                                "platform": platform,
+                                                "stream_url": stream_url
+                                            },
+                                            "read": False,
+                                            "room_url": stream_url,
+                                            "streamer": streamer,
+                                            "platform": platform,
+                                            "assigned_agent": "Unassigned"
+                                        }
+                                        emit_notification(notification_data)
+                                    # Additional alert for detected keywords
+                                    if detected_keywords:
+                                        platform, streamer = get_stream_info(stream_url)
+                                        notification_data = {
+                                            "event_type": "audio_keyword_alert",
+                                            "timestamp": datetime.now().isoformat(),
+                                            "details": {
+                                                "keyword": detected_keywords,
+                                                "transcript": transcript,
+                                                "streamer_name": streamer or "unknown",
+                                                "platform": platform or "unknown",
+                                                "stream_url": stream_url
+                                            },
+                                            "read": False,
+                                            "room_url": stream_url,
+                                            "streamer": streamer or "unknown",
+                                            "platform": platform or "unknown",
+                                            "assigned_agent": "Unassigned"
+                                        }
+                                        emit_notification(notification_data)
+                                    audio_buffer = []
+                                    total_audio_duration = 0
+                        except Exception as e:
+                            logger.error(f"Error processing audio frame for {stream_url}: {e}")
+                            continue
+                    if current_app.config.get('ENABLE_CHAT_MONITORING', True):
                         current_time = time.time()
                         if last_chat_process_time is None or current_time - last_chat_process_time >= 30:
                             messages = fetch_chat_messages(stream.room_url)
                             chat_detections = process_chat_messages(messages, stream.room_url)
                             log_chat_detection(chat_detections, stream.room_url)
                             last_chat_process_time = current_time
-            except Exception as e:
-                logger.error(f"Stream error: {e}")
+            except av.error.OSError as e:
+                logger.error(f"OS error opening stream {stream_url}: {e}", exc_info=True)
                 gevent.sleep(10)
+            except av.error.ValueError as e:
+                logger.error(f"Value error opening stream {stream_url}: {e}", exc_info=True)
+                gevent.sleep(10)
+            except Exception as e:
+                logger.error(f"Unexpected error opening stream {stream_url}: {e}", exc_info=True)
+                gevent.sleep(10)
+            finally:
+                if 'container' in locals():
+                    container.close()
         logger.info(f"Stopped monitoring {stream_url}")
 
-# =============== MAIN MONITORING CONTROL ===============
+# Main monitoring control
 def start_monitoring(stream):
     """Start monitoring a stream for detections"""
     if not stream:
         logger.error("Stream not provided")
         return False
-    if not CONTINUOUS_MONITORING:
+    if not current_app.config.get('CONTINUOUS_MONITORING', True):
         logger.info(f"Continuous monitoring disabled; skipping stream {stream.room_url}")
         return False
     if stream.status == 'offline':
@@ -312,6 +418,9 @@ def start_monitoring(stream):
             return True
         stream.is_monitored = True
         db.session.commit()
+    
+    # Initialize globals before starting
+    initialize_monitoring()
     
     stream_url = get_m3u8_url(stream)
     if not stream_url:
@@ -367,7 +476,7 @@ def stop_monitoring(stream):
 
 def refresh_and_monitor_streams(stream_ids):
     """Refresh and monitor selected streams"""
-    if not CONTINUOUS_MONITORING:
+    if not current_app.config.get('CONTINUOUS_MONITORING', True):
         logger.info("Continuous monitoring disabled; skipping stream refresh")
         return False
     with current_app.app_context():
@@ -417,7 +526,7 @@ def refresh_and_monitor_streams(stream_ids):
 
 def start_notification_monitor():
     """Initialize background tasks for notifications monitoring"""
-    if not CONTINUOUS_MONITORING:
+    if not current_app.config.get('CONTINUOUS_MONITORING', True):
         logger.info("Continuous monitoring disabled; notification monitor not started")
         return
     logger.info("Starting notification monitor")
@@ -434,7 +543,7 @@ def start_notification_monitor():
         logger.error(f"Error starting notification monitor: {e}")
         raise
 
-# =============== EXPORTS ===============
+# Exports
 __all__ = [
     'start_monitoring',
     'stop_monitoring',
@@ -442,7 +551,8 @@ __all__ = [
     'process_video_frame',
     'process_chat_messages',
     'start_notification_monitor',
-    'refresh_and_monitor_streams'
+    'refresh_and_monitor_streams',
+    'initialize_monitoring'
 ]
 
 if __name__ == "__main__":

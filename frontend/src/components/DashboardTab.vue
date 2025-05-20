@@ -207,7 +207,7 @@ export default {
 
     // Computed stats with fallback
     const stats = computed(() => [{
-      value: props.streams.filter(s => s.status === 'online').length,
+      value: props.streams.filter(s => s.status === 'online' || s.status === 'monitoring').length,
       label: 'Active Streams',
       icon: 'broadcast-tower'
     }, {
@@ -222,12 +222,14 @@ export default {
       icon: 'user-shield'
     }]);
 
+    // Include 'online' and 'monitoring' statuses in Online Streams
     const onlineStreams = computed(() => 
-      props.streams.filter(s => s.status === 'online')
+      props.streams.filter(s => s.status === 'online' || s.status === 'monitoring')
     );
 
+    // Exclude 'online' and 'monitoring' from Offline Streams
     const offlineStreams = computed(() => 
-      props.streams.filter(s => s.status !== 'online')
+      props.streams.filter(s => s.status !== 'online' && s.status !== 'monitoring')
     );
 
     const filteredOnlineStreams = computed(() => 
@@ -865,13 +867,6 @@ export default {
     justify-content: center;
   }
 
-  .stream-list-header, .stream-item {
-    grid-template-columns: 50px 1fr 1fr 1fr 1fr;
-    font-size: 0.85rem;
-  }
-}
-
-@media (max-width: 600px) {
   .stream-list-header, .stream-item {
     grid-template-columns: 50px 1fr 1fr;
   }

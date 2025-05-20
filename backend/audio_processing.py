@@ -3,6 +3,7 @@ import numpy as np
 from datetime import datetime
 import librosa
 from flask import current_app
+from gevent.lock import Semaphore
 from models import DetectionLog, Stream, ChaturbateStream, StripchatStream, ChatKeyword
 from extensions import db
 from utils.notifications import emit_notification
@@ -17,13 +18,15 @@ logger = logging.getLogger(__name__)
 
 # External dependencies
 _whisper_model = None
-_whisper_lock = None
+_whisper_lock = Semaphore()
 
 def initialize_audio_globals(whisper_model, whisper_lock):
     """Initialize global variables for model and lock"""
     global _whisper_model, _whisper_lock
     _whisper_model = whisper_model
-    _whisper_lock = whisper_lock
+    if whisper_lock is not None:
+        _whisper_lock = whisper_lock
+    logger.info("Audio globals initialized")
 
 def load_whisper_model():
     """Load the OpenAI Whisper model with configurable size and fallback"""
@@ -31,7 +34,10 @@ def load_whisper_model():
     if not enable_audio_monitoring:
         logger.info("Audio monitoring disabled; skipping Whisper model loading")
         return None
-    global _whisper_model
+    global _whisper_model, _whisper_lock
+    if not isinstance(_whisper_lock, Semaphore):
+        logger.warning("Whisper lock not initialized; resetting to Semaphore")
+        _whisper_lock = Semaphore()
     with _whisper_lock:
         if _whisper_model is None:
             try:
