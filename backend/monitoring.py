@@ -43,7 +43,7 @@ all_agents_fetched = False
 gevent_pool = Pool(5)
 
 # Directory for saving transcriptions
-TRANSCRIPTION_DIR = "./transcriptions/"
+TRANSCRIPTION_DIR = "/home/kvsh1m/LiveStream_Monitoring_Vue3_Flask/backend/transcriptions/"
 
 # Initialize monitoring globals
 def initialize_monitoring():
