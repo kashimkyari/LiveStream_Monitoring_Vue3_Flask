@@ -2,6 +2,7 @@
 import asyncio
 import time
 import requests
+import threading
 from flask import current_app
 from flask_socketio import SocketIO
 from extensions import db, scheduler
@@ -29,6 +30,7 @@ class NotificationService:
     app = None  # Class attribute for Flask app
     # Cache for recent notifications to prevent spamming
     notification_cache = {}
+    notification_cache_lock = threading.Lock()  # Thread-safe lock
     NOTIFICATION_DEBOUNCE = 300  # 5 minutes in seconds
 
     # Cache for stream statuses to detect changes
@@ -179,14 +181,15 @@ class NotificationService:
     def should_send_notification(user_id, event_type, room_url):
         """Check if a notification should be sent based on recent notifications."""
         cache_key = f"{user_id}_{event_type}_{room_url}"
-        last_notification = NotificationService.notification_cache.get(cache_key)
-        current_time = datetime.utcnow()
-        
-        if last_notification and (current_time - last_notification).total_seconds() < NotificationService.NOTIFICATION_DEBOUNCE:
-            logger.info(f"Skipping notification for {cache_key} due to debounce")
-            return False
-        NotificationService.notification_cache[cache_key] = current_time
-        return True
+        with NotificationService.notification_cache_lock:  # Thread-safe access
+            last_notification = NotificationService.notification_cache.get(cache_key)
+            current_time = datetime.utcnow()
+            
+            if last_notification and (current_time - last_notification).total_seconds() < NotificationService.NOTIFICATION_DEBOUNCE:
+                logger.info(f"Skipping notification for {cache_key} due to debounce")
+                return False
+            NotificationService.notification_cache[cache_key] = current_time
+            return True
 
     @staticmethod
     async def send_telegram_notification(user, event_type, details, platform, streamer, is_image=False, image_data=None):
