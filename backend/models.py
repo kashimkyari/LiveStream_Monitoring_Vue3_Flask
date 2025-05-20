@@ -172,49 +172,49 @@ class Assignment(db.Model):
         agent_username = self.agent.username if self.agent else "Unassigned"
         return f"<Assignment Agent:{agent_username} Stream:{self.stream_id}>"
 
-    def serialize(self, include_relationships=True):
-    data = {
-        "id": self.id,
-        "agent_id": self.agent_id,
-        "stream_id": self.stream_id,
-        "created_at": self.created_at.isoformat(),
-        "assigned_by": self.assigned_by,
-        "notes": self.notes,
-        "priority": self.priority,
-        "status": self.status,
-        "assignment_metadata": self.assignment_metadata or {},
-        "streamer_username": self.stream.streamer_username if self.stream else None
-    }
-    if include_relationships:
-        if self.agent:
-            data["agent"] = {
-                "id": self.agent.id,
-                "username": self.agent.username,
-                "email": self.agent.email,
-                "role": self.agent.role,
-                "telegram_username": self.agent.telegram_username,  # Fix: Access through self.agent
-            }
-        else:
-            data["agent"] = None
-        if self.stream:
-            data["stream"] = {
-                "id": self.stream.id,
-                "room_url": self.stream.room_url,
-                "streamer_username": self.stream.streamer_username,
-                "platform": self.stream.type.capitalize() if self.stream.type else None,
-                "status": self.stream.status,
-            }
-        else:
-            data["stream"] = None
-        if self.assigner:
-            data["assigner"] = {
-                "id": self.assigner.id,
-                "username": self.assigner.username,
-                "role": self.assigner.role,
-            }
-        else:
-            data["assigner"] = None
-    return data
+        def serialize(self, include_relationships=True):
+        data = {
+            "id": self.id,
+            "agent_id": self.agent_id,
+            "stream_id": self.stream_id,
+            "created_at": self.created_at.isoformat(),
+            "assigned_by": self.assigned_by,
+            "notes": self.notes,
+            "priority": self.priority,
+            "status": self.status,
+            "assignment_metadata": self.assignment_metadata or {},
+            "streamer_username": self.stream.streamer_username if self.stream else None
+        }
+        if include_relationships:
+            if self.agent:
+                data["agent"] = {
+                    "id": self.agent.id,
+                    "username": self.agent.username,
+                    "email": self.agent.email,
+                    "role": self.agent.role,
+                    "telegram_username": self.agent.telegram_username,  # Fix: Access through self.agent
+                }
+            else:
+                data["agent"] = None
+            if self.stream:
+                data["stream"] = {
+                    "id": self.stream.id,
+                    "room_url": self.stream.room_url,
+                    "streamer_username": self.stream.streamer_username,
+                    "platform": self.stream.type.capitalize() if self.stream.type else None,
+                    "status": self.stream.status,
+                }
+            else:
+                data["stream"] = None
+            if self.assigner:
+                data["assigner"] = {
+                    "id": self.assigner.id,
+                    "username": self.assigner.username,
+                    "role": self.assigner.role,
+                }
+            else:
+                data["assigner"] = None
+        return data
 
 class Log(db.Model):
     """
