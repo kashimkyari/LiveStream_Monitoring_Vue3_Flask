@@ -69,10 +69,10 @@ def create_app(config_class=Config):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class)
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = config_class.SQLALCHEMY_ENGINE_OPTIONS
-    app.config['CONTINUOUS_MONITORING'] = os.getenv('CONTINUOUS_MONITORING', 'false').lower() == 'true'
-    app.config['ENABLE_AUDIO_MONITORING'] = os.getenv('ENABLE_AUDIO_MONITORING', 'false').lower() == 'true'
-    app.config['ENABLE_VIDEO_MONITORING'] = os.getenv('ENABLE_VIDEO_MONITORING', 'false').lower() == 'true'
-    app.config['ENABLE_CHAT_MONITORING'] = os.getenv('ENABLE_CHAT_MONITORING', 'false').lower() == 'true'
+    app.config['CONTINUOUS_MONITORING'] = os.getenv('CONTINUOUS_MONITORING', 'true').lower() == 'true'
+    app.config['ENABLE_AUDIO_MONITORING'] = os.getenv('ENABLE_AUDIO_MONITORING', 'true').lower() == 'true'
+    app.config['ENABLE_VIDEO_MONITORING'] = os.getenv('ENABLE_VIDEO_MONITORING', 'true').lower() == 'true'
+    app.config['ENABLE_CHAT_MONITORING'] = os.getenv('ENABLE_CHAT_MONITORING', 'true').lower() == 'true'
     app.config['CHAT_ALERT_COOLDOWN'] = int(os.getenv('CHAT_ALERT_COOLDOWN', 60))
     app.config['VISUAL_ALERT_COOLDOWN'] = int(os.getenv('VISUAL_ALERT_COOLDOWN', 60))
     app.config['AUDIO_ALERT_COOLDOWN'] = int(os.getenv('AUDIO_ALERT_COOLDOWN', 60))
