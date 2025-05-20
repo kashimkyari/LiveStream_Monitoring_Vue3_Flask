@@ -42,7 +42,7 @@ def load_whisper_model():
         if _whisper_model is None:
             try:
                 import whisper
-                model_size = current_app.config.get('WHISPER_MODEL_SIZE', 'base')
+                model_size = current_app.config.get('WHISPER_MODEL_SIZE', 'medium')
                 logger.info(f"Loading Whisper model: {model_size}")
                 _whisper_model = whisper.load_model(model_size)
                 logger.info(f"Whisper model '{model_size}' loaded successfully")

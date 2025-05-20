@@ -532,13 +532,10 @@ def start_notification_monitor():
     logger.info("Starting notification monitor")
     try:
         with current_app.app_context():
-            streams = Stream.query.filter_by(is_monitored=True).all()
+            streams = Stream.query.filter(Stream.status != 'offline').all()
             for stream in streams:
-                if stream.status != 'offline':
-                    start_monitoring(stream)
-                else:
-                    logger.info(f"Skipping offline stream {stream.id} during notification monitor startup")
-        logger.info("Notification monitor started successfully")
+                start_monitoring(stream)
+            logger.info("Notification monitor started successfully")
     except Exception as e:
         logger.error(f"Error starting notification monitor: {e}")
         raise
