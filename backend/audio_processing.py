@@ -1,12 +1,17 @@
 import logging
 import numpy as np
 from datetime import datetime
+import os
 import librosa
 from flask import current_app
 from gevent.lock import Semaphore
 from models import DetectionLog, Stream, ChaturbateStream, StripchatStream, ChatKeyword
 from extensions import db
 from utils.notifications import emit_notification
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -30,7 +35,7 @@ def initialize_audio_globals(whisper_model, whisper_lock):
 
 def load_whisper_model():
     """Load the OpenAI Whisper model with configurable size and fallback"""
-    enable_audio_monitoring = current_app.config.get('ENABLE_AUDIO_MONITORING', True)
+    enable_audio_monitoring = os.getenv('ENABLE_AUDIO_MONITORING', 'true').lower() == 'true'
     if not enable_audio_monitoring:
         logger.info("Audio monitoring disabled; skipping Whisper model loading")
         return None
@@ -42,7 +47,7 @@ def load_whisper_model():
         if _whisper_model is None:
             try:
                 import whisper
-                model_size = current_app.config.get('WHISPER_MODEL_SIZE', 'medium')
+                model_size = os.getenv('WHISPER_MODEL_SIZE', 'medium')
                 logger.info(f"Loading Whisper model: {model_size}")
                 _whisper_model = whisper.load_model(model_size)
                 logger.info(f"Whisper model '{model_size}' loaded successfully")
@@ -130,7 +135,7 @@ def normalize_audio(audio_data):
 
 def process_audio_segment(audio_data, original_sample_rate, stream_url):
     """Process an audio segment for transcription and analysis with diagnostics"""
-    enable_audio_monitoring = current_app.config.get('ENABLE_AUDIO_MONITORING', True)
+    enable_audio_monitoring = os.getenv('ENABLE_AUDIO_MONITORING', 'true').lower() == 'true'
     if not enable_audio_monitoring:
         logger.info(f"Audio monitoring disabled for {stream_url}")
         return [], ""
@@ -179,7 +184,7 @@ def process_audio_segment(audio_data, original_sample_rate, stream_url):
 
 def log_audio_detection(detection, stream_url):
     """Log audio detections to database"""
-    enable_audio_monitoring = current_app.config.get('ENABLE_AUDIO_MONITORING', True)
+    enable_audio_monitoring = os.getenv('ENABLE_AUDIO_MONITORING', 'true').lower() == 'true'
     if not enable_audio_monitoring:
         return
     platform, streamer = get_stream_info(stream_url)
@@ -215,4 +220,8 @@ def log_audio_detection(detection, stream_url):
             "platform": platform,
             "assigned_agent": "Unassigned" if not agent_id else "Agent"
         }
-        emit_notification(notification_data)
+        
+        # Use environment variables for alert cooldown
+        audio_alert_cooldown = int(os.getenv('AUDIO_ALERT_COOLDOWN', 60))
+        # Use the configured cooldown when emitting the notification
+        emit_notification(notification_data, cooldown=audio_alert_cooldown)
