@@ -590,7 +590,7 @@ const apiCall = async (method, url, data = null, loadingState = null, showSucces
   try {
     const response = await axios({
       method,
-      url: ` https://monitor-backend.jetcamstudio.com:5000`,
+      url: `${url}`,
       data,
       withCredentials: true
     })
