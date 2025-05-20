@@ -172,7 +172,7 @@ class Assignment(db.Model):
         agent_username = self.agent.username if self.agent else "Unassigned"
         return f"<Assignment Agent:{agent_username} Stream:{self.stream_id}>"
 
-        def serialize(self, include_relationships=True):
+    def serialize(self, include_relationships=True):
         data = {
             "id": self.id,
             "agent_id": self.agent_id,
@@ -192,7 +192,7 @@ class Assignment(db.Model):
                     "username": self.agent.username,
                     "email": self.agent.email,
                     "role": self.agent.role,
-                    "telegram_username": self.agent.telegram_username,  # Fix: Access through self.agent
+                    "telegram_username": self.telegram_username,
                 }
             else:
                 data["agent"] = None
