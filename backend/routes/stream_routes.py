@@ -21,15 +21,15 @@ job_lock = Lock()
 
 def cleanup_jobs():
     """Clean up completed or expired jobs."""
-    expired_jobs = [
-        job_id for job_id, job in stream_creation_jobs.items()
-        if job["progress"] >= 100 or
-        (datetime.now() - datetime.fromisoformat(job["created_at"])) > timedelta(minutes=30)
-    ]
-    for job_id in expired_jobs:
-        del stream_creation_jobs[job_id]
-    logging.info(f"Cleaned up {len(expired_jobs)} jobs. {len(stream_creation_jobs)} jobs remaining.")
-
+    with job_lock:
+        expired_jobs = [
+            job_id for job_id, job in stream_creation_jobs.items()
+            if (job["progress"] >= 100 and (datetime.now() - datetime.fromisoformat(job["created_at"])) > timedelta(minutes=5)) or
+               (datetime.now() - datetime.fromisoformat(job["created_at"])) > timedelta(hours=1)
+        ]
+        for job_id in expired_jobs:
+            del stream_creation_jobs[job_id]
+        logging.info(f"Cleaned up {len(expired_jobs)} jobs. {len(stream_creation_jobs)} jobs remaining.")
 # --------------------------------------------------------------------
 # Stream Management Endpoints
 # --------------------------------------------------------------------
@@ -444,7 +444,6 @@ def update_stream_status(stream_id):
         return jsonify({"message": "Stream status update failed", "error": str(e)}), 500
 
 @stream_bp.route("/api/streams/interactive", methods=["POST"])
-
 def interactive_create_stream():
     try:
         if not request.is_json:
@@ -517,14 +516,7 @@ def interactive_create_stream():
                 "existing_id": existing_stream.id,
             }), 409
 
-        # Check if another job is running
-        if not job_lock.acquire(blocking=False):
-            return jsonify({
-                "message": "Another stream creation job is in progress. Please wait.",
-                "error": "job_in_progress",
-            }), 429
-
-        try:
+        with job_lock:
             job_id = str(uuid.uuid4())
             stream_creation_jobs[job_id] = {
                 "progress": 0,
@@ -538,20 +530,20 @@ def interactive_create_stream():
                 "error": None,
                 "stream": None,
                 "assignment": None,
+                "stream_id": None,  # Store stream ID once created
             }
 
-            # Define a function to run the job in a separate thread
             def run_job_in_thread(app, job_id, room_url, platform, agent_id, notes, priority):
                 with app.app_context():
                     try:
                         run_stream_creation_job(app, job_id, room_url, platform, agent_id, notes, priority)
                     except Exception as e:
-                        stream_creation_jobs[job_id]["error"] = str(e)
+                        with job_lock:
+                            stream_creation_jobs[job_id]["error"] = str(e)
                         logging.error(f"Stream creation job {job_id} failed: {str(e)}")
                     finally:
                         cleanup_jobs()
 
-            # Start the job in a new thread
             thread = threading.Thread(
                 target=run_job_in_thread,
                 args=(current_app._get_current_object(), job_id, room_url, platform, agent_id, notes, priority)
@@ -564,11 +556,7 @@ def interactive_create_stream():
                 "monitor_url": f"/api/streams/interactive/sse?job_id={job_id}",
             }), 202
 
-        finally:
-            job_lock.release()
-
     except Exception as e:
-        job_lock.release()
         logging.error(f"Interactive stream creation failed: {str(e)}")
         return jsonify({
             "message": "Internal server error",
@@ -577,7 +565,6 @@ def interactive_create_stream():
         }), 500
 
 @stream_bp.route("/api/streams/interactive/sse")
-
 def stream_creation_sse():
     job_id = request.args.get("job_id")
     if not job_id:
@@ -591,53 +578,70 @@ def stream_creation_sse():
         try:
             last_progress = -1
             while True:
-                job_status = stream_creation_jobs.get(job_id)
-                if not job_status:
-                    yield f"event: error\ndata: {json.dumps({'message': 'Job not found'})}\n\n"
-                    break
+                with job_lock:
+                    job_status = stream_creation_jobs.get(job_id)
+                    if not job_status:
+                        # Check if stream exists in database
+                        stream = Stream.query.filter_by(room_url=request.args.get("room_url", "")).first()
+                        if stream:
+                            yield f"event: completed\ndata: {json.dumps({'message': 'Stream created', 'stream_id': stream.id})}\n\n"
+                        else:
+                            yield f"event: error\ndata: {json.dumps({'message': 'Job not found'})}\n\n"
+                        break
 
-                # Only send updates if progress or message has changed
-                if job_status["progress"] != last_progress or job_status.get("error"):
-                    data = json.dumps({
-                        "progress": job_status["progress"],
-                        "message": job_status["message"],
-                        "error": job_status.get("error"),
-                        "estimated_time": job_status.get("estimated_time"),
-                        "stream": job_status.get("stream"),
-                        "assignment": job_status.get("assignment"),
-                    })
-                    yield f"data: {data}\n\n"
-                    last_progress = job_status["progress"]
+                    if job_status["progress"] != last_progress or job_status.get("error"):
+                        data = json.dumps({
+                            "progress": job_status["progress"],
+                            "message": job_status["message"],
+                            "error": job_status.get("error"),
+                            "estimated_time": job_status.get("estimated_time"),
+                            "stream": job_status.get("stream"),
+                            "assignment": job_status.get("assignment"),
+                            "stream_id": job_status.get("stream_id"),
+                        })
+                        yield f"data: {data}\n\n"
+                        last_progress = job_status["progress"]
 
-                if job_status["progress"] >= 100 or job_status.get("error"):
-                    if job_status.get("stream"):
-                        yield f"event: completed\ndata: {json.dumps(job_status['stream'])}\n\n"
-                    break
-                time.sleep(0.5)  # Reduced polling interval for responsiveness
+                    if job_status["progress"] >= 100 or job_status.get("error"):
+                        if job_status.get("stream"):
+                            yield f"event: completed\ndata: {json.dumps({'stream': job_status['stream'], 'stream_id': job_status['stream_id']})}\n\n"
+                        break
+                time.sleep(0.5)
         except GeneratorExit:
             pass
 
     return Response(event_stream(), mimetype="text/event-stream")
 
 @stream_bp.route("/api/streams/interactive/status", methods=["GET"])
-
 def stream_creation_status():
     job_id = request.args.get("job_id")
     if not job_id:
         return jsonify({"message": "Job ID required"}), 400
 
-    job_status = stream_creation_jobs.get(job_id)
-    if not job_status:
-        return jsonify({"message": "Job not found", "error": "Job not found"}), 404
+    with job_lock:
+        job_status = stream_creation_jobs.get(job_id)
+        if not job_status:
+            # Check if stream exists in database
+            stream = Stream.query.filter_by(room_url=request.args.get("room_url", "")).first()
+            if stream:
+                return jsonify({
+                    "progress": 100,
+                    "message": "Stream created",
+                    "stream_id": stream.id,
+                    "stream": stream.serialize(),
+                    "assignment": stream.assignments[0].serialize() if stream.assignments else None,
+                })
+            return jsonify({"message": "Job not found", "error": "Job not found"}), 404
 
-    return jsonify({
-        "progress": job_status["progress"],
-        "message": job_status["message"],
-        "error": job_status.get("error"),
-        "estimated_time": job_status.get("estimated_time"),
-        "stream": job_status.get("stream"),
-        "assignment": job_status.get("assignment"),
-    })
+        return jsonify({
+            "progress": job_status["progress"],
+            "message": job_status["message"],
+            "error": job_status.get("error"),
+            "estimated_time": job_status.get("estimated_time"),
+            "stream": job_status.get("stream"),
+            "assignment": job_status.get("assignment"),
+            "stream_id": job_status.get("stream_id"),
+        })
 
 @stream_bp.route("/api/streams/interactive/cleanup", methods=["POST"])
 

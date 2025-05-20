@@ -535,63 +535,63 @@ export default {
     
     // Fallback polling method
     const setupPolling = () => {
-      if (pollingInterval) return
+  if (pollingInterval) return;
 
-      pollingInterval = setInterval(async () => {
-        try {
-          const now = Date.now()
-          if (now - lastPollTime < 1000) return
-          lastPollTime = now
+  pollingInterval = setInterval(async () => {
+    try {
+      const now = Date.now();
+      if (now - lastPollTime < 1000) return;
+      lastPollTime = now;
 
-          const startTime = Date.now()
-          const response = await axios.get(`/api/streams/interactive/status?job_id=${jobId.value}`)
-          
-          console.log('Polling response:', response.data)
-          latency.value = Date.now() - startTime
+      const startTime = Date.now();
+      const response = await axios.get(`/api/streams/interactive/status?job_id=${jobId.value}&room_url=${encodeURIComponent(form.value.room_url)}`);
 
-          if (!response.data) return
+      console.log('Polling response:', response.data);
+      latency.value = Date.now() - startTime;
 
-          if (response.data.progress !== undefined) {
-            progressPercentage.value = Math.min(response.data.progress, 100)
-            animateProgress(response.data.progress, progressPercentage.value)
-          }
+      if (!response.data) return;
 
-          if (response.data.message) {
-            progressMessage.value = response.data.message
-          }
+      if (response.data.progress !== undefined) {
+        progressPercentage.value = Math.min(response.data.progress, 100);
+        animateProgress(response.data.progress, progressPercentage.value);
+      }
 
-          if (response.data.estimated_time) {
-            estimatedTime.value = Math.round(response.data.estimated_time)
-          }
+      if (response.data.message) {
+        progressMessage.value = response.data.message;
+      }
 
-          if (response.data.error) {
-            console.error('Polling error:', response.data.error)
-            emit('error', response.data.error)
-            toast.error(`Stream creation failed: ${response.data.error}`)
-            cleanupConnections()
-            isCreating.value = false
-          }
+      if (response.data.estimated_time) {
+        estimatedTime.value = Math.round(response.data.estimated_time);
+      }
 
-          if (response.data.stream && response.data.progress >= 100) {
-            console.log('Polling completion:', response.data)
-            assignmentDetails.value = response.data.assignment
-            emit('streamCreated', response.data.stream)
-            toast.success('Stream created successfully!')
-            cleanupConnections()
-            isCreating.value = false
-          }
-        } catch (e) {
-          console.error('Polling error:', e)
-          if (e.response?.status === 404) {
-            console.error('Job not found, stopping polling')
-            emit('error', 'Stream creation job not found')
-            toast.error('Stream creation job not found')
-            cleanupConnections()
-            isCreating.value = false
-          }
+      if (response.data.error) {
+        console.error('Polling error:', response.data.error);
+        emit('error', response.data.error);
+        toast.error(`Stream creation failed: ${response.data.error}`);
+        cleanupConnections();
+        isCreating.value = false;
+      }
+
+      if (response.data.stream && (response.data.progress >= 100 || response.data.stream_id)) {
+        console.log('Polling completion:', response.data);
+        assignmentDetails.value = response.data.assignment;
+        emit('streamCreated', { ...response.data.stream, id: response.data.stream_id || response.data.stream?.id });
+        toast.success('Stream created successfully!');
+        cleanupConnections();
+        isCreating.value = false;
         }
-      }, 1000)
+    } catch (e) {
+      console.error('Polling error:', e);
+      if (e.response?.status === 404) {
+        console.error('Job not found, stopping polling');
+        emit('error', 'Stream creation job not found. Please check the streams list.');
+        toast.error('Stream creation job not found. Please check the streams list.');
+        cleanupConnections();
+        isCreating.value = false;
+      }
     }
+  }, 3000); // Align polling interval with useModalActions.js
+};
     
     // Cleanup connections
     const cleanupConnections = () => {
@@ -610,55 +610,55 @@ export default {
     
     // Form submission
     const submitForm = async () => {
-      if (!formValid.value) return
-      
-      const streamData = {
-        room_url: form.value.room_url.trim(),
-        platform: form.value.platform,
-        agent_id: form.value.agent_id || null,
-        notes: form.value.notes.trim() || null,
-        priority: form.value.priority
-      }
-      
-      try {
-        isCreating.value = true
-        progressPercentage.value = 5
-        progressMessage.value = 'Initializing stream creation...'
-        assignmentDetails.value = null
-        reconnectAttempts = 1
-        
-        const response = await axios.post('/api/streams/interactive', streamData, {
-          timeout: 30000, // Reduce timeout to 2 seconds for faster feedback
-          withCredentials: true
-        })
-        
-        if (response.data && response.data.job_id) {
-          jobId.value = response.data.job_id
-          console.log('Starting SSE for job:', jobId.value)
-          setupSSEConnection()
-          toast.info(`Creating ${form.value.platform} stream...`, {
-            timeout: 3000
-          })
-          emit('submit', streamData)
-        } else {
-          throw new Error('No job ID returned from server')
-        }
-      } catch (error) {
-        isCreating.value = false
-        let errorMessage = 'Failed to create stream'
-        if (error.response?.status === 429) {
-          errorMessage = 'Another stream creation is in progress. Please wait.'
-        } else if (error.response?.data?.message) {
-          errorMessage = error.response.data.message
-          if (error.response.data.error === 'duplicate_stream') {
-            errorMessage += ` (Stream ID: ${error.response.data.existing_id})`
-          }
-        }
-        console.error('Submit error:', errorMessage)
-        emit('error', errorMessage)
-        toast.error(errorMessage)
+  if (!formValid.value) return;
+
+  const streamData = {
+    room_url: form.value.room_url.trim(),
+    platform: form.value.platform,
+    agent_id: form.value.agent_id || null,
+    notes: form.value.notes.trim() || null,
+    priority: form.value.priority
+  };
+
+  try {
+    isCreating.value = true;
+    progressPercentage.value = 5;
+    progressMessage.value = 'Initializing stream creation...';
+    assignmentDetails.value = null;
+    reconnectAttempts = 0; // Reset reconnect attempts
+
+    const response = await axios.post('/api/streams/interactive', streamData, {
+      timeout: 30000, // Keep timeout at 30 seconds for consistency
+      withCredentials: true
+    });
+
+    if (response.data && response.data.job_id) {
+      jobId.value = response.data.job_id;
+      console.log('Starting SSE for job:', jobId.value);
+      setupSSEConnection();
+      toast.info(`Creating ${form.value.platform} stream...`, {
+        timeout: 3000
+      });
+      emit('submit', streamData);
+    } else {
+      throw new Error('No job ID returned from server');
+    }
+  } catch (error) {
+    isCreating.value = false;
+    let errorMessage = 'Failed to create stream';
+    if (error.response?.status === 429) {
+      errorMessage = 'Another stream creation is in progress. Please wait.';
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+      if (error.response.data.error === 'duplicate_stream') {
+        errorMessage += ` (Stream ID: ${error.response.data.existing_id})`;
       }
     }
+    console.error('Submit error:', errorMessage);
+    emit('error', errorMessage);
+    toast.error(errorMessage);
+  }
+};
     
     // Retry creation
     const retryCreation = () => {

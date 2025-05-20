@@ -442,7 +442,7 @@ export default {
       }
 
       try {
-        socket.value = io(' https://monitor-backend.jetcamstudio.com:5000/notifications', {
+        socket.value = io('  https://monitor-backend.jetcamstudio.com:5000/notifications', {
           path: '/ws',
           transports: ['websocket', 'polling'],
           reconnection: false,

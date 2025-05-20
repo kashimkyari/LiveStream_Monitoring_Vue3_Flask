@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 _whisper_model = None
 _whisper_lock = Semaphore()
 
-def initialize_audio_globals(whisper_model, whisper_lock):
+def initialize_audio_globals(whisper_model=None, whisper_lock=None):
     """Initialize global variables for model and lock"""
     global _whisper_model, _whisper_lock
     _whisper_model = whisper_model
@@ -35,7 +35,7 @@ def initialize_audio_globals(whisper_model, whisper_lock):
 
 def load_whisper_model():
     """Load the OpenAI Whisper model with configurable size and fallback"""
-    enable_audio_monitoring = os.getenv('ENABLE_AUDIO_MONITORING', 'true').lower() == 'true'
+    enable_audio_monitoring = os.getenv('ENABLE_AUDIO_MONITORING', 'false').lower() == 'true'
     if not enable_audio_monitoring:
         logger.info("Audio monitoring disabled; skipping Whisper model loading")
         return None
@@ -135,7 +135,7 @@ def normalize_audio(audio_data):
 
 def process_audio_segment(audio_data, original_sample_rate, stream_url):
     """Process an audio segment for transcription and analysis with diagnostics"""
-    enable_audio_monitoring = os.getenv('ENABLE_AUDIO_MONITORING', 'true').lower() == 'true'
+    enable_audio_monitoring = os.getenv('ENABLE_AUDIO_MONITORING', 'false').lower() == 'true'
     if not enable_audio_monitoring:
         logger.info(f"Audio monitoring disabled for {stream_url}")
         return [], ""
@@ -184,7 +184,7 @@ def process_audio_segment(audio_data, original_sample_rate, stream_url):
 
 def log_audio_detection(detection, stream_url):
     """Log audio detections to database"""
-    enable_audio_monitoring = os.getenv('ENABLE_AUDIO_MONITORING', 'true').lower() == 'true'
+    enable_audio_monitoring = os.getenv('ENABLE_AUDIO_MONITORING', 'false').lower() == 'true'
     if not enable_audio_monitoring:
         return
     platform, streamer = get_stream_info(stream_url)

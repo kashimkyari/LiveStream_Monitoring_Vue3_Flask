@@ -1,4 +1,3 @@
-// src/composables/useModalActions.js
 import { ref } from 'vue'
 import axios from 'axios'
 
@@ -21,10 +20,14 @@ export function useModalActions(toast, fetchDashboardData) {
     progress: 0,
     progressMessage: '',
     jobId: null,
+    roomUrl: null, // Added to store room_url for SSE/polling
     estimatedTime: 0,
     error: null,
     submitSuccess: false,
-    submitError: false
+    submitError: false,
+    startTime: null,
+    eventSource: null,
+    pollInterval: null
   })
   
   // Stream methods
@@ -32,216 +35,223 @@ export function useModalActions(toast, fetchDashboardData) {
     selectedStream.value = stream
   }
   
-const closeModal = () => {
-  selectedStream.value = null
-  
-  // Clean up any active SSE connections or polling intervals
-  cleanupStreamCreation()
-  
-  // Reset stream creation state
-  streamCreationState.value = {
-    isSubmitting: false,
-    progress: 0,
-    progressMessage: '',
-    jobId: null,
-    estimatedTime: 0,
-    error: null,
-    submitSuccess: false,
-    submitError: false,
-    eventSource: null,
-    pollInterval: null
-  }
-}
-  
-const subscribeToProgress = (jobId) => {
-  // Add a timeout to detect initial connection failure
-  let connectionEstablished = false
-  const connectionTimeout = setTimeout(() => {
-    if (!connectionEstablished) {
-      streamCreationState.value.submitError = true
-      streamCreationState.value.error = 'Connection timed out. Stream may still be creating.'
-      streamCreationState.value.isSubmitting = false
-      
-      if (eventSource) {
-        eventSource.close()
-      }
-      
-      // Fall back to polling for status
-      startPollingForStatus(jobId)
-    }
-  }, 5000) // 5 second timeout
-  
-  const eventSource = new EventSource(`/api/streams/interactive/sse?job_id=${jobId.value}`)
-  
-  // Handle connection open
-  eventSource.onopen = () => {
-    connectionEstablished = true
-    clearTimeout(connectionTimeout)
-    console.log('SSE connection established')
-  }
-  
-  eventSource.onmessage = (e) => {
-    connectionEstablished = true
-    clearTimeout(connectionTimeout)
+  const closeModal = () => {
+    selectedStream.value = null
     
-    try {
-      const data = JSON.parse(e.data)
-      streamCreationState.value.progress = data.progress
-      streamCreationState.value.progressMessage = data.message
-      streamCreationState.value.estimatedTime = data.estimated_time || 0
-      
-      if (data.progress >= 100) {
-        if (data.error) {
-          streamCreationState.value.submitError = true
-          streamCreationState.value.error = data.error
-        } else {
-          streamCreationState.value.submitSuccess = true
-        }
-        eventSource.close()
-        
-        // If successful, refresh dashboard data to show the new stream
-        if (!data.error) {
-          fetchDashboardData()
-          toast.success('Stream created successfully')
-          showCreateStreamModal.value = false
-        }
-      }
-    } catch (error) {
-      console.error('Error parsing SSE data:', error)
-      // Continue listening - don't close the connection on parse error
-    }
-  }
-  
-  eventSource.onerror = (err) => {
-    console.error("SSE error:", err)
-    
-    // Only handle if we haven't already fallen back to polling
-    if (connectionEstablished) {
-      // Try reconnecting once
-      if (eventSource.readyState === EventSource.CLOSED) {
-        connectionEstablished = false
-        startPollingForStatus(jobId)
-        eventSource.close()
-      }
-    }
-  }
-  
-  // Store the event source for cleanup
-  streamCreationState.value.eventSource = eventSource
-}
-
-// Add a polling fallback when SSE fails
-const startPollingForStatus = (jobId) => {
-  console.log('Falling back to polling for job status:', jobId)
-  
-  const pollInterval = setInterval(async () => {
-    try {
-      const response = await axios.get(`/api/streams/interactive/status?job_id=${jobId.value}`)
-      const data = response.data
-      
-      streamCreationState.value.progress = data.progress
-      streamCreationState.value.progressMessage = data.message || 'Processing...'
-      
-      if (data.progress >= 100 || data.error) {
-        clearInterval(pollInterval)
-        
-        if (data.error) {
-          streamCreationState.value.submitError = true
-          streamCreationState.value.error = data.error
-        } else {
-          streamCreationState.value.submitSuccess = true
-          fetchDashboardData()
-          toast.success('Stream created successfully')
-          showCreateStreamModal.value = false
-        }
-      }
-    } catch (error) {
-      console.error('Error polling for status:', error)
-      // Don't stop polling on error, but after 5 minutes we should give up
-      if (Date.now() - streamCreationState.value.startTime > 30000) {
-        clearInterval(pollInterval)
-        streamCreationState.value.submitError = true
-        streamCreationState.value.error = 'Status updates timed out. Please check the streams list to see if creation was successful.'
-      }
-    }
-  }, 15000) // Poll every 3 seconds
-  
-  // Store the interval ID for cleanup
-  streamCreationState.value.pollInterval = pollInterval
-}
-
-// Add cleanup function
-const cleanupStreamCreation = () => {
-  if (streamCreationState.value.eventSource) {
-    streamCreationState.value.eventSource.close()
-    streamCreationState.value.eventSource = null
-  }
-  
-  if (streamCreationState.value.pollInterval) {
-    clearInterval(streamCreationState.value.pollInterval)
-    streamCreationState.value.pollInterval = null
-  }
-}
-  
-const createStream = async (streamData) => {
-  try {
-    // Cleanup any existing connections/intervals
+    // Clean up any active SSE connections or polling intervals
     cleanupStreamCreation()
     
-    // Reset state
+    // Reset stream creation state
     streamCreationState.value = {
-      isSubmitting: true,
+      isSubmitting: false,
       progress: 0,
-      progressMessage: 'Initializing...',
+      progressMessage: '',
       jobId: null,
+      roomUrl: null,
       estimatedTime: 0,
       error: null,
-      submitError: false,
       submitSuccess: false,
-      startTime: Date.now(),
+      submitError: false,
+      startTime: null,
       eventSource: null,
       pollInterval: null
     }
+  }
+  
+  const subscribeToProgress = (jobId, roomUrl) => {
+    // Add a timeout to detect initial connection failure
+    let connectionEstablished = false
+    const connectionTimeout = setTimeout(() => {
+      if (!connectionEstablished) {
+        streamCreationState.value.submitError = true
+        streamCreationState.value.error = 'Connection timed out. Stream may still be creating.'
+        streamCreationState.value.isSubmitting = false
+        
+        if (streamCreationState.value.eventSource) {
+          streamCreationState.value.eventSource.close()
+        }
+        
+        // Fall back to polling for status
+        startPollingForStatus(jobId, roomUrl)
+      }
+    }, 5000) // 5 second timeout
     
-    // Ensure we have valid data to work with
-    if (!streamData || !streamData.room_url) {
-      throw new Error('Invalid stream data provided')
+    const eventSource = new EventSource(`/api/streams/interactive/sse?job_id=${jobId}&room_url=${encodeURIComponent(roomUrl)}`)
+    
+    // Handle connection open
+    eventSource.onopen = () => {
+      connectionEstablished = true
+      clearTimeout(connectionTimeout)
+      console.log('SSE connection established')
     }
     
-    // Determine platform from URL if not explicitly set
-    if (!streamData.platform) {
-      if (streamData.room_url.toLowerCase().includes('stripchat.com')) {
-        streamData.platform = 'stripchat'
-      } else {
-        streamData.platform = 'chaturbate'
+    eventSource.onmessage = (e) => {
+      connectionEstablished = true
+      clearTimeout(connectionTimeout)
+      
+      try {
+        const data = JSON.parse(e.data)
+        streamCreationState.value.progress = data.progress
+        streamCreationState.value.progressMessage = data.message
+        streamCreationState.value.estimatedTime = data.estimated_time || 0
+        
+        if (data.progress >= 100 || data.stream_id) {
+          if (data.error) {
+            streamCreationState.value.submitError = true
+            streamCreationState.value.error = data.error
+          } else {
+            streamCreationState.value.submitSuccess = true
+            fetchDashboardData()
+            toast.success('Stream created successfully')
+            showCreateStreamModal.value = false
+          }
+          eventSource.close()
+          streamCreationState.value.eventSource = null
+        }
+      } catch (error) {
+        console.error('Error parsing SSE data:', error)
+        // Continue listening - don't close the connection on parse error
       }
     }
     
-    console.log('Creating stream with data:', streamData)
-    
-    // Use interactive stream creation API endpoint
-    const response = await axios.post('/api/streams/interactive', streamData)
-    
-    if (response.data && response.data.job_id) {
-      streamCreationState.value.jobId = response.data.job_id
-      subscribeToProgress(response.data.job_id)
-    } else {
-      // Fallback to non-interactive if job_id is not returned
-      await handleLegacyStreamCreation(streamData)
+    eventSource.onerror = (err) => {
+      console.error("SSE error:", err)
+      
+      // Only handle if we haven't already fallen back to polling
+      if (connectionEstablished && eventSource.readyState === EventSource.CLOSED) {
+        connectionEstablished = false
+        startPollingForStatus(jobId, roomUrl)
+        eventSource.close()
+        streamCreationState.value.eventSource = null
+      }
     }
-  } catch (error) {
-    console.error('Failed to create stream:', error)
-    streamCreationState.value.error = error.response?.data?.message || 'Failed to start stream creation'
-    streamCreationState.value.submitError = true
-    streamCreationState.value.isSubmitting = false
-    toast.error('Failed to create stream')
+    
+    // Store the event source for cleanup
+    streamCreationState.value.eventSource = eventSource
   }
-}
+  
+  // Add a polling fallback when SSE fails
+  const startPollingForStatus = (jobId, roomUrl) => {
+    console.log('Falling back to polling for job status:', jobId)
+    
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await axios.get(`/api/streams/interactive/status?job_id=${jobId}&room_url=${encodeURIComponent(roomUrl)}`)
+        const data = response.data
+        
+        streamCreationState.value.progress = data.progress
+        streamCreationState.value.progressMessage = data.message || 'Processing...'
+        
+        if (data.progress >= 100 || data.error || data.stream_id) {
+          clearInterval(pollInterval)
+          streamCreationState.value.pollInterval = null
+          
+          if (data.error) {
+            streamCreationState.value.submitError = true
+            streamCreationState.value.error = data.error
+          } else {
+            streamCreationState.value.submitSuccess = true
+            fetchDashboardData()
+            toast.success('Stream created successfully')
+            showCreateStreamModal.value = false
+          }
+        }
+      } catch (error) {
+        console.error('Error polling for status:', error)
+        // Stop polling after 5 minutes
+        if (Date.now() - streamCreationState.value.startTime > 300000) { // 5 minutes
+          clearInterval(pollInterval)
+          streamCreationState.value.pollInterval = null
+          streamCreationState.value.submitError = true
+          streamCreationState.value.error = 'Status updates timed out. Please check the streams list.'
+          toast.error('Status updates timed out. Please check the streams list.')
+        }
+      }
+    }, 3000) // Poll every 3 seconds to align with CreateStreamModal.vue
+    
+    // Store the interval ID for cleanup
+    streamCreationState.value.pollInterval = pollInterval
+  }
+  
+  // Add cleanup function
+  const cleanupStreamCreation = () => {
+    if (streamCreationState.value.eventSource) {
+      streamCreationState.value.eventSource.close()
+      streamCreationState.value.eventSource = null
+    }
+    
+    if (streamCreationState.value.pollInterval) {
+      clearInterval(streamCreationState.value.pollInterval)
+      streamCreationState.value.pollInterval = null
+    }
+  }
+  
+  const createStream = async (streamData) => {
+    try {
+      // Cleanup any existing connections/intervals
+      cleanupStreamCreation()
+      
+      // Reset state
+      streamCreationState.value = {
+        isSubmitting: true,
+        progress: 0,
+        progressMessage: 'Initializing...',
+        jobId: null,
+        roomUrl: streamData.room_url, // Store room_url
+        estimatedTime: 0,
+        error: null,
+        submitError: false,
+        submitSuccess: false,
+        startTime: Date.now(),
+        eventSource: null,
+        pollInterval: null
+      }
+      
+      // Ensure we have valid data to work with
+      if (!streamData || !streamData.room_url) {
+        throw new Error('Invalid stream data provided')
+      }
+      
+      // Determine platform from URL if not explicitly set
+      if (!streamData.platform) {
+        if (streamData.room_url.toLowerCase().includes('stripchat.com')) {
+          streamData.platform = 'stripchat'
+        } else {
+          streamData.platform = 'chaturbate'
+        }
+      }
+      
+      console.log('Creating stream with data:', streamData)
+      
+      // Use interactive stream creation API endpoint
+      const response = await axios.post('/api/streams/interactive', streamData, {
+        timeout: 30000, // Align with CreateStreamModal.vue
+        withCredentials: true
+      })
+      
+      if (response.data && response.data.job_id) {
+        streamCreationState.value.jobId = response.data.job_id
+        subscribeToProgress(response.data.job_id, streamData.room_url)
+      } else {
+        // Fallback to non-interactive if job_id is not returned
+        await handleLegacyStreamCreation(streamData)
+      }
+    } catch (error) {
+      console.error('Failed to create stream:', error)
+      streamCreationState.value.error = error.response?.data?.message || 'Failed to start stream creation'
+      streamCreationState.value.submitError = true
+      streamCreationState.value.isSubmitting = false
+      toast.error('Failed to create stream')
+    }
+  }
   
   // Fallback method for legacy API without progress tracking
   const handleLegacyStreamCreation = async (streamData) => {
     try {
-      const response = await axios.post('/api/streams', streamData)
+      const response = await axios.post('/api/streams', streamData, {
+        timeout: 30000,
+        withCredentials: true
+      })
       if (response.status === 201) {
         showCreateStreamModal.value = false
         fetchDashboardData()
@@ -273,6 +283,9 @@ const createStream = async (streamData) => {
           await axios.post('/api/assign', {
             agent_id: agentId,
             stream_id: stream.id
+          }, {
+            timeout: 30000,
+            withCredentials: true
           })
           fetchDashboardData()
           closeModal()
@@ -302,7 +315,10 @@ const createStream = async (streamData) => {
   
   const deleteStream = async (stream) => {
     try {
-      await axios.delete(`/api/streams/${stream.id}`)
+      await axios.delete(`/api/streams/${stream.id}`, {
+        timeout: 30000,
+        withCredentials: true
+      })
       confirmationModal.value.show = false
       fetchDashboardData()
       toast.success('Stream deleted successfully')
@@ -315,7 +331,10 @@ const createStream = async (streamData) => {
   // Agent methods
   const createAgent = async (agentData) => {
     try {
-      const response = await axios.post('/api/agents', agentData)
+      const response = await axios.post('/api/agents', agentData, {
+        timeout: 30000,
+        withCredentials: true
+      })
       if (response.status === 201) {
         showCreateAgentModal.value = false
         fetchDashboardData()
@@ -343,7 +362,10 @@ const createStream = async (streamData) => {
   
   const deleteAgent = async (agent) => {
     try {
-      await axios.delete(`/api/agents/${agent.id}`)
+      await axios.delete(`/api/agents/${agent.id}`, {
+        timeout: 30000,
+        withCredentials: true
+      })
       confirmationModal.value.show = false
       fetchDashboardData()
       toast.success('Agent deleted successfully')

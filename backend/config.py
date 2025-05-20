@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from extensions import db
 from services.notification_service import NotificationService
 
+# Load environment variables
 load_dotenv()
 
 class Config:
@@ -65,10 +66,47 @@ class Config:
     VIEWER_COUNT_INTERVAL = int(os.getenv('VIEWER_COUNT_INTERVAL', 30))
     NOTIFICATION_DEBOUNCE = int(os.getenv('NOTIFICATION_DEBOUNCE', 300))
 
+    # ─── Monitoring Configuration ────────────────────────────────────────
+    CONTINUOUS_MONITORING = os.getenv('CONTINUOUS_MONITORING', 'false').lower() == 'true'
+    ENABLE_AUDIO_MONITORING = os.getenv('ENABLE_AUDIO_MONITORING', 'false').lower() == 'true'
+    ENABLE_VIDEO_MONITORING = os.getenv('ENABLE_VIDEO_MONITORING', 'false').lower() == 'true'
+    ENABLE_CHAT_MONITORING = os.getenv('ENABLE_CHAT_MONITORING', 'false').lower() == 'true'
+    CHAT_ALERT_COOLDOWN = int(os.getenv('CHAT_ALERT_COOLDOWN', 60))
+    VISUAL_ALERT_COOLDOWN = int(os.getenv('VISUAL_ALERT_COOLDOWN', 60))
+    AUDIO_ALERT_COOLDOWN = int(os.getenv('AUDIO_ALERT_COOLDOWN', 60))
+    NEGATIVE_SENTIMENT_THRESHOLD = float(os.getenv('NEGATIVE_SENTIMENT_THRESHOLD', -0.5))
+    WHISPER_MODEL_SIZE = os.getenv('WHISPER_MODEL_SIZE', 'base')
+    AUDIO_SAMPLE_DURATION = int(os.getenv('AUDIO_SAMPLE_DURATION', 10))
+
 def create_app(config_class=Config):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class)
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = config_class.SQLALCHEMY_ENGINE_OPTIONS
+
+    # Explicitly set monitoring configurations in app.config
+    app.config['CONTINUOUS_MONITORING'] = config_class.CONTINUOUS_MONITORING
+    app.config['ENABLE_AUDIO_MONITORING'] = config_class.ENABLE_AUDIO_MONITORING
+    app.config['ENABLE_VIDEO_MONITORING'] = config_class.ENABLE_VIDEO_MONITORING
+    app.config['ENABLE_CHAT_MONITORING'] = config_class.ENABLE_CHAT_MONITORING
+    app.config['CHAT_ALERT_COOLDOWN'] = config_class.CHAT_ALERT_COOLDOWN
+    app.config['VISUAL_ALERT_COOLDOWN'] = config_class.VISUAL_ALERT_COOLDOWN
+    app.config['AUDIO_ALERT_COOLDOWN'] = config_class.AUDIO_ALERT_COOLDOWN
+    app.config['NEGATIVE_SENTIMENT_THRESHOLD'] = config_class.NEGATIVE_SENTIMENT_THRESHOLD
+    app.config['WHISPER_MODEL_SIZE'] = config_class.WHISPER_MODEL_SIZE
+    app.config['AUDIO_SAMPLE_DURATION'] = config_class.AUDIO_SAMPLE_DURATION
+
+    # Log configuration for debugging
+    app.logger.info("Loaded configuration:")
+    app.logger.info(f"CONTINUOUS_MONITORING: {app.config['CONTINUOUS_MONITORING']}")
+    app.logger.info(f"ENABLE_AUDIO_MONITORING: {app.config['ENABLE_AUDIO_MONITORING']}")
+    app.logger.info(f"ENABLE_VIDEO_MONITORING: {app.config['ENABLE_VIDEO_MONITORING']}")
+    app.logger.info(f"ENABLE_CHAT_MONITORING: {app.config['ENABLE_CHAT_MONITORING']}")
+    app.logger.info(f"CHAT_ALERT_COOLDOWN: {app.config['CHAT_ALERT_COOLDOWN']}")
+    app.logger.info(f"VISUAL_ALERT_COOLDOWN: {app.config['VISUAL_ALERT_COOLDOWN']}")
+    app.logger.info(f"AUDIO_ALERT_COOLDOWN: {app.config['AUDIO_ALERT_COOLDOWN']}")
+    app.logger.info(f"NEGATIVE_SENTIMENT_THRESHOLD: {app.config['NEGATIVE_SENTIMENT_THRESHOLD']}")
+    app.logger.info(f"WHISPER_MODEL_SIZE: {app.config['WHISPER_MODEL_SIZE']}")
+    app.logger.info(f"AUDIO_SAMPLE_DURATION: {app.config['AUDIO_SAMPLE_DURATION']}")
 
     try:
         os.makedirs(app.instance_path, exist_ok=True)

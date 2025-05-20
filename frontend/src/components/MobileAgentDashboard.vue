@@ -258,7 +258,7 @@ export default {
 
     // Messages
     const initializeSocketConnection = () => {
-      socket = io('  https://monitor-backend.jetcamstudio.com:5000', {
+      socket = io('   https://monitor-backend.jetcamstudio.com:5000', {
         path: '/ws',
         transports: ['websocket'],
         query: { userId: currentUserId }

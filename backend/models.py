@@ -1,4 +1,3 @@
-# models.py
 from datetime import datetime, timezone, timedelta
 from extensions import db
 
@@ -97,11 +96,13 @@ class Stream(db.Model):
 class ChaturbateStream(Stream):
     """
     ChaturbateStream model extends Stream for Chaturbate-specific streams.
-    Stores the m3u8 URL for Chaturbate.
+    Stores the m3u8 URL, broadcaster_uid, and room_uid for Chaturbate.
     """
     __tablename__ = "chaturbate_streams"
     id = db.Column(db.Integer, db.ForeignKey("streams.id"), primary_key=True)
     chaturbate_m3u8_url = db.Column(db.String(300), nullable=True, index=True)
+    broadcaster_uid = db.Column(db.String(50), nullable=True, index=True)
+    room_uid = db.Column(db.String(50), nullable=True, index=True)
 
     __mapper_args__ = {
         'polymorphic_identity': 'chaturbate'
@@ -115,6 +116,8 @@ class ChaturbateStream(Stream):
         data.update({
             "platform": "Chaturbate",
             "chaturbate_m3u8_url": self.chaturbate_m3u8_url,
+            "broadcaster_uid": self.broadcaster_uid,
+            "room_uid": self.room_uid,
         })
         return data
 
@@ -189,7 +192,7 @@ class Assignment(db.Model):
                     "username": self.agent.username,
                     "email": self.agent.email,
                     "role": self.agent.role,
-                    "telegram_username": self.agent.telegram_username,
+                    "telegram_username": self.telegram_username,
                 }
             else:
                 data["agent"] = None
@@ -386,7 +389,7 @@ class ChatMessage(db.Model):
                 "size": self.attachment.size
             }
             
-        return data
+        return result
 
 class PasswordReset(db.Model):
     __tablename__ = 'password_resets'

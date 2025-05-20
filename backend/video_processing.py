@@ -6,6 +6,12 @@ from flask import current_app
 from models import DetectionLog, Stream, ChaturbateStream, StripchatStream
 from extensions import db
 from utils.notifications import emit_notification
+from dotenv import load_dotenv
+import base64
+import os
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -22,13 +28,13 @@ ENABLE_VIDEO_MONITORING = None
 VISUAL_ALERT_COOLDOWN = None
 last_visual_alerts = {}
 
-def initialize_video_globals(yolo_model, yolo_lock, enable_video_monitoring, visual_alert_cooldown):
-    """Initialize global variables from monitoring.py"""
+def initialize_video_globals(yolo_model=None, yolo_lock=None):
+    """Initialize global variables from environment"""
     global _yolo_model, _yolo_lock, ENABLE_VIDEO_MONITORING, VISUAL_ALERT_COOLDOWN
     _yolo_model = yolo_model
     _yolo_lock = yolo_lock
-    ENABLE_VIDEO_MONITORING = enable_video_monitoring
-    VISUAL_ALERT_COOLDOWN = visual_alert_cooldown
+    ENABLE_VIDEO_MONITORING = os.getenv('ENABLE_VIDEO_MONITORING', 'false').lower() == 'true'
+    VISUAL_ALERT_COOLDOWN = int(os.getenv('VISUAL_ALERT_COOLDOWN', 60))
 
 def load_yolo_model():
     """Load the YOLO object detection model"""
