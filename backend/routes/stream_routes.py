@@ -70,7 +70,7 @@ def get_streams():
                     current_app.logger.warning(f"Agent with ID {assignment.agent_id} not found for stream {stream.id}")
                     agent_data = None
             assignments_data.append({
-                # **assignment.serialize(),
+                **assignment.serialize(),
                 "agent": agent_data
             })
         stream_data = {
