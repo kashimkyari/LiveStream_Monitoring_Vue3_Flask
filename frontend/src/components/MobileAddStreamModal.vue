@@ -10,22 +10,14 @@
           </div>
           <div v-if="isProcessing" class="progress-section">
             <div class="progress-bar-container" :class="{ 'error': hasError }">
-              <div
-                class="progress-bar"
-                :style="progressBarStyle"
-                :title="`Progress: ${progress}%`"
-                @mouseenter="showTooltip = true"
-                @mouseleave="showTooltip = false"
-              >
+              <div class="progress-bar" :style="progressBarStyle" :title="`Progress: ${progress}%`"
+                @mouseenter="showTooltip = true" @mouseleave="showTooltip = false">
                 <div class="progress-bar-inner"></div>
               </div>
               <span v-if="showTooltip" class="progress-tooltip">{{ progress }}%</span>
             </div>
-            <p
-              class="progress-message"
-              :class="{ 'error-message': hasError, 'fade-in': messageChanged }"
-              @animationend="messageChanged = false"
-            >
+            <p class="progress-message" :class="{ 'error-message': hasError, 'fade-in': messageChanged }"
+              @animationend="messageChanged = false">
               {{ progressMessage }}
             </p>
             <div v-if="hasError" class="error-details">
@@ -42,13 +34,7 @@
           <form v-else @submit.prevent="handleSubmit" class="stream-form">
             <div class="form-group">
               <label for="platform">Platform</label>
-              <select
-                id="platform"
-                v-model="form.platform"
-                required
-                class="form-control"
-                :disabled="isSubmitting"
-              >
+              <select id="platform" v-model="form.platform" required class="form-control" :disabled="isSubmitting">
                 <option value="" disabled>Select Platform</option>
                 <option value="chaturbate">Chaturbate</option>
                 <option value="stripchat">Stripchat</option>
@@ -56,24 +42,13 @@
             </div>
             <div class="form-group">
               <label for="room_url">Room URL</label>
-              <input
-                id="room_url"
-                v-model="form.room_url"
-                type="url"
-                placeholder="https://example.com/username"
-                required
-                class="form-control"
-                :disabled="isSubmitting"
-              />
+              <input id="room_url" v-model="form.room_url" type="url" placeholder="https://example.com/username"
+                required class="form-control" :disabled="isSubmitting" />
             </div>
             <div class="form-group">
               <label for="agent_id">Assign Agent (Optional)</label>
-              <select
-                id="agent_id"
-                v-model="form.agent_id"
-                class="form-control"
-                :disabled="isSubmitting || loadingAgents"
-              >
+              <select id="agent_id" v-model="form.agent_id" class="form-control"
+                :disabled="isSubmitting || loadingAgents">
                 <option value="">Unassigned</option>
                 <option v-for="agent in agentsList" :key="agent.id" :value="agent.id">
                   {{ agent.username }}
@@ -89,24 +64,11 @@
               </div>
             </div>
             <div class="sheet-actions">
-              <button
-                type="submit"
-                class="btn btn-primary"
-                :disabled="isSubmitting || loadingAgents"
-              >
-                <font-awesome-icon
-                  :icon="isSubmitting ? 'spinner' : 'plus'"
-                  :spin="isSubmitting"
-                  class="icon-left"
-                />
+              <button type="submit" class="btn btn-primary" :disabled="isSubmitting || loadingAgents">
+                <font-awesome-icon :icon="isSubmitting ? 'spinner' : 'plus'" :spin="isSubmitting" class="icon-left" />
                 {{ isSubmitting ? 'Submitting...' : 'Add Stream' }}
               </button>
-              <button
-                type="button"
-                class="btn btn-outline-secondary"
-                @click="$emit('close')"
-                :disabled="isSubmitting"
-              >
+              <button type="button" class="btn btn-outline-secondary" @click="$emit('close')" :disabled="isSubmitting">
                 Cancel
               </button>
             </div>
@@ -169,8 +131,8 @@ export default {
       errorLoadingAgents.value = false
       errorMessage.value = ''
       try {
-        console.debug('Fetching agents from   https://monitor-backend.jetcamstudio.com:5000/api/agents')
-        const response = await axios.get('   https://monitor-backend.jetcamstudio.com:5000/api/agents', {
+        console.debug('Fetching agents from   https://monitor-backend.jetcamstudio.com:5000api/agents')
+        const response = await axios.get('   https://monitor-backend.jetcamstudio.com:5000api/agents', {
           headers: {
             'Accept': 'application/json'
           },
@@ -224,7 +186,7 @@ export default {
 
     const connectSSE = (jobId) => {
       if (eventSource.value) eventSource.value.close()
-      const sseUrl = `   https://monitor-backend.jetcamstudio.com:5000/api/streams/interactive/sse?job_id=${jobId}`
+      const sseUrl = `   https://monitor-backend.jetcamstudio.com:5000api/streams/interactive/sse?job_id=${jobId}`
       eventSource.value = new EventSource(sseUrl, { withCredentials: true })
 
       eventSource.value.onmessage = (event) => {
@@ -305,7 +267,7 @@ export default {
       isSubmitting.value = true
       try {
         console.debug('Submitting stream creation:', form.value)
-        const response = await axios.post('   https://monitor-backend.jetcamstudio.com:5000/api/streams/interactive', form.value, {
+        const response = await axios.post('   https://monitor-backend.jetcamstudio.com:5000api/streams/interactive', form.value, {
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json'
@@ -598,16 +560,14 @@ export default {
 .progress-bar-inner {
   width: 100%;
   height: 100%;
-  background: linear-gradient(
-    45deg,
-    rgba(255, 255, 255, 0.2) 25%,
-    transparent 25%,
-    transparent 50%,
-    rgba(255, 255, 255, 0.2) 50%,
-    rgba(255, 255, 255, 0.2) 75%,
-    transparent 75%,
-    transparent
-  );
+  background: linear-gradient(45deg,
+      rgba(255, 255, 255, 0.2) 25%,
+      transparent 25%,
+      transparent 50%,
+      rgba(255, 255, 255, 0.2) 50%,
+      rgba(255, 255, 255, 0.2) 75%,
+      transparent 75%,
+      transparent);
   background-size: 30px 30px;
   animation: move-stripes 1s linear infinite;
 }
@@ -693,34 +653,75 @@ export default {
 }
 
 @keyframes move-stripes {
-  0% { background-position: 0 0; }
-  100% { background-position: 30px 0; }
+  0% {
+    background-position: 0 0;
+  }
+
+  100% {
+    background-position: 30px 0;
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.8; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.8;
+  }
 }
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-5px); }
-  40%, 80% { transform: translateX(5px); }
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20%,
+  60% {
+    transform: translateX(-5px);
+  }
+
+  40%,
+  80% {
+    transform: translateX(5px);
+  }
 }
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
 }
 
 @keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
 :where([data-theme="light"]) {

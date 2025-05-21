@@ -52,6 +52,7 @@ TRANSCRIPTION_DIR = "/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/tra
 # Initialize monitoring globals
 def initialize_monitoring():
     """Initialize global variables for monitoring"""
+    logger.info("Initializing monitoring globals")
     global _whisper_model, _whisper_lock, _sentiment_analyzer
     from audio_processing import initialize_audio_globals
     initialize_audio_globals(
@@ -338,7 +339,7 @@ def process_combined_detection(app, stream_url, cancel_event):
                                     frame_duration = frame.samples / sample_rate
                                     audio_buffer.append(audio_data)
                                     total_audio_duration += frame_duration
-                                    if total_audio_duration >= os.getenv('AUDIO_SAMPLE_DURATION', 10):
+                                    if total_audio_duration >= current_app.config['AUDIO_SAMPLE_DURATION']:
                                         combined_audio = np.concatenate(audio_buffer)
                                         detections, transcript = process_audio_segment(combined_audio, sample_rate, stream_url)
                                         # Log transcription
@@ -576,12 +577,20 @@ def start_notification_monitor():
     try:
         with current_app.app_context():
             streams = Stream.query.filter(Stream.status != 'offline').all()
+            logger.info(f"Found {len(streams)} streams to monitor")
             for stream in streams:
-                start_monitoring(stream)
+                logger.info(f"Attempting to start monitoring for stream {stream.id} ({stream.room_url})")
+                try:
+                    if start_monitoring(stream):
+                        logger.info(f"Successfully started monitoring for stream {stream.id}")
+                    else:
+                        logger.warning(f"Failed to start monitoring for stream {stream.id}")
+                except Exception as e:
+                    logger.error(f"Error starting monitoring for stream {stream.id}: {str(e)}")
             logger.info("Notification monitor started successfully")
     except Exception as e:
-            logger.error(f"Error starting notification monitor: {e}")
-            raise
+        logger.error(f"Error starting notification monitor: {str(e)}")
+        raise
 
 # Exports
 __all__ = [

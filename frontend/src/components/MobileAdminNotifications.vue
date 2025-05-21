@@ -3,21 +3,10 @@
     <div class="header">
       <h2>Notifications</h2>
       <div class="header-actions">
-        <button
-          @click="refreshNotifications"
-          :disabled="notificationsLoading"
-          class="refresh-btn"
-        >
-          <font-awesome-icon
-            :icon="['fas', 'sync-alt']"
-            :class="{ 'spinning': notificationsLoading }"
-          />
+        <button @click="refreshNotifications" :disabled="notificationsLoading" class="refresh-btn">
+          <font-awesome-icon :icon="['fas', 'sync-alt']" :class="{ 'spinning': notificationsLoading }" />
         </button>
-        <button
-          @click="markAllAsRead"
-          :disabled="unreadCount === 0"
-          class="mark-all-read-btn"
-        >
+        <button @click="markAllAsRead" :disabled="unreadCount === 0" class="mark-all-read-btn">
           Mark All Read
         </button>
       </div>
@@ -25,19 +14,11 @@
 
     <div class="filter-section">
       <label>
-        <input
-          type="checkbox"
-          v-model="groupByType"
-          @change="toggleGroupByType"
-        />
+        <input type="checkbox" v-model="groupByType" @change="toggleGroupByType" />
         Group by Type
       </label>
       <label>
-        <input
-          type="checkbox"
-          v-model="groupByStream"
-          @change="toggleGroupByStream"
-        />
+        <input type="checkbox" v-model="groupByStream" @change="toggleGroupByStream" />
         Group by Streamer
       </label>
     </div>
@@ -50,11 +31,7 @@
     </div>
     <div v-else class="notifications-list">
       <template v-if="groupByType || groupByStream">
-        <div
-          v-for="(group, key) in groupedNotifications"
-          :key="key"
-          class="notification-group"
-        >
+        <div v-for="(group, key) in groupedNotifications" :key="key" class="notification-group">
           <h3>
             {{
               groupByType
@@ -62,19 +39,11 @@
                 : group[0].details.streamer_name || 'Unknown Streamer'
             }}
           </h3>
-          <div
-            v-for="notification in group"
-            :key="notification.id"
-            class="notification-item"
-            :class="{ 'unread': !notification.read }"
-            @click="openModal(notification)"
-          >
+          <div v-for="notification in group" :key="notification.id" class="notification-item"
+            :class="{ 'unread': !notification.read }" @click="openModal(notification)">
             <div class="notification-content">
               <div class="notification-header">
-                <span
-                  class="type"
-                  :class="getTypeClass(notification.event_type)"
-                >
+                <span class="type" :class="getTypeClass(notification.event_type)">
                   {{ notification.event_type.replace('_', ' ') }}
                 </span>
                 <span class="time">{{ formatTime(notification.timestamp) }}</span>
@@ -101,12 +70,10 @@
                     (notification.details.transcript?.length > 100 ? '...' : '')
                   }}
                 </p>
-                <p
-                  v-if="
-                    notification.event_type === 'chat_detection' ||
-                    notification.event_type === 'chat_sentiment_detection'
-                  "
-                >
+                <p v-if="
+                  notification.event_type === 'chat_detection' ||
+                  notification.event_type === 'chat_sentiment_detection'
+                ">
                   <strong>Sender:</strong>
                   {{ notification.details.detections?.[0]?.sender || 'Unknown' }}<br />
                   <strong>Message:</strong>
@@ -122,11 +89,7 @@
                   {{ notification.details.assigned_agent || 'Unassigned' }}
                 </p>
               </div>
-              <button
-                v-if="!notification.read"
-                @click.stop="markAsRead(notification.id)"
-                class="mark-read-btn"
-              >
+              <button v-if="!notification.read" @click.stop="markAsRead(notification.id)" class="mark-read-btn">
                 Mark as Read
               </button>
             </div>
@@ -134,19 +97,11 @@
         </div>
       </template>
       <template v-else>
-        <div
-          v-for="notification in notifications"
-          :key="notification.id"
-          class="notification-item"
-          :class="{ 'unread': !notification.read }"
-          @click="openModal(notification)"
-        >
+        <div v-for="notification in notifications" :key="notification.id" class="notification-item"
+          :class="{ 'unread': !notification.read }" @click="openModal(notification)">
           <div class="notification-content">
             <div class="notification-header">
-              <span
-                class="type"
-                :class="getTypeClass(notification.event_type)"
-              >
+              <span class="type" :class="getTypeClass(notification.event_type)">
                 {{ notification.event_type.replace('_', ' ') }}
               </span>
               <span class="time">{{ formatTime(notification.timestamp) }}</span>
@@ -173,12 +128,10 @@
                   (notification.details.transcript?.length > 100 ? '...' : '')
                 }}
               </p>
-              <p
-                v-if="
-                  notification.event_type === 'chat_detection' ||
-                  notification.event_type === 'chat_sentiment_detection'
-                "
-              >
+              <p v-if="
+                notification.event_type === 'chat_detection' ||
+                notification.event_type === 'chat_sentiment_detection'
+              ">
                 <strong>Sender:</strong>
                 {{ notification.details.detections?.[0]?.sender || 'Unknown' }}<br />
                 <strong>Message:</strong>
@@ -194,11 +147,7 @@
                 {{ notification.details.assigned_agent || 'Unassigned' }}
               </p>
             </div>
-            <button
-              v-if="!notification.read"
-              @click.stop="markAsRead(notification.id)"
-              class="mark-read-btn"
-            >
+            <button v-if="!notification.read" @click.stop="markAsRead(notification.id)" class="mark-read-btn">
               Mark as Read
             </button>
           </div>
@@ -228,24 +177,23 @@
             <div class="modal-section" v-if="selectedNotification.event_type === 'object_detection'">
               <p><strong>Detected Objects:</strong> {{ formatObjects(selectedNotification.details.detections) }}</p>
               <div v-if="selectedNotification.details.annotated_image" class="image-container" @click="toggleImageZoom">
-                <img
-                  :src="selectedNotification.details.annotated_image"
-                  alt="Annotated Image"
-                  class="annotated-image"
-                />
+                <img :src="selectedNotification.details.annotated_image" alt="Annotated Image"
+                  class="annotated-image" />
               </div>
             </div>
             <div class="modal-section" v-if="selectedNotification.event_type === 'audio_detection'">
               <p><strong>Keyword:</strong> {{ selectedNotification.details.keyword || 'N/A' }}</p>
               <p><strong>Transcript:</strong> {{ selectedNotification.details.transcript || 'N/A' }}</p>
             </div>
-            <div class="modal-section" v-if="selectedNotification.event_type === 'chat_detection' || selectedNotification.event_type === 'chat_sentiment_detection'">
+            <div class="modal-section"
+              v-if="selectedNotification.event_type === 'chat_detection' || selectedNotification.event_type === 'chat_sentiment_detection'">
               <p><strong>Sender:</strong> {{ selectedNotification.details.detections?.[0]?.sender || 'Unknown' }}</p>
               <p><strong>Message:</strong> {{ selectedNotification.details.detections?.[0]?.message || 'N/A' }}</p>
             </div>
           </div>
           <div class="modal-footer">
-            <button v-if="!selectedNotification.read" class="mark-read-btn small-btn" @click="markAsRead(selectedNotification.id)">
+            <button v-if="!selectedNotification.read" class="mark-read-btn small-btn"
+              @click="markAsRead(selectedNotification.id)">
               Mark as Read
             </button>
             <button class="close-btn small-btn" @click="closeModal">Close</button>
@@ -257,11 +205,7 @@
     <!-- Full-screen Image Viewer -->
     <transition name="image-zoom">
       <div v-if="isImageZoomed" class="image-zoom-overlay" @click="toggleImageZoom">
-        <img
-          :src="selectedNotification?.details?.annotated_image"
-          alt="Zoomed Annotated Image"
-          class="zoomed-image"
-        />
+        <img :src="selectedNotification?.details?.annotated_image" alt="Zoomed Annotated Image" class="zoomed-image" />
       </div>
     </transition>
   </div>
@@ -468,7 +412,7 @@ export default {
 
     // Initialize Socket.IO
     const initializeSocket = () => {
-      socket = io('   https://monitor-backend.jetcamstudio.com:5000/notifications', {
+      socket = io('   https://monitor-backend.jetcamstudio.com:5000notifications', {
         path: '/ws',
         transports: ['websocket'],
         query: { token: localStorage.getItem('token') }
@@ -647,13 +591,15 @@ export default {
   min-height: 2rem;
 }
 
-.mark-all-read-btn:hover, .refresh-btn:hover {
+.mark-all-read-btn:hover,
+.refresh-btn:hover {
   background-color: var(--secondary-color);
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
 
-.mark-all-read-btn:disabled, .refresh-btn:disabled {
+.mark-all-read-btn:disabled,
+.refresh-btn:disabled {
   background-color: var(--border-color);
   cursor: not-allowed;
 }
@@ -750,10 +696,21 @@ export default {
   color: white;
 }
 
-.type-object { background-color: #4CAF50; }
-.type-audio { background-color: #2196F3; }
-.type-chat { background-color: #FFC107; }
-.type-default { background-color: var(--text-light); }
+.type-object {
+  background-color: #4CAF50;
+}
+
+.type-audio {
+  background-color: #2196F3;
+}
+
+.type-chat {
+  background-color: #FFC107;
+}
+
+.type-default {
+  background-color: var(--text-light);
+}
 
 .time {
   font-size: 0.75rem;
@@ -947,45 +904,67 @@ export default {
 
 /* Animations */
 @keyframes slideIn {
-  from { transform: translateY(10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
-.modal-enter-active, .modal-leave-active {
+.modal-enter-active,
+.modal-leave-active {
   transition: opacity 0.3s ease;
 }
 
-.modal-enter-from, .modal-leave-to {
+.modal-enter-from,
+.modal-leave-to {
   opacity: 0;
 }
 
-.modal-enter-active .modal, .modal-leave-active .modal {
+.modal-enter-active .modal,
+.modal-leave-active .modal {
   transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
-.modal-enter-from .modal, .modal-leave-to .modal {
+.modal-enter-from .modal,
+.modal-leave-to .modal {
   transform: translateY(20px);
   opacity: 0;
 }
 
-.image-zoom-enter-active, .image-zoom-leave-active {
+.image-zoom-enter-active,
+.image-zoom-leave-active {
   transition: opacity 0.3s ease;
 }
 
-.image-zoom-enter-from, .image-zoom-leave-to {
+.image-zoom-enter-from,
+.image-zoom-leave-to {
   opacity: 0;
 }
 
-.image-zoom-enter-active .zoomed-image, .image-zoom-leave-active .zoomed-image {
+.image-zoom-enter-active .zoomed-image,
+.image-zoom-leave-active .zoomed-image {
   transition: transform 0.3s ease;
 }
 
-.image-zoom-enter-from .zoomed-image, .image-zoom-leave-to .zoomed-image {
+.image-zoom-enter-from .zoomed-image,
+.image-zoom-leave-to .zoomed-image {
   transform: scale(0.8);
 }
 </style>

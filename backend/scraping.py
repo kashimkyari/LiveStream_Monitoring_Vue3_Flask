@@ -4,7 +4,7 @@ chaturbate_scraper_updated.py
 
 This module provides scraping functions for Chaturbate and Stripchat streams.
 The updated Chaturbate scraper uses a POST request to retrieve the HLS URL 
-via free proxies. SSL verification is disabled due to known proxy issues.
+via free proxies and fetches room_uid and broadcaster_uid. SSL verification is disabled due to known proxy issues.
 """
 # import gevent.monkey
 # gevent.monkey.patch_all()  # Apply at the start of the application
@@ -121,6 +121,43 @@ def get_random_proxy():
             "https": f"http://{proxy}"
         }
     return None
+
+def fetch_chaturbate_room_uid(streamer_username):
+    """Fetch Chaturbate room UID and broadcaster UID"""
+    url = f"https://chaturbate.com/api/chatvideocontext/{streamer_username}/"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br, zstd',
+        'Referer': f'https://chaturbate.com/{streamer_username}/',
+        'Connection': 'keep-alive',
+    }
+    max_attempts = 3
+    attempts = 0
+    while attempts < max_attempts:
+        proxy_dict = get_random_proxy()
+        try:
+            response = requests.get(
+                url,
+                headers=headers,
+                proxies=proxy_dict,
+                timeout=10,
+                verify=False
+            )
+            response.raise_for_status()
+            data = response.json()
+            broadcaster_uid = data.get('broadcaster_uid')
+            room_uid = data.get('room_uid')
+            logging.debug(f"Fetched Chaturbate UIDs for {streamer_username}: broadcaster_uid={broadcaster_uid}, room_uid={room_uid}")
+            return broadcaster_uid, room_uid
+        except Exception as e:
+            attempts += 1
+            logging.warning(f"Attempt {attempts} failed for Chaturbate room UID fetch for {streamer_username}: {e}")
+            if attempts < max_attempts:
+                time.sleep(1)
+    logging.error(f"Failed to fetch Chaturbate room UID for {streamer_username} after {max_attempts} attempts")
+    return None, None
 
 def create_selenium_driver_with_proxy(headless=True):
     """Create a Selenium driver configured with a random proxy"""
@@ -360,16 +397,16 @@ def fetch_chaturbate_hls_with_curl_method(room_slug):
         f'{room_slug}\r\n'
         f'------{boundary}\r\n'
         f'Content-Disposition: form-data; name="bandwidth"\r\n\r\n'
-        f'high\r\n'
+        'high\r\n'
         f'------{boundary}\r\n'
         f'Content-Disposition: form-data; name="current_edge"\r\n\r\n'
-        f'edge20-mad.live.mmcdn.com\r\n'
+        'edge20-mad.live.mmcdn.com\r\n'
         f'------{boundary}\r\n'
         f'Content-Disposition: form-data; name="exclude_edge"\r\n\r\n'
-        f'\r\n'
+        '\r\n'
         f'------{boundary}\r\n'
-        f'Content-Disposition: form-data; name="csrfmiddlewaretoken"\r\n\r\n'
-        f'ZF2KoQPEfT3ikgEEvhx4Ht4Dfg9LOo3f\r\n'
+        'Content-Disposition: form-data; name="csrfmiddlewaretoken"\r\n\r\n'
+        'ZF2KoQPEfT3ikgEEvhx4Ht4Dfg9LOo3f\r\n'
         f'------{boundary}--\r\n'
     )
     
@@ -400,7 +437,7 @@ def fetch_chaturbate_hls_with_curl_method(room_slug):
         return None
 
 def scrape_chaturbate_data(url, progress_callback=None):
-    """Enhanced Chaturbate scraper that searches for any .m3u8 URL in XHR network requests"""
+    """Enhanced Chaturbate scraper that searches for any .m3u8 URL in XHR network requests and fetches room_uid and broadcaster_uid"""
     try:
         if not url or 'chaturbate.com/' not in url:
             raise ValueError("Invalid Chaturbate URL")
@@ -411,6 +448,11 @@ def scrape_chaturbate_data(url, progress_callback=None):
 
         update_progress(10, "Extracting room slug")
         room_slug = extract_room_slug(url)
+
+        update_progress(20, "Fetching room and broadcaster UIDs")
+        broadcaster_uid, room_uid = fetch_chaturbate_room_uid(room_slug)
+        if not broadcaster_uid or not room_uid:
+            logging.warning(f"Could not fetch UIDs for {room_slug}, proceeding with scraping")
 
         update_progress(30, "Fetching HLS URL via API")
         result = get_hls_url(room_slug)
@@ -435,6 +477,8 @@ def scrape_chaturbate_data(url, progress_callback=None):
                 "status": "online",
                 "streamer_username": room_slug,
                 "chaturbate_m3u8_url": hls_url,
+                "broadcaster_uid": broadcaster_uid,
+                "room_uid": room_uid,
             }
 
         update_progress(50, "Searching XHR requests for .m3u8 URL")
@@ -474,6 +518,8 @@ def scrape_chaturbate_data(url, progress_callback=None):
             "status": "online",
             "streamer_username": room_slug,
             "chaturbate_m3u8_url": hls_url,
+            "broadcaster_uid": broadcaster_uid,
+            "room_uid": room_uid,
         }
 
     except Exception as e:
@@ -858,6 +904,7 @@ def run_stream_creation_job(app, job_id, room_url, platform, agent_id=None, note
                             room_url=room_url,
                             streamer_username=scraped_data['streamer_username'],
                             chaturbate_m3u8_url=scraped_data['chaturbate_m3u8_url'],
+                            broadcaster_uid=scraped_data.get('broadcaster_uid'),
                             type='chaturbate',
                         )
                     else:
@@ -1030,19 +1077,21 @@ def refresh_chaturbate_stream(room_slug):
         stream = ChaturbateStream.query.filter_by(streamer_username=room_slug).first()
         if stream:
             stream.chaturbate_m3u8_url = new_url
+            stream.broadcaster_uid = scraped_data.get('broadcaster_uid')
             db.session.commit()
-            logging.info("Updated stream '%s' with new m3u8 URL: %s", room_slug, new_url)
+            logging.info("Updated stream '%s' with new m3u8 URL: %s, broadcaster_uid: %s", room_slug, new_url, stream.broadcaster_uid)
         else:
             logging.info("No existing stream found for %s, creating new", room_slug)
             stream = ChaturbateStream(
                 room_url=room_url,
                 streamer_username=room_slug,
                 chaturbate_m3u8_url=new_url,
+                broadcaster_uid=scraped_data.get('broadcaster_uid'),
                 type='chaturbate'
             )
             db.session.add(stream)
             db.session.commit()
-            logging.info("Created new stream for %s with m3u8 URL: %s", room_slug, new_url)
+            logging.info("Created new stream for %s with m3u8 URL: %s, broadcaster_uid: %s", room_slug, new_url, stream.broadcaster_uid)
 
         # Notify admins and assigned agents
         NotificationService.notify_admins(
@@ -1053,6 +1102,7 @@ def refresh_chaturbate_stream(room_slug):
                 'streamer_username': room_slug,
                 'platform': 'chaturbate',
                 'new_url': new_url,
+                'broadcaster_uid': scraped_data.get('broadcaster_uid'),
             },
             room_url,
             'chaturbate',
@@ -1072,6 +1122,7 @@ def refresh_chaturbate_stream(room_slug):
                         'streamer_username': room_slug,
                         'platform': 'chaturbate',
                         'new_url': new_url,
+                        'broadcaster_uid': scraped_data.get('broadcaster_uid'),
                     },
                     room_url,
                     'chaturbate',

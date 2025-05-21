@@ -6,12 +6,12 @@
           <font-awesome-icon icon="times" />
         </button>
       </div>
-      
+
       <div class="modal-header">
         <font-awesome-icon icon="stream" class="header-icon" />
         <h3>Add New Stream</h3>
       </div>
-      
+
       <div class="connection-status-container" v-if="isCreating">
         <div class="connection-status">
           <div class="status-indicator" :class="connectionStatus">
@@ -20,7 +20,7 @@
           <div class="status-latency" v-if="latency">{{ latency }}ms</div>
         </div>
       </div>
-      
+
       <div class="modal-body">
         <form @submit.prevent="submitForm">
           <!-- Platform Selection -->
@@ -30,26 +30,20 @@
               Platform
             </label>
             <div class="platform-selector">
-              <div 
-                class="platform-option" 
-                :class="{ active: form.platform === 'Chaturbate' }"
-                @click="selectPlatform('Chaturbate')"
-              >
+              <div class="platform-option" :class="{ active: form.platform === 'Chaturbate' }"
+                @click="selectPlatform('Chaturbate')">
                 <div class="platform-icon">CB</div>
                 <span>Chaturbate</span>
               </div>
-              <div 
-                class="platform-option" 
-                :class="{ active: form.platform === 'Stripchat' }"
-                @click="selectPlatform('Stripchat')"
-              >
+              <div class="platform-option" :class="{ active: form.platform === 'Stripchat' }"
+                @click="selectPlatform('Stripchat')">
                 <div class="platform-icon">SC</div>
                 <span>Stripchat</span>
               </div>
             </div>
             <input type="hidden" v-model="form.platform" required>
           </div>
-          
+
           <!-- Room URL -->
           <div class="form-group" v-show="!isCreating">
             <label for="room_url">
@@ -57,15 +51,8 @@
               Room URL
             </label>
             <div class="input-wrapper">
-              <input 
-                id="room_url" 
-                v-model="form.room_url" 
-                type="url" 
-                placeholder="https://chaturbate.com/username" 
-                required
-                @input="detectPlatform"
-                :class="{ 'has-platform': form.platform, 'has-error': urlError }"
-              />
+              <input id="room_url" v-model="form.room_url" type="url" placeholder="https://chaturbate.com/username"
+                required @input="detectPlatform" :class="{ 'has-platform': form.platform, 'has-error': urlError }" />
               <div v-if="form.platform" class="platform-badge">
                 {{ form.platform }}
               </div>
@@ -77,7 +64,7 @@
               Enter the full URL including https://
             </div>
           </div>
-          
+
           <!-- Agent Assignment -->
           <div class="form-group" v-show="!isCreating">
             <label for="stream_agent">
@@ -95,7 +82,7 @@
               <font-awesome-icon icon="chevron-down" class="select-arrow" />
             </div>
           </div>
-          
+
           <!-- Assignment Notes -->
           <div class="form-group" v-show="!isCreating">
             <label for="notes">
@@ -103,14 +90,8 @@
               Assignment Notes (Optional)
               <span class="tooltip" v-tooltip="'Add notes for the assigned agent (max 500 characters)'">?</span>
             </label>
-            <textarea
-              id="notes"
-              v-model="form.notes"
-              placeholder="Enter any special instructions for the agent..."
-              :class="{ 'has-error': notesError }"
-              maxlength="500"
-              @input="validateNotes"
-            ></textarea>
+            <textarea id="notes" v-model="form.notes" placeholder="Enter any special instructions for the agent..."
+              :class="{ 'has-error': notesError }" maxlength="500" @input="validateNotes"></textarea>
             <div v-if="notesError" class="field-error">
               {{ notesError }}
             </div>
@@ -118,7 +99,7 @@
               {{ form.notes ? form.notes.length : 0 }}/500 characters
             </div>
           </div>
-          
+
           <!-- Priority Selection -->
           <div class="form-group" v-show="!isCreating">
             <label for="priority">
@@ -135,7 +116,7 @@
               <font-awesome-icon icon="chevron-down" class="select-arrow" />
             </div>
           </div>
-          
+
           <!-- Progress Section -->
           <div v-if="isCreating" class="progress-container">
             <div class="progress-header">
@@ -144,7 +125,7 @@
               </div>
               <h4>Creating Stream for {{ extractUsername(form.room_url) }}</h4>
             </div>
-            
+
             <div class="progress-stage">
               <div class="stage-icon">
                 <font-awesome-icon :icon="currentStageIcon" />
@@ -154,7 +135,7 @@
                 <div class="stage-description">{{ progressMessage }}</div>
               </div>
             </div>
-            
+
             <div class="progress-tracker">
               <div class="progress-bar-container" ref="progressBarContainer">
                 <div class="progress-bar" ref="progressBar" :style="{ width: `${progressPercentage}%` }"></div>
@@ -167,24 +148,19 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="progress-steps">
-              <div 
-                v-for="(step, index) in progressSteps" 
-                :key="index"
-                class="progress-step"
-                :class="{ 
-                  'completed': progressPercentage >= step.threshold,
-                  'current': currentStepIndex === index
-                }"
-              >
+              <div v-for="(step, index) in progressSteps" :key="index" class="progress-step" :class="{
+                'completed': progressPercentage >= step.threshold,
+                'current': currentStepIndex === index
+              }">
                 <div class="step-indicator">
                   <font-awesome-icon :icon="progressPercentage >= step.threshold ? 'check-circle' : 'circle'" />
                 </div>
                 <div class="step-label">{{ step.label }}</div>
               </div>
             </div>
-            
+
             <!-- Assignment Details on Completion -->
             <div v-if="progressPercentage >= 100 && assignmentDetails" class="assignment-details">
               <h5>Assignment Details</h5>
@@ -193,18 +169,19 @@
               <p v-if="assignmentDetails.notes"><strong>Notes:</strong> {{ assignmentDetails.notes }}</p>
             </div>
           </div>
-          
+
           <!-- Error Message -->
-          <div v-if="error" class="error-message">
+          <div v-if="submitError" class="error-message">
             <font-awesome-icon icon="exclamation-circle" class="error-icon" />
             <span>{{ error }}</span>
             <button @click="retryCreation" class="retry-button" v-if="submitError">
               <font-awesome-icon icon="redo" /> Retry
             </button>
           </div>
-          
-          <div class="form-actions" v-show="!isCreating || error">
-            <button type="button" @click="$emit('close')" class="cancel-button" v-wave :disabled="isCreating && !error">
+
+          <div class="form-actions" v-show="!isCreating || submitError">
+            <button type="button" @click="$emit('close')" class="cancel-button" v-wave
+              :disabled="isCreating && !submitError">
               <font-awesome-icon icon="times" /> Cancel
             </button>
             <button type="submit" class="submit-button" v-wave :disabled="isCreating || !formValid">
@@ -219,67 +196,67 @@
 </template>
 
 <script>
-import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
-import { useToast } from 'vue-toastification'
-import anime from 'animejs/lib/anime.es.js'
-import axios from 'axios'
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue';
+import { useToast } from 'vue-toastification';
+import anime from 'animejs/lib/anime.es.js';
+import axios from 'axios';
 
 export default {
   name: 'CreateStreamModal',
   props: {
-    agents: Array,
+    agents: {
+      type: Array,
+      required: true,
+    },
     error: {
       type: String,
-      default: ''
+      default: '',
     },
-    submitError: {
-      type: Boolean,
-      default: false
-    }
   },
-  emits: ['close', 'submit', 'retry', 'streamCreated'],
+  emits: ['close', 'submit', 'retry', 'streamCreated', 'error'],
   setup(props, { emit }) {
-    const toast = useToast()
-    
+    const toast = useToast();
+
     // Form state
     const form = ref({
       platform: '',
       room_url: '',
       agent_id: '',
       notes: '',
-      priority: 'normal'
-    })
-    
+      priority: 'normal',
+    });
+
     // Progress state
-    const isCreating = ref(false)
-    const progressPercentage = ref(0)
-    const progressMessage = ref('Initializing...')
-    const estimatedTime = ref('')
-    const urlError = ref('')
-    const notesError = ref('')
-    const jobId = ref('')
-    const connectionStatus = ref('none')
-    const latency = ref(null)
-    const assignmentDetails = ref(null)
-    
+    const isCreating = ref(false);
+    const progressPercentage = ref(0);
+    const progressMessage = ref('Initializing...');
+    const estimatedTime = ref('');
+    const urlError = ref('');
+    const notesError = ref('');
+    const jobId = ref('');
+    const connectionStatus = ref('none');
+    const latency = ref(null);
+    const assignmentDetails = ref(null);
+    const submitError = ref(false);
+
     // DOM refs
-    const progressBarContainer = ref(null)
-    const progressBar = ref(null)
-    const progressParticles = ref(null)
-    
+    const progressBarContainer = ref(null);
+    const progressBar = ref(null);
+    const progressParticles = ref(null);
+
     // Animation state
-    let progressAnimation = null
-    let particleAnimations = []
-    let particleCleanupInterval = null
-    
+    let progressAnimation = null;
+    let particleAnimations = [];
+    let particleCleanupInterval = null;
+
     // Stream event source
-    let eventSource = null
-    let pollingInterval = null
-    let lastPollTime = 0
-    let reconnectAttempts = 0
-    const maxReconnectAttempts = 5
-    const baseReconnectDelay = 1000
-    
+    let eventSource = null;
+    let pollingInterval = null;
+    let lastPollTime = 0;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    const baseReconnectDelay = 1000;
+
     // Progress steps (aligned with backend phases)
     const progressSteps = [
       { threshold: 0, label: 'Initialization' },
@@ -287,42 +264,44 @@ export default {
       { threshold: 55, label: 'Scraping' },
       { threshold: 75, label: 'Database' },
       { threshold: 90, label: 'Assignment' },
-      { threshold: 100, label: 'Finalizing' }
-    ]
-    
+      { threshold: 100, label: 'Finalizing' },
+    ];
+
     const currentStepIndex = computed(() => {
       for (let i = progressSteps.length - 1; i >= 0; i--) {
         if (progressPercentage.value >= progressSteps[i].threshold) {
-          return i
+          return i;
         }
       }
-      return 0
-    })
-    
-    const progressStage = computed(() => progressSteps[currentStepIndex.value].label)
-    
+      return 0;
+    });
+
+    const progressStage = computed(() => progressSteps[currentStepIndex.value].label);
+
     const currentStageIcon = computed(() => {
-      const icons = ['rocket', 'check-circle', 'download', 'database', 'user-secret', 'flag-checkered']
-      return icons[currentStepIndex.value] || 'circle-notch'
-    })
-    
+      const icons = ['rocket', 'check-circle', 'download', 'database', 'user-secret', 'flag-checkered'];
+      return icons[currentStepIndex.value] || 'circle-notch';
+    });
+
     // Form validation
     const formValid = computed(() => {
-      return form.value.platform && 
-             form.value.room_url && 
-             isValidUrl(form.value.room_url) &&
-             validateUrlForPlatform(form.value.room_url, form.value.platform) &&
-             !urlError.value &&
-             !notesError.value
-    })
-    
+      return (
+        form.value.platform &&
+        form.value.room_url &&
+        isValidUrl(form.value.room_url) &&
+        validateUrlForPlatform(form.value.room_url, form.value.platform) &&
+        !urlError.value &&
+        !notesError.value
+      );
+    });
+
     // Progress animation methods
     const animateProgress = (newValue, oldValue = 0) => {
-      if (!progressBar.value) return
-      
-      particleAnimations.forEach(anim => anim.pause())
-      particleAnimations = []
-      
+      if (!progressBar.value) return;
+
+      particleAnimations.forEach(anim => anim.pause());
+      particleAnimations = [];
+
       requestAnimationFrame(() => {
         progressAnimation = anime({
           targets: progressBar.value,
@@ -330,356 +309,365 @@ export default {
           elasticity: 300,
           duration: 1500,
           easing: 'easeOutElastic(1, .5)',
-          update: function() {
+          update: function () {
             progressSteps.forEach(step => {
               if (newValue >= step.threshold && oldValue < step.threshold) {
-                createParticles(newValue)
+                createParticles(newValue);
               }
-            })
-          }
-        })
-      })
-    }
-    
+            });
+          },
+        });
+      });
+    };
+
     const createParticles = (position) => {
-      if (!progressParticles.value || !progressBarContainer.value) return
-      
-      const containerWidth = progressBarContainer.value.offsetWidth
-      const posX = (containerWidth * position) / 100
-      
+      if (!progressParticles.value || !progressBarContainer.value) return;
+
+      const containerWidth = progressBarContainer.value.offsetWidth;
+      const posX = (containerWidth * position) / 100;
+
       for (let i = 0; i < 10; i++) {
-        const particle = document.createElement('div')
-        particle.className = 'particle'
-        const size = Math.floor(Math.random() * 8) + 4
-        const color = getRandomColor()
-        
-        particle.style.width = `${size}px`
-        particle.style.height = `${size}px`
-        particle.style.backgroundColor = color
-        particle.style.left = `${posX}px`
-        
-        progressParticles.value.appendChild(particle)
-        
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        const size = Math.floor(Math.random() * 8) + 4;
+        const color = getRandomColor();
+
+        particle.style.width = `${size}px`;
+        particle.style.height = `${size}px`;
+        particle.style.backgroundColor = color;
+        particle.style.left = `${posX}px`;
+
+        progressParticles.value.appendChild(particle);
+
         const particleAnim = anime({
           targets: particle,
           translateX: {
             value: anime.random(-40, 40),
-            easing: 'easeOutQuad'
+            easing: 'easeOutQuad',
           },
           translateY: {
             value: anime.random(-60, -20),
-            easing: 'easeInQuad'
+            easing: 'easeInQuad',
           },
           opacity: [{ value: 0.9 }, { value: 0 }],
           scale: [
             { value: 1.2, duration: 200 },
-            { value: 0.5, duration: 800 }
+            { value: 0.5, duration: 800 },
           ],
           duration: anime.random(1000, 1500),
           complete: () => {
             if (progressParticles.value?.contains(particle)) {
-              progressParticles.value.removeChild(particle)
+              progressParticles.value.removeChild(particle);
             }
-          }
-        })
-        
-        particleAnimations.push(particleAnim)
+          },
+        });
+
+        particleAnimations.push(particleAnim);
       }
-    }
-    
+    };
+
     const getRandomColor = () => {
-      const colors = ['#4CAF50', '#2196F3', '#FFC107', '#E91E63', '#9C27B0', '#3F51B5']
-      return colors[Math.floor(Math.random() * colors.length)]
-    }
-    
+      const colors = ['#4CAF50', '#2196F3', '#FFC107', '#E91E63', '#9C27B0', '#3F51B5'];
+      return colors[Math.floor(Math.random() * colors.length)];
+    };
+
     // Validation methods
     const isValidUrl = (url) => {
       try {
-        new URL(url)
-        return true
+        new URL(url);
+        return true;
       } catch (e) {
-        urlError.value = 'Please enter a valid URL'
-        return false
+        urlError.value = 'Please enter a valid URL';
+        return false;
       }
-    }
+    };
 
     const validateUrlForPlatform = (url, platform) => {
-      if (!url || !platform) return false
-      
+      if (!url || !platform) return false;
+
       const patterns = {
         Chaturbate: /https?:\/\/(www\.)?chaturbate\.com\/[\w-]+\/?$/i,
-        Stripchat: /https?:\/\/(www\.)?stripchat\.com\/[\w-]+\/?$/i
-      }
-      
-      const isValid = patterns[platform]?.test(url.toLowerCase()) || false
-      urlError.value = isValid ? '' : `This URL doesn't match the ${platform} format`
-      return isValid
-    }
-    
+        Stripchat: /https?:\/\/(www\.)?stripchat\.com\/[\w-]+\/?$/i,
+      };
+
+      const isValid = patterns[platform]?.test(url.toLowerCase()) || false;
+      urlError.value = isValid ? '' : `This URL doesn't match the ${platform} format`;
+      return isValid;
+    };
+
     const validateNotes = () => {
       if (form.value.notes.length > 500) {
-        notesError.value = 'Notes cannot exceed 500 characters'
+        notesError.value = 'Notes cannot exceed 500 characters';
       } else {
-        notesError.value = ''
+        notesError.value = '';
       }
-    }
-    
+    };
+
     const selectPlatform = (platform) => {
-      form.value.platform = platform
-      if (form.value.room_url) validateUrlForPlatform(form.value.room_url, platform)
-    }
+      form.value.platform = platform;
+      if (form.value.room_url) validateUrlForPlatform(form.value.room_url, platform);
+    };
 
     const detectPlatform = () => {
-      const url = form.value.room_url.toLowerCase()
+      const url = form.value.room_url.toLowerCase();
       const newPlatform = url.includes('stripchat.com') ? 'Stripchat' :
-                         url.includes('chaturbate.com') ? 'Chaturbate' : ''
-      
+        url.includes('chaturbate.com') ? 'Chaturbate' : '';
+
       if (form.value.platform !== newPlatform) {
-        form.value.platform = newPlatform
+        form.value.platform = newPlatform;
       }
-      
+
       if (form.value.room_url && form.value.platform) {
-        validateUrlForPlatform(form.value.room_url, form.value.platform)
+        validateUrlForPlatform(form.value.room_url, form.value.platform);
       } else {
-        urlError.value = ''
+        urlError.value = '';
       }
-    }
-    
+    };
+
     const extractUsername = (url) => {
-      if (!url) return 'Stream'
+      if (!url) return 'Stream';
       try {
-        const cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url
-        const segments = cleanUrl.split('/')
-        return segments[segments.length - 1] || 'Stream'
+        const cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+        const segments = cleanUrl.split('/');
+        return segments[segments.length - 1] || 'Stream';
       } catch (e) {
-        return 'Stream'
+        return 'Stream';
       }
-    }
-    
+    };
+
     // SSE Implementation
     const setupSSEConnection = () => {
-      cleanupConnections()
+      cleanupConnections();
       if (reconnectAttempts >= maxReconnectAttempts) {
-        console.warn('Max SSE reconnect attempts reached, switching to polling')
-        connectionStatus.value = 'polling'
-        setupPolling()
-        return
+        console.warn('Max SSE reconnect attempts reached, switching to polling');
+        connectionStatus.value = 'polling';
+        setupPolling();
+        return;
       }
-      
+
       try {
-        const url = `/api/streams/interactive/sse?job_id=${jobId.value}`
-        
-        eventSource = new EventSource(url)
-        connectionStatus.value = 'sse'
-        const startTime = Date.now()
-        
+        const url = `/api/streams/interactive/sse?job_id=${jobId.value}`;
+
+        eventSource = new EventSource(url);
+        connectionStatus.value = 'sse';
+        const startTime = Date.now();
+
         eventSource.onopen = () => {
-          console.log(`SSE connection established for job ${jobId.value}`, Date.now() - startTime)
-          reconnectAttempts = 0
-          latency.value = Date.now() - startTime
-        }
-        
+          console.log(`SSE connection established for job ${jobId.value}`, Date.now() - startTime);
+          reconnectAttempts = 0;
+          latency.value = Date.now() - startTime;
+        };
+
         eventSource.onmessage = (event) => {
           try {
-            const data = JSON.parse(event.data)
-            console.log('SSE message received:', data, event)
-            
+            const data = JSON.parse(event.data);
+            console.log('SSE message received:', data, event);
+
             if (data.progress !== undefined) {
-              progressPercentage.value = Math.min(data.progress, 100)
-              animateProgress(data.progress, progressPercentage.value)
+              progressPercentage.value = Math.min(data.progress, 100);
+              animateProgress(data.progress, progressPercentage.value);
             }
-            
+
             if (data.message) {
-              progressMessage.value = data.message
+              progressMessage.value = data.message;
             }
-            
+
             if (data.estimated_time) {
-              estimatedTime.value = Math.round(data.estimated_time)
+              estimatedTime.value = Math.round(data.estimated_time);
             }
-            
+
             if (data.error) {
-              console.error('SSE error event:', data.error)
-              emit('error', data.error)
-              toast.error(`Stream creation failed: ${data.error}`)
-              cleanupConnections()
-              isCreating.value = false
+              console.error('SSE error event:', data.error);
+              emit('error', data.error);
+              toast.error(`Stream creation failed: ${data.error}`);
+              cleanupConnections();
+              isCreating.value = false;
+              submitError.value = true;
             }
-            
+
             if (event.event === 'completed' || (data.stream && data.progress >= 100)) {
-              console.log('SSE completion event:', data)
-              assignmentDetails.value = data.assignment
-              emit('streamCreated', data.stream)
-              toast.success('Stream created successfully!')
-              cleanupConnections()
-              isCreating.value = false
+              console.log('SSE completion event:', data);
+              assignmentDetails.value = data.assignment;
+              emit('streamCreated', { ...data.stream, id: data.stream_id || data.stream?.id });
+              toast.success('Stream created successfully!');
+              cleanupConnections();
+              isCreating.value = false;
+              submitError.value = false;
             }
           } catch (e) {
-            console.error('Error parsing SSE message:', e, event.data)
+            console.error('Error parsing SSE message:', e, event.data);
           }
-        }
-        
+        };
+
         eventSource.onerror = () => {
-          console.warn(`SSE connection failed for job ${jobId.value}, attempt ${reconnectAttempts + 1}`)
-          eventSource.close()
-          eventSource = null
-          reconnectAttempts++
-          const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts)
-          setTimeout(setupSSEConnection, delay)
-        }
+          console.warn(`SSE connection failed for job ${jobId.value}, attempt ${reconnectAttempts + 1}`);
+          eventSource.close();
+          eventSource = null;
+          reconnectAttempts++;
+          const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts);
+          setTimeout(setupSSEConnection, delay);
+        };
       } catch (e) {
-        console.warn('SSE not supported or failed to initialize, falling back to polling:', e)
-        connectionStatus.value = 'polling'
-        setupPolling()
+        console.warn('SSE not supported or failed to initialize, falling back to polling:', e);
+        connectionStatus.value = 'polling';
+        setupPolling();
       }
-    }
-    
+    };
+
     // Fallback polling method
     const setupPolling = () => {
-  if (pollingInterval) return;
+      if (pollingInterval) return;
 
-  pollingInterval = setInterval(async () => {
-    try {
-      const now = Date.now();
-      if (now - lastPollTime < 1000) return;
-      lastPollTime = now;
+      pollingInterval = setInterval(async () => {
+        try {
+          const now = Date.now();
+          if (now - lastPollTime < 1000) return;
+          lastPollTime = now;
 
-      const startTime = Date.now();
-      const response = await axios.get(`/api/streams/interactive/status?job_id=${jobId.value}&room_url=${encodeURIComponent(form.value.room_url)}`);
+          const startTime = Date.now();
+          const response = await axios.get(
+            `/api/streams/interactive/status?job_id=${jobId.value}&room_url=${encodeURIComponent(form.value.room_url)}`
+          );
 
-      console.log('Polling response:', response.data);
-      latency.value = Date.now() - startTime;
+          console.log('Polling response:', response.data);
+          latency.value = Date.now() - startTime;
 
-      if (!response.data) return;
+          if (!response.data) return;
 
-      if (response.data.progress !== undefined) {
-        progressPercentage.value = Math.min(response.data.progress, 100);
-        animateProgress(response.data.progress, progressPercentage.value);
-      }
+          if (response.data.progress !== undefined) {
+            progressPercentage.value = Math.min(response.data.progress, 100);
+            animateProgress(response.data.progress, progressPercentage.value);
+          }
 
-      if (response.data.message) {
-        progressMessage.value = response.data.message;
-      }
+          if (response.data.message) {
+            progressMessage.value = response.data.message;
+          }
 
-      if (response.data.estimated_time) {
-        estimatedTime.value = Math.round(response.data.estimated_time);
-      }
+          if (response.data.estimated_time) {
+            estimatedTime.value = Math.round(response.data.estimated_time);
+          }
 
-      if (response.data.error) {
-        console.error('Polling error:', response.data.error);
-        emit('error', response.data.error);
-        toast.error(`Stream creation failed: ${response.data.error}`);
-        cleanupConnections();
-        isCreating.value = false;
-      }
+          if (response.data.error) {
+            console.error('Polling error:', response.data.error);
+            emit('error', response.data.error);
+            toast.error(`Stream creation failed: ${response.data.error}`); // Fixed: Use response.data.error
+            cleanupConnections();
+            isCreating.value = false;
+            submitError.value = true;
+          }
 
-      if (response.data.stream && (response.data.progress >= 100 || response.data.stream_id)) {
-        console.log('Polling completion:', response.data);
-        assignmentDetails.value = response.data.assignment;
-        emit('streamCreated', { ...response.data.stream, id: response.data.stream_id || response.data.stream?.id });
-        toast.success('Stream created successfully!');
-        cleanupConnections();
-        isCreating.value = false;
+          if (response.data.stream && (response.data.progress >= 100 || response.data.stream_id)) {
+            console.log('Polling completion:', response.data);
+            assignmentDetails.value = response.data.assignment;
+            emit('streamCreated', { ...response.data.stream, id: response.data.stream_id || response.data.stream?.id });
+            toast.success('Stream created successfully!');
+            cleanupConnections();
+            isCreating.value = false;
+            submitError.value = false;
+          }
+        } catch (e) {
+          console.error('Polling error:', e);
+          if (e.response?.status === 404) {
+            console.error('Job not found, stopping polling');
+            emit('error', 'Stream creation job not found. Please check the streams list.');
+            toast.error('Stream creation job not found. Please check the streams list.');
+            cleanupConnections();
+            isCreating.value = false;
+            submitError.value = true;
+          }
         }
-    } catch (e) {
-      console.error('Polling error:', e);
-      if (e.response?.status === 404) {
-        console.error('Job not found, stopping polling');
-        emit('error', 'Stream creation job not found. Please check the streams list.');
-        toast.error('Stream creation job not found. Please check the streams list.');
-        cleanupConnections();
-        isCreating.value = false;
-      }
-    }
-  }, 3000); // Align polling interval with useModalActions.js
-};
-    
+      }, 3000);
+    };
+
     // Cleanup connections
     const cleanupConnections = () => {
       if (eventSource) {
-        eventSource.close()
-        eventSource = null
+        eventSource.close();
+        eventSource = null;
       }
-      
+
       if (pollingInterval) {
-        clearInterval(pollingInterval)
-        pollingInterval = null
+        clearInterval(pollingInterval);
+        pollingInterval = null;
       }
-      connectionStatus.value = 'none'
-      latency.value = null
-    }
-    
+      connectionStatus.value = 'none';
+      latency.value = null;
+    };
+
     // Form submission
     const submitForm = async () => {
-  if (!formValid.value) return;
+      if (!formValid.value) return;
 
-  const streamData = {
-    room_url: form.value.room_url.trim(),
-    platform: form.value.platform,
-    agent_id: form.value.agent_id || null,
-    notes: form.value.notes.trim() || null,
-    priority: form.value.priority
-  };
+      const streamData = {
+        room_url: form.value.room_url.trim(),
+        platform: form.value.platform,
+        agent_id: form.value.agent_id || null,
+        notes: form.value.notes.trim() || null,
+        priority: form.value.priority,
+      };
 
-  try {
-    isCreating.value = true;
-    progressPercentage.value = 5;
-    progressMessage.value = 'Initializing stream creation...';
-    assignmentDetails.value = null;
-    reconnectAttempts = 0; // Reset reconnect attempts
+      try {
+        isCreating.value = true;
+        progressPercentage.value = 5;
+        progressMessage.value = 'Initializing stream creation...';
+        assignmentDetails.value = null;
+        reconnectAttempts = 0;
+        submitError.value = false;
 
-    const response = await axios.post('/api/streams/interactive', streamData, {
-      timeout: 30000, // Keep timeout at 30 seconds for consistency
-      withCredentials: true
-    });
+        const response = await axios.post('/api/streams/interactive', streamData, {
+          timeout: 30000,
+          withCredentials: true,
+        });
 
-    if (response.data && response.data.job_id) {
-      jobId.value = response.data.job_id;
-      console.log('Starting SSE for job:', jobId.value);
-      setupSSEConnection();
-      toast.info(`Creating ${form.value.platform} stream...`, {
-        timeout: 3000
-      });
-      emit('submit', streamData);
-    } else {
-      throw new Error('No job ID returned from server');
-    }
-  } catch (error) {
-    isCreating.value = false;
-    let errorMessage = 'Failed to create stream';
-    if (error.response?.status === 429) {
-      errorMessage = 'Another stream creation is in progress. Please wait.';
-    } else if (error.response?.data?.message) {
-      errorMessage = error.response.data.message;
-      if (error.response.data.error === 'duplicate_stream') {
-        errorMessage += ` (Stream ID: ${error.response.data.existing_id})`;
+        if (response.data && response.data.job_id) {
+          jobId.value = response.data.job_id;
+          console.log('Starting SSE for job:', jobId.value);
+          setupSSEConnection();
+          toast.info(`Creating ${form.value.platform} stream...`, {
+            timeout: 3000,
+          });
+          emit('submit', streamData);
+        } else {
+          throw new Error('No job ID returned from server');
+        }
+      } catch (error) {
+        isCreating.value = false;
+        submitError.value = true;
+        let errorMessage = 'Failed to create stream';
+        if (error.response?.status === 429) {
+          errorMessage = 'Another stream creation is in progress. Please wait.';
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message;
+          if (error.response.data.error === 'duplicate_stream') {
+            errorMessage += ` (Stream ID: ${error.response.data.existing_id})`;
+          }
+        }
+        console.error('Submit error:', errorMessage);
+        emit('error', errorMessage);
+        toast.error(errorMessage);
       }
-    }
-    console.error('Submit error:', errorMessage);
-    emit('error', errorMessage);
-    toast.error(errorMessage);
-  }
-};
-    
+    };
+
     // Retry creation
     const retryCreation = () => {
-      emit('retry', form.value)
-      submitForm()
-    }
-    
+      emit('retry', form.value);
+      submitForm();
+    };
+
     // Lifecycle hooks
     onMounted(() => {
       particleCleanupInterval = setInterval(() => {
-        particleAnimations = particleAnimations.filter(anim => !anim.completed)
-      }, 1000)
-    })
-    
+        particleAnimations = particleAnimations.filter(anim => !anim.completed);
+      }, 1000);
+    });
+
     onBeforeUnmount(() => {
-      cleanupConnections()
-      if (progressAnimation) progressAnimation.pause()
-      particleAnimations.forEach(anim => anim.pause())
-      clearInterval(particleCleanupInterval)
-    })
-    
+      cleanupConnections();
+      if (progressAnimation) progressAnimation.pause();
+      particleAnimations.forEach(anim => anim.pause());
+      clearInterval(particleCleanupInterval);
+    });
+
     return {
       form,
       isCreating,
@@ -704,10 +692,11 @@ export default {
       extractUsername,
       retryCreation,
       assignmentDetails,
-      validateNotes
-    }
-  }
-}
+      validateNotes,
+      submitError,
+    };
+  },
+};
 </script>
 
 <style scoped>
@@ -1145,12 +1134,10 @@ textarea.has-error {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.3) 50%,
-    rgba(255, 255, 255, 0) 100%
-  );
+  background: linear-gradient(90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.3) 50%,
+      rgba(255, 255, 255, 0) 100%);
   animation: shine 2s infinite;
 }
 
@@ -1324,7 +1311,8 @@ textarea.has-error {
   margin-top: 30px;
 }
 
-.cancel-button, .submit-button {
+.cancel-button,
+.submit-button {
   padding: 12px 20px;
   border-radius: 8px;
   font-weight: 500;
@@ -1367,29 +1355,59 @@ textarea.has-error {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 @keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes shine {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 @media (max-width: 768px) {
@@ -1397,43 +1415,42 @@ textarea.has-error {
     max-width: 100%;
     margin: 0 10px;
   }
-  
+
   .progress-steps {
     display: none;
   }
-  
+
   .platform-selector {
     flex-direction: column;
   }
-  
+
   .modal-header h3 {
     font-size: 1.3rem;
   }
-  
+
   .modal-body {
     padding: 20px;
   }
-  
+
   .form-actions {
     flex-direction: column;
     gap: 15px;
   }
-  
-  .cancel-button, .submit-button {
+
+  .cancel-button,
+  .submit-button {
     width: 100%;
   }
 }
 
 @media (prefers-color-scheme: dark) {
   .progress-bar::after {
-    background: linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0) 0%,
-      rgba(255, 255, 255, 0.1) 50%,
-      rgba(255, 255, 255, 0) 100%
-    );
+    background: linear-gradient(90deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.1) 50%,
+        rgba(255, 255, 255, 0) 100%);
   }
-  
+
   .platform-option:hover {
     background: rgba(255, 255, 255, 0.05);
   }

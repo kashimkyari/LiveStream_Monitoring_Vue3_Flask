@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # External dependencies
 _yolo_model = None
 _yolo_lock = None
-ENABLE_VIDEO_MONITORING = None
+ENABLE_VIDEO_MONITORING = True
 VISUAL_ALERT_COOLDOWN = None
 last_visual_alerts = {}
 

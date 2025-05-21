@@ -3,11 +3,7 @@
     <div class="section-header">
       <h2>Notifications</h2>
       <div class="notification-controls">
-        <button 
-          v-if="unreadCount > 0"
-          class="btn btn-mark-all"
-          @click="markAllAsRead"
-        >
+        <button v-if="unreadCount > 0" class="btn btn-mark-all" @click="markAllAsRead">
           <font-awesome-icon icon="check-double" />
           Mark All Read
         </button>
@@ -17,21 +13,13 @@
     <div class="notification-filters">
       <div class="filter-toggle">
         <span>Group by Type</span>
-        <div 
-          class="toggle-switch"
-          :class="{ active: groupByType }"
-          @click="toggleGroupByType"
-        >
+        <div class="toggle-switch" :class="{ active: groupByType }" @click="toggleGroupByType">
           <div class="toggle-switch-handle"></div>
         </div>
       </div>
       <div class="filter-toggle">
         <span>Group by Stream</span>
-        <div 
-          class="toggle-switch"
-          :class="{ active: groupByStream }"
-          @click="toggleGroupByStream"
-        >
+        <div class="toggle-switch" :class="{ active: groupByStream }" @click="toggleGroupByStream">
           <div class="toggle-switch-handle"></div>
         </div>
       </div>
@@ -46,11 +34,7 @@
     </div>
     <div v-else class="notification-list">
       <template v-if="groupByType || groupByStream">
-        <div
-          v-for="(group, key) in groupedNotifications"
-          :key="key"
-          class="notification-group"
-        >
+        <div v-for="(group, key) in groupedNotifications" :key="key" class="notification-group">
           <h3>
             {{
               groupByType
@@ -58,19 +42,15 @@
                 : group[0].streamer || 'Unknown Streamer'
             }}
           </h3>
-          <div 
-            v-for="notification in group" 
-            :key="notification.id"
-            class="notification-item"
-            :class="{ unread: !notification.read }"
-            @click="openModal(notification)"
-          >
+          <div v-for="notification in group" :key="notification.id" class="notification-item"
+            :class="{ unread: !notification.read }" @click="openModal(notification)">
             <div class="notification-icon" :style="{ backgroundColor: getNotificationColor(notification.event_type) }">
               <font-awesome-icon :icon="getNotificationIcon(notification.event_type)" />
             </div>
             <div class="notification-content">
               <div class="notification-title">{{ getNotificationTitle(notification) }}</div>
-              <div class="notification-text">{{ notification.details.message || notification.details.transcript || notification.details.detections?.[0]?.message || 'No details available' }}</div>
+              <div class="notification-text">{{ notification.details.message || notification.details.transcript ||
+                notification.details.detections?.[0]?.message || 'No details available' }}</div>
               <div class="notification-time">{{ formatTime(notification.timestamp) }}</div>
             </div>
             <div class="notification-status">
@@ -80,19 +60,15 @@
         </div>
       </template>
       <template v-else>
-        <div 
-          v-for="notification in notifications" 
-          :key="notification.id"
-          class="notification-item"
-          :class="{ unread: !notification.read }"
-          @click="openModal(notification)"
-        >
+        <div v-for="notification in notifications" :key="notification.id" class="notification-item"
+          :class="{ unread: !notification.read }" @click="openModal(notification)">
           <div class="notification-icon" :style="{ backgroundColor: getNotificationColor(notification.event_type) }">
             <font-awesome-icon :icon="getNotificationIcon(notification.event_type)" />
           </div>
           <div class="notification-content">
             <div class="notification-title">{{ getNotificationTitle(notification) }}</div>
-            <div class="notification-text">{{ notification.details.message || notification.details.transcript || notification.details.detections?.[0]?.message || 'No details available' }}</div>
+            <div class="notification-text">{{ notification.details.message || notification.details.transcript ||
+              notification.details.detections?.[0]?.message || 'No details available' }}</div>
             <div class="notification-time">{{ formatTime(notification.timestamp) }}</div>
           </div>
           <div class="notification-status">
@@ -124,7 +100,8 @@
             <strong>Keyword:</strong> {{ selectedNotification.details.keyword || 'N/A' }}<br />
             <strong>Transcript:</strong> {{ selectedNotification.details.transcript || 'N/A' }}
           </p>
-          <p v-if="selectedNotification.event_type === 'chat_detection' || selectedNotification.event_type === 'chat_sentiment_detection'">
+          <p
+            v-if="selectedNotification.event_type === 'chat_detection' || selectedNotification.event_type === 'chat_sentiment_detection'">
             <strong>Sender:</strong> {{ selectedNotification.details.detections?.[0]?.sender || 'Unknown' }}<br />
             <strong>Message:</strong> {{ selectedNotification.details.detections?.[0]?.message || 'N/A' }}
           </p>
@@ -347,7 +324,7 @@ export default {
 
     // Initialize Socket.IO
     const initializeSocket = () => {
-      socket = io('   https://monitor-backend.jetcamstudio.com:5000/notifications', {
+      socket = io('   https://monitor-backend.jetcamstudio.com:5000notifications', {
         path: '/ws',
         transports: ['websocket'],
         query: { token: localStorage.getItem('token') }
@@ -801,18 +778,37 @@ export default {
 
 /* Animations */
 @keyframes slideIn {
-  from { transform: translateY(10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* Theme Variables */
@@ -847,11 +843,29 @@ export default {
 
 /* Responsive Adjustments */
 @media (max-width: 360px) {
-  .section-header h2 { font-size: 1.25rem; }
-  .btn-mark-all { padding: 0.5rem 1rem; font-size: 0.75rem; }
-  .notification-item { padding: 0.75rem; }
-  .notification-title { font-size: 0.75rem; }
-  .notification-text { font-size: 0.75rem; }
-  .modal { max-width: 95%; }
+  .section-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .btn-mark-all {
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+  }
+
+  .notification-item {
+    padding: 0.75rem;
+  }
+
+  .notification-title {
+    font-size: 0.75rem;
+  }
+
+  .notification-text {
+    font-size: 0.75rem;
+  }
+
+  .modal {
+    max-width: 95%;
+  }
 }
 </style>

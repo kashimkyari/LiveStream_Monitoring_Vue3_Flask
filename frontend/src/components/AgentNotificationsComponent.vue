@@ -3,18 +3,13 @@
     <!-- Top navigation bar with filters and actions -->
     <div class="top-bar">
       <div class="filter-tabs">
-        <button 
-          v-for="tab in ['All', 'Unread', 'Detections']" 
-          :key="tab"
-          class="tab-btn"
-          :class="{ 'active': mainFilter === tab }"
-          @click="handleMainFilterChange(tab)"
-        >
+        <button v-for="tab in ['All', 'Unread', 'Detections']" :key="tab" class="tab-btn"
+          :class="{ 'active': mainFilter === tab }" @click="handleMainFilterChange(tab)">
           {{ tab }}
           <span v-if="tab === 'Unread' && unreadCount > 0" class="badge">{{ unreadCount }}</span>
         </button>
       </div>
-      
+
       <div class="action-buttons">
         <button class="icon-btn refresh-btn" @click="fetchNotifications" title="Refresh">
           <font-awesome-icon icon="sync" class="icon" />
@@ -23,22 +18,16 @@
           <font-awesome-icon icon="ellipsis-v" class="icon" />
         </button>
       </div>
-      
+
       <!-- Dropdown menu -->
       <div v-if="isMenuOpen" class="dropdown-menu">
-        <button 
-          @click="markAllAsRead"
-          :disabled="unreadCount === 0 || markingAllRead"
-          :class="{ 'disabled': unreadCount === 0 || markingAllRead }"
-        >
+        <button @click="markAllAsRead" :disabled="unreadCount === 0 || markingAllRead"
+          :class="{ 'disabled': unreadCount === 0 || markingAllRead }">
           <font-awesome-icon v-if="markingAllRead" icon="spinner" spin class="icon" />
           Mark All as Read
         </button>
-        <button 
-          @click="confirmDeleteAll"
-          :disabled="notifications.length === 0 || deletingAll"
-          :class="{ 'disabled': notifications.length === 0 || deletingAll }"
-        >
+        <button @click="confirmDeleteAll" :disabled="notifications.length === 0 || deletingAll"
+          :class="{ 'disabled': notifications.length === 0 || deletingAll }">
           <font-awesome-icon v-if="deletingAll" icon="spinner" spin class="icon" />
           Delete All
         </button>
@@ -47,20 +36,15 @@
         </button>
       </div>
     </div>
-    
+
     <!-- Sub-filters for detection types -->
     <div v-if="mainFilter === 'Detections'" class="sub-filters">
-      <button 
-        v-for="subTab in ['Visual', 'Audio', 'Chat']" 
-        :key="subTab"
-        class="sub-filter-btn"
-        :class="{ active: detectionSubFilter === subTab }"
-        @click="detectionSubFilter = subTab"
-      >
+      <button v-for="subTab in ['Visual', 'Audio', 'Chat']" :key="subTab" class="sub-filter-btn"
+        :class="{ active: detectionSubFilter === subTab }" @click="detectionSubFilter = subTab">
         {{ subTab }}
       </button>
     </div>
-    
+
     <!-- Main content area -->
     <div class="content-area">
       <!-- Left panel: Notifications list -->
@@ -68,7 +52,7 @@
         <div class="panel-header">
           <h2>Notifications <span class="count">({{ filteredNotifications.length }})</span></h2>
         </div>
-        
+
         <!-- Loading, error, or empty states -->
         <div v-if="loading" class="state-container">
           <div class="loading-spinner"></div>
@@ -84,67 +68,50 @@
           <font-awesome-icon icon="bell-slash" class="empty-icon" />
           <p>No notifications to display</p>
         </div>
-        
+
         <!-- Notifications list -->
         <div v-else class="notification-list">
           <TransitionGroup name="list" tag="div">
-            <div 
-              v-for="notification in filteredNotifications" 
-              :key="notification.id"
-              class="notification-card"
-              :class="{ 
-                'read': notification.read, 
-                'unread': !notification.read, 
-                'selected': selectedNotification?.id === notification.id,
-                'new-notification': newNotificationIds.includes(notification.id),
-                'low-priority': notification.details?.priority === 'low'
-              }"
-              @click="handleNotificationClick(notification)"
-            >
-              <div 
-                class="notification-indicator"
-                :style="{ backgroundColor: getNotificationColor(notification) }"
-              ></div>
-              
+            <div v-for="notification in filteredNotifications" :key="notification.id" class="notification-card" :class="{
+              'read': notification.read,
+              'unread': !notification.read,
+              'selected': selectedNotification?.id === notification.id,
+              'new-notification': newNotificationIds.includes(notification.id),
+              'low-priority': notification.details?.priority === 'low'
+            }" @click="handleNotificationClick(notification)">
+              <div class="notification-indicator" :style="{ backgroundColor: getNotificationColor(notification) }">
+              </div>
+
               <div class="notification-content">
                 <div class="notification-header">
                   <span class="notification-type">{{ getNotificationType(notification) }}</span>
                   <span class="notification-time">{{ formatTimestamp(notification.timestamp) }}</span>
                 </div>
-                
+
                 <div class="notification-message">
                   {{ getNotificationMessage(notification) }}
                 </div>
-                
+
                 <div class="notification-meta">
                   <span class="notification-source">
-                    {{ notification.details?.platform || 'System' }} | 
-                    {{ notification.details?.streamer_name || 'Unknown' }} | 
+                    {{ notification.details?.platform || 'System' }} |
+                    {{ notification.details?.streamer_name || 'Unknown' }} |
                     {{ notification.details?.assigned_agent || 'None' }}
                   </span>
-                  <span 
-                    v-if="notification.event_type === 'object_detection' && notification.details?.detections?.length" 
-                    class="notification-confidence"
-                  >
+                  <span
+                    v-if="notification.event_type === 'object_detection' && notification.details?.detections?.length"
+                    class="notification-confidence">
                     {{ formatConfidence(notification.details.detections[0].confidence) }}
                   </span>
                 </div>
               </div>
-              
+
               <div class="notification-actions">
-                <button 
-                  v-if="!notification.read" 
-                  class="action-btn read-btn" 
-                  @click.stop="markAsRead(notification.id)"
-                  title="Mark as Read"
-                >
+                <button v-if="!notification.read" class="action-btn read-btn" @click.stop="markAsRead(notification.id)"
+                  title="Mark as Read">
                   <font-awesome-icon icon="check" />
                 </button>
-                <button 
-                  class="action-btn delete-btn" 
-                  @click.stop="confirmDelete(notification.id)"
-                  title="Delete"
-                >
+                <button class="action-btn delete-btn" @click.stop="confirmDelete(notification.id)" title="Delete">
                   <font-awesome-icon icon="trash" />
                 </button>
               </div>
@@ -152,38 +119,31 @@
           </TransitionGroup>
         </div>
       </div>
-      
+
       <!-- Right panel: Notification details -->
       <div class="details-panel" v-if="selectedNotification || isMobile">
         <div v-if="!selectedNotification && isMobile" class="empty-detail">
           <font-awesome-icon icon="clipboard" class="empty-icon" />
           <p>Select a notification to view details</p>
         </div>
-        
+
         <div v-else-if="selectedNotification" class="detail-content">
           <div class="detail-header">
             <button v-if="isMobile" class="back-btn" @click="selectedNotification = null">
               <font-awesome-icon icon="arrow-left" />
             </button>
             <h2>{{ getNotificationDetailTitle() }}</h2>
-            
+
             <div class="detail-actions">
-              <button 
-                v-if="!selectedNotification.read" 
-                class="action-btn" 
-                @click="markAsRead(selectedNotification.id)"
-              >
+              <button v-if="!selectedNotification.read" class="action-btn" @click="markAsRead(selectedNotification.id)">
                 Mark as Read
               </button>
-              <button 
-                class="action-btn delete-btn" 
-                @click="confirmDelete(selectedNotification.id)"
-              >
+              <button class="action-btn delete-btn" @click="confirmDelete(selectedNotification.id)">
                 Delete
               </button>
             </div>
           </div>
-          
+
           <!-- Notification details content -->
           <div class="detail-body">
             <div class="detail-field">
@@ -196,13 +156,8 @@
             </div>
             <div class="detail-field">
               <label>Stream URL:</label>
-              <a 
-                :href="selectedNotification.room_url" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                class="url-link"
-                v-if="selectedNotification.room_url"
-              >
+              <a :href="selectedNotification.room_url" target="_blank" rel="noopener noreferrer" class="url-link"
+                v-if="selectedNotification.room_url">
                 {{ truncateUrl(selectedNotification.room_url) }}
               </a>
               <span v-else>N/A</span>
@@ -223,59 +178,41 @@
               <label>Assigned Agent:</label>
               <span>{{ selectedNotification.details?.assigned_agent || 'None' }}</span>
             </div>
-            
+
             <!-- Specific details based on notification type -->
             <div v-if="selectedNotification.event_type === 'object_detection'" class="type-details detection-details">
               <h3>Detection Details</h3>
-              <div 
-                v-if="selectedNotification.details?.detections?.length" 
-                class="detections-grid"
-              >
-                <div 
-                  v-for="(detection, index) in selectedNotification.details.detections" 
-                  :key="index"
-                  class="detection-item"
-                >
+              <div v-if="selectedNotification.details?.detections?.length" class="detections-grid">
+                <div v-for="(detection, index) in selectedNotification.details.detections" :key="index"
+                  class="detection-item">
                   <span class="detection-class">{{ detection.class }}</span>
                   <span class="detection-confidence">
                     {{ formatConfidence(detection.confidence) }}
                   </span>
                 </div>
               </div>
-              <div 
-                v-if="selectedNotification.details?.annotated_image"
-                class="detection-image"
-              >
-                <img 
-                  :src="`data:image/png;base64,${selectedNotification.details.annotated_image}`"
-                  alt="Detection Image"
-                  @click="openImageModal(selectedNotification.details.annotated_image)"
-                />
+              <div v-if="selectedNotification.details?.annotated_image" class="detection-image">
+                <img :src="`data:image/png;base64,${selectedNotification.details.annotated_image}`"
+                  alt="Detection Image" @click="openImageModal(selectedNotification.details.annotated_image)" />
               </div>
             </div>
-            
+
             <div v-if="selectedNotification.event_type === 'chat_detection'" class="type-details chat-details">
               <h3>Chat Details</h3>
               <div class="chat-message">
                 <p>{{ selectedNotification.details?.message || 'No message content' }}</p>
               </div>
-              <div 
-                v-if="selectedNotification.details?.keywords?.length"
-                class="keywords-list"
-              >
+              <div v-if="selectedNotification.details?.keywords?.length" class="keywords-list">
                 <h4>Flagged Keywords:</h4>
                 <div class="keywords">
-                  <span 
-                    v-for="(keyword, index) in selectedNotification.details.keywords" 
-                    :key="index"
-                    class="keyword-tag"
-                  >
+                  <span v-for="(keyword, index) in selectedNotification.details.keywords" :key="index"
+                    class="keyword-tag">
                     {{ keyword }}
                   </span>
                 </div>
               </div>
             </div>
-            
+
             <div v-if="selectedNotification.event_type === 'audio_detection'" class="type-details audio-details">
               <h3>Audio Details</h3>
               <div class="audio-transcript">
@@ -287,7 +224,7 @@
                 <span class="keyword-tag">{{ selectedNotification.details.keyword }}</span>
               </div>
             </div>
-            
+
             <div v-if="selectedNotification.event_type === 'stream_status_updated'" class="type-details stream-details">
               <h3>Stream Status Details</h3>
               <div class="stream-message">
@@ -298,7 +235,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- Delete confirmation modal -->
     <Teleport to="body">
       <div v-if="isDeleteModalOpen" class="modal-overlay" @click="isDeleteModalOpen = false">
@@ -315,11 +252,8 @@
           </div>
           <div class="modal-footer">
             <button class="cancel-btn" @click="isDeleteModalOpen = false">Cancel</button>
-            <button 
-              class="confirm-btn" 
-              @click="deleteAll ? deleteAllNotifications() : deleteNotification(deleteId)"
-              :disabled="deletingAll || deletingSingle"
-            >
+            <button class="confirm-btn" @click="deleteAll ? deleteAllNotifications() : deleteNotification(deleteId)"
+              :disabled="deletingAll || deletingSingle">
               <font-awesome-icon v-if="deletingAll || deletingSingle" icon="spinner" spin class="icon" />
               Delete
             </button>
@@ -327,7 +261,7 @@
         </div>
       </div>
     </Teleport>
-    
+
     <!-- Image viewer modal -->
     <Teleport to="body">
       <div v-if="imageModalSrc" class="modal-overlay" @click="imageModalSrc = null">
@@ -339,16 +273,11 @@
         </div>
       </div>
     </Teleport>
-    
+
     <!-- Toast notifications -->
     <div class="toast-container">
       <TransitionGroup name="toast">
-        <div 
-          v-for="toast in toasts" 
-          :key="toast.id"
-          class="toast"
-          :class="toast.type"
-        >
+        <div v-for="toast in toasts" :key="toast.id" class="toast" :class="toast.type">
           {{ toast.message }}
         </div>
       </TransitionGroup>
@@ -442,7 +371,7 @@ export default {
       }
 
       try {
-        socket.value = io('  https://monitor-backend.jetcamstudio.com:5000/notifications', {
+        socket.value = io('  https://monitor-backend.jetcamstudio.com:5000notifications', {
           path: '/ws',
           transports: ['websocket', 'polling'],
           reconnection: false,
@@ -484,7 +413,7 @@ export default {
         reconnectAttempts++
         if (reconnectAttempts < maxReconnectAttempts) {
           const delay = reconnectDelayMs * Math.pow(2, reconnectAttempts - 1)
-            setTimeout(setupSocketConnection, delay)
+          setTimeout(setupSocketConnection, delay)
         }
       }
     }
@@ -739,7 +668,7 @@ export default {
 
     const playNotificationSound = () => {
       const audio = new Audio('/notification.mp3')
-      audio.play().catch(() => {})
+      audio.play().catch(() => { })
     }
 
     const showToast = (msg, type = 'info') => {
@@ -979,7 +908,8 @@ export default {
   background-color: var(--hover-bg);
 }
 
-.dropdown-menu button:disabled, .dropdown-menu button.disabled {
+.dropdown-menu button:disabled,
+.dropdown-menu button.disabled {
   color: rgb(var(--secondary-rgb));
   cursor: not-allowed;
   opacity: 0.6;
@@ -1211,9 +1141,17 @@ export default {
 }
 
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.5); }
-  70% { box-shadow: 0 0 0 10px rgba(var(--primary-rgb), 0); }
-  100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.5);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(var(--primary-rgb), 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0);
+  }
 }
 
 /* States */
@@ -1278,7 +1216,9 @@ export default {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Detail Section */
@@ -1670,44 +1610,44 @@ export default {
   .notifications-page {
     margin-left: 0;
   }
-  
+
   .content-area {
     flex-direction: column;
   }
-  
+
   .notifications-panel {
     width: 100%;
     border-right: none;
     border-bottom: 1px solid var(--input-border);
     max-height: 50vh;
   }
-  
+
   .detail-actions {
     flex-wrap: wrap;
   }
-  
+
   .top-bar {
     flex-wrap: wrap;
   }
-  
+
   .filter-tabs {
     width: 100%;
     margin-bottom: 8px;
     justify-content: space-between;
   }
-  
+
   .action-buttons {
     margin-left: auto;
   }
-  
+
   .notification-card {
     padding: 8px;
   }
-  
+
   .notification-message {
     font-size: 14px;
   }
-  
+
   .notification-meta,
   .notification-time {
     font-size: 12px;

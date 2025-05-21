@@ -192,7 +192,7 @@ class Assignment(db.Model):
                     "username": self.agent.username,
                     "email": self.agent.email,
                     "role": self.agent.role,
-                    "telegram_username": self.telegram_username,
+                    "telegram_username": self.agent.telegram_username,
                 }
             else:
                 data["agent"] = None

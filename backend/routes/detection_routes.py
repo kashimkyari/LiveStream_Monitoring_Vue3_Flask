@@ -68,9 +68,12 @@ def get_livestream():
 @detection_bp.route("/api/trigger-detection", methods=["POST"])
 
 def trigger_detection():
+    current_app.logger.info("Received request to /api/trigger-detection")
     data = request.get_json()
+    current_app.logger.info(f"Request data: {data}")
     stream_id = data.get("stream_id")
     stop = data.get("stop", False)
+    current_app.logger.info(f"Stream ID: {stream_id}, Stop: {stop}")
     
     if not stream_id:
         return jsonify({"error": "Missing stream_id"}), 400

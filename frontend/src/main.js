@@ -41,7 +41,8 @@ import {
   faUserCircle,
   faTags,
   faTasks,
-  faStickyNote
+  faStickyNote,
+  faStopCircle
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import Toast from 'vue-toastification';
@@ -92,7 +93,8 @@ library.add(
   faUserCircle,
   faTags,
   faTasks,
-  faStickyNote
+  faStickyNote,
+  faStopCircle
  
   
 );

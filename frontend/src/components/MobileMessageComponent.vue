@@ -7,68 +7,50 @@
         <div class="header-actions">
           <button class="filter-button" @click="toggleFilterDropdown">
             <font-awesome-icon icon="filter" />
-            <span class="filter-label">{{ activeFilter === 'all' ? 'All' : activeFilter === 'online' ? 'Online' : 'Unread' }}</span>
+            <span class="filter-label">{{ activeFilter === 'all' ? 'All' : activeFilter === 'online' ? 'Online' :
+              'Unread' }}</span>
           </button>
         </div>
       </div>
-      
+
       <!-- Filter dropdown -->
       <div v-if="showFilterDropdown" class="filter-dropdown">
-        <button 
-          :class="['filter-option', { active: activeFilter === 'all' }]" 
-          @click="setFilter('all')"
-        >
+        <button :class="['filter-option', { active: activeFilter === 'all' }]" @click="setFilter('all')">
           <font-awesome-icon icon="users" />
           <span>All Users</span>
         </button>
-        <button 
-          :class="['filter-option', { active: activeFilter === 'online' }]" 
-          @click="setFilter('online')"
-        >
+        <button :class="['filter-option', { active: activeFilter === 'online' }]" @click="setFilter('online')">
           <font-awesome-icon icon="circle" class="online-icon" />
           <span>Online</span>
         </button>
-        <button 
-          :class="['filter-option', { active: activeFilter === 'unread' }]" 
-          @click="setFilter('unread')"
-        >
+        <button :class="['filter-option', { active: activeFilter === 'unread' }]" @click="setFilter('unread')">
           <font-awesome-icon icon="envelope" />
           <span>Unread</span>
         </button>
       </div>
-      
+
       <!-- Search bar -->
       <div class="search-bar">
         <font-awesome-icon icon="search" class="search-icon" />
-        <input 
-          type="text"
-          v-model="searchQuery"
-          placeholder="Search users..."
-          class="search-input"
-        />
+        <input type="text" v-model="searchQuery" placeholder="Search users..." class="search-input" />
         <button v-if="searchQuery" class="clear-btn" @click="searchQuery = ''">
           <font-awesome-icon icon="times" />
         </button>
       </div>
-      
+
       <!-- User list -->
       <div class="users-list">
         <div v-if="isLoading" class="loading-container">
           <div class="loading-spinner"></div>
           <span>Loading users...</span>
         </div>
-        
+
         <div v-else-if="filteredUsers.length === 0" class="empty-state">
           <font-awesome-icon icon="user-slash" size="2x" />
           <p>No users found</p>
         </div>
-        
-        <div
-          v-for="user in filteredUsers"
-          :key="user.id"
-          class="user-item"
-          @click="selectUser(user)"
-        >
+
+        <div v-for="user in filteredUsers" :key="user.id" class="user-item" @click="selectUser(user)">
           <div class="user-status" :class="{ online: user.online }"></div>
           <div class="user-avatar">
             {{ getUserInitials(user.username) }}
@@ -92,7 +74,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- Chat view (shows when a conversation is selected) -->
     <div v-else class="chat-view">
       <!-- Chat header -->
@@ -117,18 +99,14 @@
           </button>
         </div>
       </div>
-      
+
       <!-- Chat messages -->
-      <div
-        class="messages-container"
-        ref="messagesContainer"
-        @scroll="handleScroll"
-        v-mobile-chat-scroll="{ activateCondition: !isLoading && !fetchingMoreMessages }"
-      >
+      <div class="messages-container" ref="messagesContainer" @scroll="handleScroll"
+        v-mobile-chat-scroll="{ activateCondition: !isLoading && !fetchingMoreMessages }">
         <div v-if="fetchingMoreMessages" class="load-more-spinner">
           <div class="loading-spinner small"></div>
         </div>
-        
+
         <div v-if="messages.length === 0 && !isLoading" class="empty-chat">
           <div class="empty-illustration">
             <font-awesome-icon icon="comments" size="3x" />
@@ -136,17 +114,13 @@
           <p>No messages yet</p>
           <p class="empty-chat-hint">Start the conversation with {{ selectedUser.username }}</p>
         </div>
-        
-        <div
-          v-for="(message, index) in messages"
-          :key="message.id"
-          class="message-wrapper"
-          :class="{ 'own-message': message.sender_id === user.id }"
-        >
+
+        <div v-for="(message, index) in messages" :key="message.id" class="message-wrapper"
+          :class="{ 'own-message': message.sender_id === user.id }">
           <div class="message-date" v-if="showDateDivider(message, index)">
             {{ formatMessageDate(message.timestamp) }}
           </div>
-          
+
           <div class="message" :class="{ 'own': message.sender_id === user.id }">
             <!-- System message -->
             <div v-if="message.is_system" class="system-message">
@@ -154,7 +128,7 @@
                 {{ message.message }}
               </div>
             </div>
-            
+
             <!-- Regular message -->
             <div v-else class="message-bubble" :class="{ 'has-attachment': message.attachment }">
               <div class="message-content">
@@ -173,26 +147,22 @@
                     </div>
                   </div>
                 </div>
-                
+
                 <!-- Message text -->
                 <div v-if="message.message" class="message-text">
                   {{ message.message }}
                 </div>
               </div>
-              
+
               <div class="message-meta">
                 <span class="message-time">{{ formatMessageTime(message.timestamp) }}</span>
-                <font-awesome-icon
-                  v-if="message.sender_id === user.id"
-                  icon="check-double"
-                  class="message-status"
-                  :class="{ 'read': message.read }"
-                />
+                <font-awesome-icon v-if="message.sender_id === user.id" icon="check-double" class="message-status"
+                  :class="{ 'read': message.read }" />
               </div>
             </div>
           </div>
         </div>
-        
+
         <!-- Typing indicator -->
         <div v-if="typingUsers[selectedUser.id]" class="typing-indicator-container">
           <div class="typing-dots">
@@ -203,7 +173,7 @@
           <div class="typing-text">{{ selectedUser.username }} is typing...</div>
         </div>
       </div>
-      
+
       <!-- Message input -->
       <div class="message-composer">
         <div class="attachment-preview" v-if="selectedFile">
@@ -221,40 +191,24 @@
             </div>
           </div>
         </div>
-        
+
         <div class="input-container">
           <button class="attach-button" @click="triggerFileInput">
             <font-awesome-icon icon="paperclip" />
           </button>
-          <input
-            type="file"
-            ref="fileInput"
-            class="file-input"
-            @change="handleFileSelect"
-            accept="image/*,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          />
-          
-          <textarea
-            v-model="inputMessage"
-            @input="handleInput"
-            @keydown.enter.prevent="sendMessage"
-            placeholder="Type a message..."
-            class="message-input"
-            ref="messageInput"
-            rows="1"
-          ></textarea>
-          
-          <button
-            class="send-button"
-            :class="{ 'active': inputMessage.trim() || selectedFile }"
-            @click="sendMessage"
-            :disabled="!inputMessage.trim() && !selectedFile"
-          >
+          <input type="file" ref="fileInput" class="file-input" @change="handleFileSelect"
+            accept="image/*,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+
+          <textarea v-model="inputMessage" @input="handleInput" @keydown.enter.prevent="sendMessage"
+            placeholder="Type a message..." class="message-input" ref="messageInput" rows="1"></textarea>
+
+          <button class="send-button" :class="{ 'active': inputMessage.trim() || selectedFile }" @click="sendMessage"
+            :disabled="!inputMessage.trim() && !selectedFile">
             <font-awesome-icon icon="paper-plane" />
           </button>
         </div>
       </div>
-      
+
       <!-- User info panel (slides in from right) -->
       <div class="user-info-panel" :class="{ 'open': showInfoPanel }">
         <div class="info-panel-header">
@@ -263,7 +217,7 @@
             <font-awesome-icon icon="times" />
           </button>
         </div>
-        
+
         <div class="info-panel-content">
           <div class="user-avatar large">
             {{ getUserInitials(selectedUser.username) }}
@@ -277,7 +231,7 @@
             <font-awesome-icon icon="clock" class="detail-icon" />
             <span>Last active: {{ formatLastActive(selectedUser.last_active) }}</span>
           </div>
-          
+
           <div class="info-panel-actions">
             <button class="panel-action-btn" @click="clearChatHistory">
               <font-awesome-icon icon="trash-alt" />
@@ -286,7 +240,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- Attachment viewer modal -->
       <div v-if="viewingAttachment" class="attachment-viewer">
         <div class="attachment-viewer-header">
@@ -295,14 +249,10 @@
             <font-awesome-icon icon="times" />
           </button>
         </div>
-        
+
         <div class="attachment-viewer-content">
-          <img
-            v-if="isImageAttachment(viewingAttachment)"
-            :src="viewingAttachment.url"
-            alt="Attachment"
-            class="attachment-image"
-          />
+          <img v-if="isImageAttachment(viewingAttachment)" :src="viewingAttachment.url" alt="Attachment"
+            class="attachment-image" />
           <div v-else class="attachment-file">
             <font-awesome-icon icon="file" size="3x" class="file-icon" />
             <div class="file-name">{{ viewingAttachment.name }}</div>
@@ -362,110 +312,110 @@ export default {
     const showInfoPanel = ref(false);
     const previewUrl = ref(null);
     const fetchingMoreMessages = ref(false);
-    
+
     // Refs
     const messagesContainer = ref(null);
     const messageInput = ref(null);
     const fileInput = ref(null);
-    
+
     // Toast
     const toast = useToast();
-    
+
     // Computed
     const filteredUsers = computed(() => {
       let result = users.value;
-      
+
       // Apply search
       if (searchQuery.value) {
         const query = searchQuery.value.toLowerCase();
-        result = result.filter(user => 
+        result = result.filter(user =>
           user.username.toLowerCase().includes(query)
         );
       }
-      
+
       // Apply filter
       if (activeFilter.value === 'online') {
         result = result.filter(user => user.online);
       } else if (activeFilter.value === 'unread') {
         result = result.filter(user => unreadCounts[user.id]);
       }
-      
+
       // Sort by online status and lastMessageTime
       return result.sort((a, b) => {
         // Online users first
         if (a.online && !b.online) return -1;
         if (!a.online && b.online) return 1;
-        
+
         // Then by unread count
         if (unreadCounts[a.id] && !unreadCounts[b.id]) return -1;
         if (!unreadCounts[a.id] && unreadCounts[b.id]) return 1;
-        
+
         // Then by last message time
         const aTime = a.lastMessageTime ? new Date(a.lastMessageTime) : new Date(0);
         const bTime = b.lastMessageTime ? new Date(b.lastMessageTime) : new Date(0);
         return bTime - aTime;
       });
     });
-    
+
     // Calculate total unread count
     const unreadCount = computed(() => {
       return Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
     });
-    
+
     // Methods
     const initSocket = () => {
       // Connect to the backend at   https://monitor-backend.jetcamstudio.com:5000
-      socket.value = io('   https://monitor-backend.jetcamstudio.com:5000/messages', { 
+      socket.value = io('   https://monitor-backend.jetcamstudio.com:5000messages', {
         path: '/ws',
         transports: ['websocket']
       });
-      
-      const socketUrl = `   https://monitor-backend.jetcamstudio.com:5000/messages`;
-      
+
+      const socketUrl = `   https://monitor-backend.jetcamstudio.com:5000messages`;
+
       console.log('Connecting to WebSocket server:', socketUrl);
       socket.value = io(socketUrl, {
         path: '/ws',
         transports: ['websocket', 'polling']
       });
-      
+
       socket.value.on('connect', () => {
         console.log('Connected to WebSocket server');
         isConnected.value = true;
-        
+
         // Send pending messages if any
         sendPendingMessages();
       });
-      
+
       socket.value.on('disconnect', () => {
         console.log('Disconnected from WebSocket server');
         isConnected.value = false;
       });
-      
+
       socket.value.on('receive_message', (message) => {
         console.log('Received message:', message);
         handleIncomingMessage(message);
       });
-      
+
       socket.value.on('user_status', (data) => {
         console.log('User status update:', data);
         updateUserStatus(data);
       });
-      
+
       socket.value.on('typing', (data) => {
         console.log('Typing indicator:', data);
         handleTypingIndicator(data);
       });
-      
+
       socket.value.on('error', (error) => {
         console.error('Socket error:', error);
       });
     };
-    
+
     const fetchUsers = async () => {
       try {
         const response = await axios.get('/api/online-users');
         users.value = response.data;
-        
+
         // Initialize unread counts
         users.value.forEach(user => {
           fetchUnreadCount(user.id);
@@ -474,14 +424,14 @@ export default {
         console.error('Error fetching users:', error);
       }
     };
-    
+
     const fetchMessages = async (userId) => {
       if (!userId) return;
-      
+
       isLoading.value = true;
       page.value = 1;
       messages.value = [];
-      
+
       try {
         const response = await axios.get(`/api/messages/${userId}`, {
           params: {
@@ -489,16 +439,16 @@ export default {
             limit: messagesPerPage.value
           }
         });
-        
+
         messages.value = response.data.messages;
         hasMoreMessages.value = response.data.has_more;
-        
+
         // Mark messages as read
         markMessagesAsRead(userId);
-        
+
         // Update unread count
         unreadCounts[userId] = 0;
-        
+
         // Scroll to bottom on next tick
         await nextTick();
         scrollToBottom();
@@ -509,14 +459,14 @@ export default {
         isLoading.value = false;
       }
     };
-    
+
     const fetchMoreMessages = async () => {
       if (!selectedUser.value || !hasMoreMessages.value || fetchingMoreMessages.value) return;
-      
+
       fetchingMoreMessages.value = true;
       const userId = selectedUser.value.id;
       const nextPage = page.value + 1;
-      
+
       try {
         const response = await axios.get(`/api/messages/${userId}`, {
           params: {
@@ -524,12 +474,12 @@ export default {
             limit: messagesPerPage.value
           }
         });
-        
+
         const oldMessages = response.data.messages;
         messages.value = [...oldMessages, ...messages.value];
         hasMoreMessages.value = response.data.has_more;
         page.value = nextPage;
-        
+
         // Maintain scroll position
         await nextTick();
         if (messagesContainer.value && oldMessages.length > 0) {
@@ -542,7 +492,7 @@ export default {
         fetchingMoreMessages.value = false;
       }
     };
-    
+
     const fetchUnreadCount = async (userId) => {
       try {
         const response = await axios.get(`/api/messages/${userId}/unread-count`);
@@ -551,41 +501,41 @@ export default {
         console.error(`Error fetching unread count for user ${userId}:`, error);
       }
     };
-    
+
     const selectUser = (user) => {
       selectedUser.value = user;
       fetchMessages(user.id);
     };
-    
+
     const closeChat = () => {
       selectedUser.value = null;
     };
-    
+
     const sendMessage = async () => {
       if ((!inputMessage.value.trim() && !selectedFile.value) || !selectedUser.value) return;
-      
+
       const messageData = {
         receiver_id: selectedUser.value.id,
         message: inputMessage.value.trim(),
         attachment: null
       };
-      
+
       // Reset input
       inputMessage.value = '';
       resizeTextarea();
-      
+
       // Handle attachment
       if (selectedFile.value) {
         try {
           const formData = new FormData();
           formData.append('file', selectedFile.value);
-          
+
           const response = await axios.post('/api/upload', formData, {
             headers: {
               'Content-Type': 'multipart/form-data'
             }
           });
-          
+
           messageData.attachment = response.data;
         } catch (error) {
           console.error('Error uploading file:', error);
@@ -597,7 +547,7 @@ export default {
           previewUrl.value = null;
         }
       }
-      
+
       // Create optimistic message
       const optimisticMessage = {
         id: `temp-${Date.now()}`,
@@ -610,14 +560,14 @@ export default {
         is_system: false,
         pending: true
       };
-      
+
       // Add to messages
       messages.value.push(optimisticMessage);
-      
+
       // Scroll to bottom
       await nextTick();
       scrollToBottom();
-      
+
       // Send message via socket
       if (isConnected.value) {
         socket.value.emit('send_message', messageData, (response) => {
@@ -625,21 +575,21 @@ export default {
             // Update the optimistic message with real data
             const index = messages.value.findIndex(m => m.id === optimisticMessage.id);
             if (index !== -1) {
-              messages.value[index] = {...response.message, pending: false};
+              messages.value[index] = { ...response.message, pending: false };
             }
-            
+
             // Update last message in user list
             updateUserLastMessage(selectedUser.value.id, response.message);
           } else {
             console.error('Failed to send message:', response.error);
             toast.error('Failed to send message');
-            
+
             // Mark message as failed
             const index = messages.value.findIndex(m => m.id === optimisticMessage.id);
             if (index !== -1) {
               messages.value[index].failed = true;
             }
-            
+
             // Add to pending messages to retry later
             pendingMessages.value.push(messageData);
           }
@@ -650,19 +600,19 @@ export default {
         toast.warning('You are offline. Message will be sent when connection is restored.');
       }
     };
-    
+
     const handleIncomingMessage = (message) => {
       // Check if we already have the message (prevent duplicates)
       const existingIndex = messages.value.findIndex(m => m.id === message.id);
       if (existingIndex !== -1) return;
-      
+
       // Add to messages if current chat is open
-      if (selectedUser.value && 
-          (message.sender_id === selectedUser.value.id || 
-           message.receiver_id === selectedUser.value.id)) {
+      if (selectedUser.value &&
+        (message.sender_id === selectedUser.value.id ||
+          message.receiver_id === selectedUser.value.id)) {
         messages.value.push(message);
         nextTick(scrollToBottom);
-        
+
         // Mark as read if from the selected user
         if (message.sender_id === selectedUser.value.id) {
           markMessagesAsRead(selectedUser.value.id);
@@ -670,18 +620,18 @@ export default {
       } else if (message.sender_id !== props.user.id) {
         // Increment unread count for sender
         unreadCounts[message.sender_id] = (unreadCounts[message.sender_id] || 0) + 1;
-        
+
         // Show notification
         const sender = users.value.find(u => u.id === message.sender_id);
         if (sender) {
           toast.info(`New message from ${sender.username}`);
         }
       }
-      
+
       // Update last message in user list
       updateUserLastMessage(message.sender_id === props.user.id ? message.receiver_id : message.sender_id, message);
     };
-    
+
     const updateUserLastMessage = (userId, message) => {
       const userIndex = users.value.findIndex(u => u.id === userId);
       if (userIndex !== -1) {
@@ -689,7 +639,7 @@ export default {
         users.value[userIndex].lastMessageTime = message.timestamp;
       }
     };
-    
+
     const updateUserStatus = (data) => {
       const userIndex = users.value.findIndex(u => u.id === data.user_id);
       if (userIndex !== -1) {
@@ -697,23 +647,23 @@ export default {
         users.value[userIndex].last_active = data.last_active;
       }
     };
-    
+
     const markMessagesAsRead = async (userId) => {
       if (!userId) return;
-      
+
       try {
         await axios.post(`/api/messages/${userId}/read`);
-        
+
         // Update UI
         messages.value.forEach(message => {
           if (message.sender_id === userId && !message.read) {
             message.read = true;
           }
         });
-        
+
         // Update unread count
         unreadCounts[userId] = 0;
-        
+
         // Notify via socket
         if (isConnected.value) {
           socket.value.emit('message_status', {
@@ -725,12 +675,12 @@ export default {
         console.error('Error marking messages as read:', error);
       }
     };
-    
+
     const handleTypingIndicator = (data) => {
       if (data.sender_id === props.user.id) return;
-      
+
       typingUsers[data.sender_id] = data.typing;
-      
+
       // Clear typing indicator after 3 seconds if no update
       if (data.typing) {
         setTimeout(() => {
@@ -738,30 +688,30 @@ export default {
         }, 3000);
       }
     };
-    
+
     const handleInput = () => {
       resizeTextarea();
-      
+
       // Send typing indicator
       if (!isTyping.value && selectedUser.value) {
         isTyping.value = true;
-        
+
         if (isConnected.value) {
           socket.value.emit('typing', {
             receiver_id: selectedUser.value.id,
             typing: true
           });
         }
-        
+
         // Clear previous timeout
         if (typingTimeout.value) {
           clearTimeout(typingTimeout.value);
         }
-        
+
         // Set new timeout
         typingTimeout.value = setTimeout(() => {
           isTyping.value = false;
-          
+
           if (isConnected.value && selectedUser.value) {
             socket.value.emit('typing', {
               receiver_id: selectedUser.value.id,
@@ -771,48 +721,48 @@ export default {
         }, 3000);
       }
     };
-    
+
     const resizeTextarea = () => {
       if (!messageInput.value) return;
-      
+
       // Reset height
       messageInput.value.style.height = 'auto';
-      
+
       // Set new height
       const newHeight = Math.min(messageInput.value.scrollHeight, 120);
       messageInput.value.style.height = `${newHeight}px`;
     };
-    
+
     const scrollToBottom = () => {
       if (!messagesContainer.value) return;
       messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
     };
-    
+
     const handleScroll = () => {
       if (!messagesContainer.value) return;
-      
+
       // Check if scrolled to top to load more messages
       if (messagesContainer.value.scrollTop < 50 && hasMoreMessages.value && !fetchingMoreMessages.value) {
         fetchMoreMessages();
       }
     };
-    
+
     const setFilter = (filter) => {
       activeFilter.value = filter;
       showFilterDropdown.value = false;
     };
-    
+
     const toggleFilterDropdown = () => {
       showFilterDropdown.value = !showFilterDropdown.value;
     };
-    
+
     const toggleUserInfo = () => {
       showInfoPanel.value = !showInfoPanel.value;
     };
-    
+
     const clearChatHistory = async () => {
       if (!selectedUser.value) return;
-      
+
       try {
         await axios.delete(`/api/messages/${selectedUser.value.id}`);
         messages.value = [];
@@ -823,14 +773,14 @@ export default {
         toast.error('Failed to clear chat history');
       }
     };
-    
+
     const sendPendingMessages = () => {
       if (!isConnected.value || pendingMessages.value.length === 0) return;
-      
+
       // Clone and clear pending messages
       const toSend = [...pendingMessages.value];
       pendingMessages.value = [];
-      
+
       // Send each pending message
       toSend.forEach(message => {
         socket.value.emit('send_message', message, (response) => {
@@ -843,26 +793,26 @@ export default {
         });
       });
     };
-    
+
     const triggerFileInput = () => {
       if (fileInput.value) {
         fileInput.value.click();
       }
     };
-    
+
     const handleFileSelect = (event) => {
       const file = event.target.files[0];
       if (!file) return;
-      
+
       // Check file size (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
         toast.error('File size exceeds 10MB limit');
         event.target.value = null;
         return;
       }
-      
+
       selectedFile.value = file;
-      
+
       // Create preview for images
       if (file.type.startsWith('image/')) {
         const reader = new FileReader();
@@ -873,46 +823,46 @@ export default {
       } else {
         previewUrl.value = null;
       }
-      
+
       // Reset file input
       event.target.value = null;
     };
-    
+
     const removeSelectedFile = () => {
       selectedFile.value = null;
       previewUrl.value = null;
     };
-    
+
     const viewAttachment = (attachment) => {
       viewingAttachment.value = attachment;
     };
-    
+
     const isImageAttachment = (attachment) => {
       if (!attachment || !attachment.url) return false;
       const ext = attachment.url.split('.').pop().toLowerCase();
       return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
     };
-    
+
     const formatFileSize = (size) => {
       if (!size) return '0 B';
-      
+
       const units = ['B', 'KB', 'MB', 'GB'];
       let i = 0;
       let formattedSize = size;
-      
+
       while (formattedSize >= 1024 && i < units.length - 1) {
         formattedSize /= 1024;
         i++;
       }
-      
+
       return `${formattedSize.toFixed(1)} ${units[i]}`;
     };
-    
+
     const formatTime = (timestamp) => {
       if (!timestamp) return '';
-      
+
       const date = parseISO(timestamp);
-      
+
       if (isToday(date)) {
         return format(date, 'HH:mm');
       } else if (isYesterday(date)) {
@@ -921,17 +871,17 @@ export default {
         return format(date, 'dd/MM/yy');
       }
     };
-    
+
     const formatMessageTime = (timestamp) => {
       if (!timestamp) return '';
       return format(parseISO(timestamp), 'HH:mm');
     };
-    
+
     const formatMessageDate = (timestamp) => {
       if (!timestamp) return '';
-      
+
       const date = parseISO(timestamp);
-      
+
       if (isToday(date)) {
         return 'Today';
       } else if (isYesterday(date)) {
@@ -940,62 +890,62 @@ export default {
         return format(date, 'EEEE, MMMM d, yyyy');
       }
     };
-    
+
     const formatLastActive = (timestamp) => {
       if (!timestamp) return 'Never';
       return formatDistance(parseISO(timestamp), new Date(), { addSuffix: true });
     };
-    
+
     const showDateDivider = (message, index) => {
       if (index === 0) return true;
-      
+
       const currentDate = parseISO(message.timestamp);
       const prevDate = parseISO(messages.value[index - 1].timestamp);
-      
+
       return !isSameDay(currentDate, prevDate);
     };
-    
+
     const isSameDay = (date1, date2) => {
       return format(date1, 'yyyy-MM-dd') === format(date2, 'yyyy-MM-dd');
     };
-    
+
     const getUserInitials = (username) => {
       if (!username) return '';
       return username.charAt(0).toUpperCase();
     };
-    
+
     const truncateMessage = (message) => {
       if (!message) return '';
       return message.length > 30 ? `${message.substring(0, 27)}...` : message;
     };
-    
+
     // Initialize
     onMounted(() => {
       fetchUsers();
       initSocket();
-      
+
       // Setup click handlers
       document.addEventListener('click', (event) => {
         // Close filter dropdown when clicking outside
-        if (showFilterDropdown.value && 
-            !event.target.closest('.filter-button') && 
-            !event.target.closest('.filter-dropdown')) {
+        if (showFilterDropdown.value &&
+          !event.target.closest('.filter-button') &&
+          !event.target.closest('.filter-dropdown')) {
           showFilterDropdown.value = false;
         }
       });
     });
-    
+
     // Clean up
     onUnmounted(() => {
       if (socket.value) {
         socket.value.disconnect();
       }
-      
+
       if (typingTimeout.value) {
         clearTimeout(typingTimeout.value);
       }
     });
-    
+
     // Watch for changes
     watch(selectedUser, (newValue) => {
       if (newValue) {
@@ -1005,7 +955,7 @@ export default {
         showInfoPanel.value = false;
       }
     });
-    
+
     return {
       // State
       users,
@@ -1025,16 +975,16 @@ export default {
       showInfoPanel,
       previewUrl,
       fetchingMoreMessages,
-      
+
       // Refs
       messagesContainer,
       messageInput,
       fileInput,
-      
+
       // Computed
       filteredUsers,
       unreadCount,
-      
+
       // Methods
       selectUser,
       closeChat,
@@ -1093,13 +1043,13 @@ export default {
   align-items: center;
   padding: 15px;
   background-color: var(--light-card-bg, #fff);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   z-index: 10;
 }
 
 [data-theme='dark'] .mobile-header {
   background-color: var(--dark-card-bg, #1e1e1e);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .mobile-header h1 {
@@ -1140,7 +1090,7 @@ export default {
   right: 15px;
   background-color: var(--light-card-bg, #fff);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   z-index: 20;
   width: 180px;
   overflow: hidden;
@@ -1148,7 +1098,7 @@ export default {
 
 [data-theme='dark'] .filter-dropdown {
   background-color: var(--dark-card-bg, #1e1e1e);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .filter-option {
@@ -1469,13 +1419,13 @@ export default {
   align-items: center;
   padding: 10px 15px;
   background-color: var(--light-card-bg, #fff);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   z-index: 2;
 }
 
 [data-theme='dark'] .chat-header {
   background-color: var(--dark-card-bg, #1e1e1e);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .back-button {
@@ -1601,14 +1551,14 @@ export default {
   background-color: var(--light-card-bg, #fff);
   border-radius: 18px;
   padding: 10px 15px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   margin-bottom: 2px;
   position: relative;
 }
 
 [data-theme='dark'] .message-bubble {
   background-color: var(--dark-card-bg, #1e1e1e);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .message-bubble.own {
@@ -1745,13 +1695,13 @@ export default {
   background-color: var(--light-card-bg, #fff);
   border-radius: 18px;
   padding: 10px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   margin-right: 10px;
 }
 
 [data-theme='dark'] .typing-dots {
   background-color: var(--dark-card-bg, #1e1e1e);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .typing-dots span {
@@ -1780,9 +1730,13 @@ export default {
 }
 
 @keyframes typingAnimation {
-  0%, 60%, 100% {
+
+  0%,
+  60%,
+  100% {
     transform: translateY(0);
   }
+
   30% {
     transform: translateY(-5px);
   }
@@ -1955,7 +1909,7 @@ export default {
   width: 85%;
   height: 100%;
   background-color: var(--light-card-bg, #fff);
-  box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
   z-index: 20;
   transition: right 0.3s ease;
   display: flex;
@@ -1964,7 +1918,7 @@ export default {
 
 [data-theme='dark'] .user-info-panel {
   background-color: var(--dark-card-bg, #1e1e1e);
-  box-shadow: -2px 0 10px rgba(0,0,0,0.3);
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
 }
 
 .user-info-panel.open {
@@ -2080,7 +2034,7 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0,0,0,0.9);
+  background-color: rgba(0, 0, 0, 0.9);
   z-index: 30;
   display: flex;
   flex-direction: column;
@@ -2091,7 +2045,7 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 15px;
-  background-color: rgba(0,0,0,0.7);
+  background-color: rgba(0, 0, 0, 0.7);
 }
 
 .attachment-viewer-header h3 {
@@ -2131,7 +2085,7 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background-color: rgba(255,255,255,0.1);
+  background-color: rgba(255, 255, 255, 0.1);
   padding: 30px;
   border-radius: 10px;
   color: white;
@@ -2140,7 +2094,7 @@ export default {
 .file-size {
   margin: 10px 0;
   font-size: 0.9rem;
-  color: rgba(255,255,255,0.7);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .download-link {

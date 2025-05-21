@@ -42,22 +42,12 @@
 
     <!-- Interactive Chart -->
     <div class="chart-container">
-      <apexchart
-        v-if="!loading"
-        type="area"
-        height="240"
-        :options="chartOptions"
-        :series="chartSeries"
-      ></apexchart>
+      <apexchart v-if="!loading" type="area" height="240" :options="chartOptions" :series="chartSeries"></apexchart>
       <div v-else class="loading-spinner"></div>
-      
+
       <div class="chart-time-filters">
-        <button 
-          v-for="period in timePeriods" 
-          :key="period.value"
-          :class="['time-filter-btn', { active: selectedPeriod === period.value }]"
-          @click="changePeriod(period.value)"
-        >
+        <button v-for="period in timePeriods" :key="period.value"
+          :class="['time-filter-btn', { active: selectedPeriod === period.value }]" @click="changePeriod(period.value)">
           {{ period.label }}
         </button>
       </div>
@@ -67,12 +57,7 @@
     <div class="detection-types">
       <h3>Alert Types</h3>
       <div class="type-grid">
-        <div 
-          v-for="(type, index) in detectionTypes"
-          :key="index"
-          class="type-card"
-          @click="filterByType(type.name)"
-        >
+        <div v-for="(type, index) in detectionTypes" :key="index" class="type-card" @click="filterByType(type.name)">
           <div class="type-icon" :style="{ backgroundColor: type.color }">
             <component :is="type.icon" />
           </div>
@@ -94,7 +79,7 @@ import apexchart from 'vue3-apexcharts'
 import io from 'socket.io-client'
 
 const agentStore = useAgentStore()
-const socket = io('   https://monitor-backend.jetcamstudio.com:5000/notifications', {
+const socket = io('   https://monitor-backend.jetcamstudio.com:5000notifications', {
   path: '/ws'
 });
 
@@ -141,7 +126,7 @@ const chartOptions = computed(() => ({
   },
   xaxis: {
     type: 'datetime',
-    labels: { 
+    labels: {
       style: { colors: '#6b7280' },
       datetimeFormatter: {
         year: 'yyyy',
@@ -153,17 +138,17 @@ const chartOptions = computed(() => ({
       hideOverlappingLabels: true
     }
   },
-  yaxis: { 
-    labels: { 
+  yaxis: {
+    labels: {
       style: { colors: '#6b7280' },
       formatter: (value) => Math.round(value)
     }
   },
-  tooltip: { 
+  tooltip: {
     x: { format: 'dd MMM yyyy, HH:mm' },
     theme: 'dark'
   },
-  grid: { 
+  grid: {
     borderColor: 'rgba(55, 65, 81, 0.2)',
     row: {
       colors: ['transparent'],
@@ -210,12 +195,12 @@ const fetchInitialData = async () => {
       loadDefaultData()
       return
     }
-    
+
     const [assignmentRes, performanceRes] = await Promise.all([
       fetch('/api/assignments?agent_id=' + agentStore.currentAgent.id),
       fetch('/api/analytics/agent-performance?period=' + selectedPeriod.value)
     ])
-    
+
     const assignmentData = await assignmentRes.json()
     const performanceData = await performanceRes.json()
 
@@ -279,11 +264,11 @@ const toggleView = (view) => {
 const changePeriod = async (period) => {
   selectedPeriod.value = period
   loading.value = true
-  
+
   try {
     const res = await fetch('/api/analytics/agent-performance?period=' + period)
     const data = await res.json()
-    
+
     // Update chart data if available
     if (data.activityTimeline && data.activityTimeline.length > 0) {
       chartSeries.value[0].data = data.activityTimeline
@@ -291,11 +276,11 @@ const changePeriod = async (period) => {
       // Generate mock data for different time periods
       const mockData = []
       const now = new Date()
-      
+
       // Adjust time range based on selected period
       const points = period === 'day' ? 24 : period === 'week' ? 7 : 30
       const intervalUnit = period === 'day' ? 'hours' : 'days'
-      
+
       for (let i = 0; i < points; i++) {
         const timestamp = new Date(now)
         if (intervalUnit === 'hours') {
@@ -303,16 +288,16 @@ const changePeriod = async (period) => {
         } else {
           timestamp.setDate(now.getDate() - points + i)
         }
-        
+
         mockData.push({
           x: timestamp.getTime(),
           y: Math.floor(Math.random() * 30) + 5
         })
       }
-      
+
       chartSeries.value[0].data = mockData
     }
-    
+
     // Update relevant stats
     stats.value = {
       ...stats.value,
@@ -322,13 +307,13 @@ const changePeriod = async (period) => {
     }
   } catch (error) {
     console.error('Error fetching period data:', error)
-    
+
     // Generate mock data on error
     const mockData = []
     const now = new Date()
     const points = period === 'day' ? 24 : period === 'week' ? 7 : 30
     const intervalUnit = period === 'day' ? 'hours' : 'days'
-    
+
     for (let i = 0; i < points; i++) {
       const timestamp = new Date(now)
       if (intervalUnit === 'hours') {
@@ -336,13 +321,13 @@ const changePeriod = async (period) => {
       } else {
         timestamp.setDate(now.getDate() - points + i)
       }
-      
+
       mockData.push({
         x: timestamp.getTime(),
         y: Math.floor(Math.random() * 30) + 5
       })
     }
-    
+
     chartSeries.value[0].data = mockData
   } finally {
     loading.value = false
@@ -365,20 +350,20 @@ const loadDefaultData = () => {
     resolutionTrend: 0,
     detectionBreakdown: []
   }
-  
+
   detectionTypes.value = [
     { name: 'Object', count: 0, icon: getTypeIcon('Object'), color: getTypeColor('Object') },
     { name: 'Audio', count: 0, icon: getTypeIcon('Audio'), color: getTypeColor('Audio') },
     { name: 'Chat', count: 0, icon: getTypeIcon('Chat'), color: getTypeColor('Chat') },
     { name: 'Response', count: 0, icon: getTypeIcon('Response'), color: getTypeColor('Response') }
   ]
-  
+
   // Generate mock chart data
   const mockData = []
   const now = new Date()
   const points = selectedPeriod.value === 'day' ? 24 : selectedPeriod.value === 'week' ? 7 : 30
   const intervalUnit = selectedPeriod.value === 'day' ? 'hours' : 'days'
-  
+
   for (let i = 0; i < points; i++) {
     const timestamp = new Date(now)
     if (intervalUnit === 'hours') {
@@ -386,20 +371,20 @@ const loadDefaultData = () => {
     } else {
       timestamp.setDate(now.getDate() - points + i)
     }
-    
+
     mockData.push({
       x: timestamp.getTime(),
       y: 0 // Empty data for fallback
     })
   }
-  
+
   chartSeries.value[0].data = mockData
   loading.value = false
 }
 
 onMounted(() => {
   fetchInitialData()
-  
+
   // Set up socket listeners
   if (socket && typeof socket.on === 'function') {
     // Listen for stats updates
@@ -418,12 +403,12 @@ onMounted(() => {
         }
       }
     })
-    
+
     // Join agent-specific notification room - Add proper check for currentAgent
     if (agentStore.currentAgent && agentStore.currentAgent.id) {
       socket.emit('join', { room: `user_${agentStore.currentAgent.id}` })
       socket.emit('join', { room: 'role_agent' })
-      
+
       // Subscribe to stream notifications for all assigned streams
       socket.emit('get_unread_notifications')
     } else {
@@ -469,14 +454,14 @@ onMounted(() => {
   padding: 0.75rem;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   touch-action: manipulation;
 }
 
 .stat-card:active {
   transform: scale(0.98);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
 .stat-value {
@@ -498,19 +483,19 @@ onMounted(() => {
   font-size: 0.65rem;
   padding: 0.2rem 0.4rem;
   border-radius: 1rem;
-  background-color: rgba(0,0,0,0.1);
+  background-color: rgba(0, 0, 0, 0.1);
 }
 
 .trend-icon {
   margin-right: 0.15rem;
 }
 
-.positive { 
-  color: #10b981; 
+.positive {
+  color: #10b981;
 }
 
-.negative { 
-  color: #ef4444; 
+.negative {
+  color: #ef4444;
 }
 
 .chart-container {
@@ -614,8 +599,13 @@ onMounted(() => {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* Enhanced mobile responsiveness */
@@ -624,19 +614,19 @@ onMounted(() => {
     grid-template-columns: repeat(3, 1fr);
     gap: 0.5rem;
   }
-  
+
   .stat-value {
     font-size: 1.1rem;
   }
-  
+
   .stat-label {
     font-size: 0.7rem;
   }
-  
+
   .stat-trend {
     font-size: 0.6rem;
   }
-  
+
   .type-grid {
     grid-template-columns: 1fr;
   }

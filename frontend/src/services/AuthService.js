@@ -1,6 +1,6 @@
 /**
  * Authentication Service
- * 
+ *
  * Provides authentication functionality for both desktop and mobile interfaces
  * Features:
  * - Login/logout handling
@@ -9,25 +9,25 @@
  * - Session management
  * - Improved mobile device support
  */
-import axios from 'axios';
-import { useToast } from 'vue-toastification';
-import sessionService from './SessionService';
+import axios from "axios";
+import { useToast } from "vue-toastification";
+import sessionService from "./SessionService";
 
 // Define the API base URL - switched to HTTP for better compatibility
-const API_BASE_URL = '   https://monitor-backend.jetcamstudio.com:5000'; // Local development API URL (relative path)
+const API_BASE_URL = "   https://monitor-backend.jetcamstudio.com:5000"; // Local development API URL (relative path)
 
 // Create axios instance with the base URL
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000, // 10 seconds timeout
-  withCredentials: true // Important for cookies/sessions across domains
+  withCredentials: true, // Important for cookies/sessions across domains
 });
 
 class AuthService {
   constructor() {
     this.toast = useToast();
   }
-  
+
   /**
    * Log in a user
    * @param {string} username - Username
@@ -36,64 +36,69 @@ class AuthService {
    */
   async login(username, password) {
     try {
-      const response = await apiClient.post('/api/login', {
+      const response = await apiClient.post("/api/login", {
         username,
-        password
+        password,
       });
-      
+
       if (response.data && response.data.success) {
         // Validate user role from server response
-        const userRole = response.data.user.role || (username === 'admin' ? 'admin' : 'agent');
-        
+        const userRole =
+          response.data.user.role || (username === "admin" ? "admin" : "agent");
+
         // Create session with user data and token
-        sessionService.createSession({
-          ...response.data.user,
-          role: userRole // Ensure role is set
-        }, response.data.token || null);
-        
+        sessionService.createSession(
+          {
+            ...response.data.user,
+            role: userRole, // Ensure role is set
+          },
+          response.data.token || null
+        );
+
         // Set theme if not set
-        if (!localStorage.getItem('theme')) {
-          localStorage.setItem('theme', 'light');
+        if (!localStorage.getItem("theme")) {
+          localStorage.setItem("theme", "light");
         }
-        
+
         return {
           success: true,
           user: {
             ...response.data.user,
-            role: userRole
-          }
+            role: userRole,
+          },
         };
       } else {
         return {
           success: false,
-          message: response.data.message || 'Login failed.'
+          message: response.data.message || "Login failed.",
         };
       }
     } catch (error) {
-      console.error('Login error:', error);
-      
+      console.error("Login error:", error);
+
       // Provide more specific error messages for mobile users
-      let errorMessage = 'Login failed. Please try again.';
-      
+      let errorMessage = "Login failed. Please try again.";
+
       if (error.response) {
         if (error.response.status === 401) {
-          errorMessage = 'Invalid username or password.';
+          errorMessage = "Invalid username or password.";
         } else if (error.response.status === 429) {
-          errorMessage = 'Too many login attempts. Please try again later.';
+          errorMessage = "Too many login attempts. Please try again later.";
         } else if (error.response.data && error.response.data.message) {
           errorMessage = error.response.data.message;
         }
       } else if (error.request) {
-        errorMessage = 'Network error. Please check your connection and server availability.';
+        errorMessage =
+          "Network error. Please check your connection and server availability.";
       }
-      
+
       return {
         success: false,
-        message: errorMessage
+        message: errorMessage,
       };
     }
   }
-   
+
   /**
    * Log out the current user
    * @returns {Promise<boolean>} - Success status
@@ -101,19 +106,18 @@ class AuthService {
   async logout() {
     try {
       // First try to notify the server
-      await apiClient.post('/api/logout');
-      
+      await apiClient.post("/api/logout");
     } catch (error) {
-      console.error('Logout error on server:', error);
+      console.error("Logout error on server:", error);
       // Continue with local logout even if server request fails
     } finally {
       // Always destroy the local session
       sessionService.destroySession();
     }
-    
+
     return true;
   }
-  
+
   /**
    * Register a new user
    * @param {string} username - Username
@@ -123,57 +127,61 @@ class AuthService {
    */
   async register(username, email, password) {
     try {
-      const response = await apiClient.post('/api/register', {
+      const response = await apiClient.post("/api/register", {
         username,
         email,
-        password
+        password,
       });
-      
+
       if (response.data && response.data.success) {
         // Automatically log in after successful registration if token provided
         if (response.data.token) {
           sessionService.createSession(response.data.user, response.data.token);
         }
-        
+
         return {
           success: true,
-          user: response.data.user
+          user: response.data.user,
         };
       } else {
         return {
           success: false,
-          message: response.data.message || 'Registration failed.'
+          message: response.data.message || "Registration failed.",
         };
       }
     } catch (error) {
-      console.error('Registration error:', error);
-      
+      console.error("Registration error:", error);
+
       // Provide more specific error messages
-      let errorMessage = 'Registration failed. Please try again.';
-      
+      let errorMessage = "Registration failed. Please try again.";
+
       if (error.response) {
         if (error.response.status === 409) {
-          if (error.response.data && error.response.data.field === 'username') {
-            errorMessage = 'Username already exists. Please choose another.';
-          } else if (error.response.data && error.response.data.field === 'email') {
-            errorMessage = 'Email already registered. Please use another email.';
+          if (error.response.data && error.response.data.field === "username") {
+            errorMessage = "Username already exists. Please choose another.";
+          } else if (
+            error.response.data &&
+            error.response.data.field === "email"
+          ) {
+            errorMessage =
+              "Email already registered. Please use another email.";
           } else {
-            errorMessage = 'Account already exists.';
+            errorMessage = "Account already exists.";
           }
         } else if (error.response.data && error.response.data.message) {
           errorMessage = error.response.data.message;
         }
       } else if (error.request) {
-        errorMessage = 'Network error. Please check your connection.';
+        errorMessage = "Network error. Please check your connection.";
       }
-      
+
       return {
         success: false,
-        message: errorMessage
+        message: errorMessage,
       };
     }
   }
-  
+
   /**
    * Send password reset request
    * @param {string} email - Email address
@@ -181,39 +189,43 @@ class AuthService {
    */
   async forgotPassword(email) {
     try {
-      const response = await apiClient.post('/api/forgot-password', {
-        email
+      const response = await apiClient.post("/api/forgot-password", {
+        email,
       });
-      
+
       if (response.data && response.data.success) {
         return {
           success: true,
-          message: response.data.message || 'Password reset email sent.'
+          message: response.data.message || "Password reset email sent.",
         };
       } else {
         return {
           success: false,
-          message: response.data.message || 'Failed to send reset email.'
+          message: response.data.message || "Failed to send reset email.",
         };
       }
     } catch (error) {
-      console.error('Password reset request error:', error);
-      
-      let errorMessage = 'Failed to send reset email. Please try again.';
-      
-      if (error.response && error.response.data && error.response.data.message) {
+      console.error("Password reset request error:", error);
+
+      let errorMessage = "Failed to send reset email. Please try again.";
+
+      if (
+        error.response &&
+        error.response.data &&
+        error.response.data.message
+      ) {
         errorMessage = error.response.data.message;
       } else if (error.request) {
-        errorMessage = 'Network error. Please check your connection.';
+        errorMessage = "Network error. Please check your connection.";
       }
-      
+
       return {
         success: false,
-        message: errorMessage
+        message: errorMessage,
       };
     }
   }
-  
+
   /**
    * Reset password with token
    * @param {string} token - Reset token
@@ -222,44 +234,45 @@ class AuthService {
    */
   async resetPassword(token, password) {
     try {
-      const response = await apiClient.post('/api/reset-password', {
+      const response = await apiClient.post("/api/reset-password", {
         token,
-        password
+        password,
       });
-      
+
       if (response.data && response.data.success) {
         return {
           success: true,
-          message: response.data.message || 'Password reset successful.'
+          message: response.data.message || "Password reset successful.",
         };
       } else {
         return {
           success: false,
-          message: response.data.message || 'Failed to reset password.'
+          message: response.data.message || "Failed to reset password.",
         };
       }
     } catch (error) {
-      console.error('Password reset error:', error);
-      
-      let errorMessage = 'Failed to reset password. Please try again.';
-      
+      console.error("Password reset error:", error);
+
+      let errorMessage = "Failed to reset password. Please try again.";
+
       if (error.response) {
         if (error.response.status === 400) {
-          errorMessage = 'Invalid or expired token. Please request a new reset link.';
+          errorMessage =
+            "Invalid or expired token. Please request a new reset link.";
         } else if (error.response.data && error.response.data.message) {
           errorMessage = error.response.data.message;
         }
       } else if (error.request) {
-        errorMessage = 'Network error. Please check your connection.';
+        errorMessage = "Network error. Please check your connection.";
       }
-      
+
       return {
         success: false,
-        message: errorMessage
+        message: errorMessage,
       };
     }
   }
-  
+
   /**
    * Verify reset token
    * @param {string} token - Reset token
@@ -267,39 +280,44 @@ class AuthService {
    */
   async verifyResetToken(token) {
     try {
-      const response = await apiClient.post('/api/verify-reset-token', {
-        token
+      const response = await apiClient.post("/api/verify-reset-token", {
+        token,
       });
-      
+
       if (response.data && response.data.success) {
         return {
           success: true,
-          user: response.data.user
+          user: response.data.user,
         };
       } else {
         return {
           success: false,
-          message: response.data.message || 'Invalid or expired token.'
+          message: response.data.message || "Invalid or expired token.",
         };
       }
     } catch (error) {
-      console.error('Token verification error:', error);
-      
-      let errorMessage = 'Token verification failed.';
-      
+      console.error("Token verification error:", error);
+
+      let errorMessage = "Token verification failed.";
+
       if (error.response && error.response.status === 400) {
-        errorMessage = 'Invalid or expired token. Please request a new reset link.';
-      } else if (error.response && error.response.data && error.response.data.message) {
+        errorMessage =
+          "Invalid or expired token. Please request a new reset link.";
+      } else if (
+        error.response &&
+        error.response.data &&
+        error.response.data.message
+      ) {
         errorMessage = error.response.data.message;
       }
-      
+
       return {
         success: false,
-        message: errorMessage
+        message: errorMessage,
       };
     }
   }
-  
+
   /**
    * Change password for authenticated user
    * @param {string} currentPassword - Current password
@@ -308,44 +326,44 @@ class AuthService {
    */
   async changePassword(currentPassword, newPassword) {
     try {
-      const response = await apiClient.post('/api/change-password', {
+      const response = await apiClient.post("/api/change-password", {
         current_password: currentPassword,
-        new_password: newPassword
+        new_password: newPassword,
       });
-      
+
       if (response.data && response.data.success) {
         return {
           success: true,
-          message: response.data.message || 'Password changed successfully.'
+          message: response.data.message || "Password changed successfully.",
         };
       } else {
         return {
           success: false,
-          message: response.data.message || 'Failed to change password.'
+          message: response.data.message || "Failed to change password.",
         };
       }
     } catch (error) {
-      console.error('Password change error:', error);
-      
-      let errorMessage = 'Failed to change password. Please try again.';
-      
+      console.error("Password change error:", error);
+
+      let errorMessage = "Failed to change password. Please try again.";
+
       if (error.response) {
         if (error.response.status === 401) {
-          errorMessage = 'Current password is incorrect.';
+          errorMessage = "Current password is incorrect.";
         } else if (error.response.data && error.response.data.message) {
           errorMessage = error.response.data.message;
         }
       } else if (error.request) {
-        errorMessage = 'Network error. Please check your connection.';
+        errorMessage = "Network error. Please check your connection.";
       }
-      
+
       return {
         success: false,
-        message: errorMessage
+        message: errorMessage,
       };
     }
   }
-  
+
   /**
    * Check if a username is available
    * @param {string} username - Username to check
@@ -353,24 +371,24 @@ class AuthService {
    */
   async checkUsername(username) {
     try {
-      const response = await apiClient.post('/api/check-username', {
-        username
+      const response = await apiClient.post("/api/check-username", {
+        username,
       });
-      
+
       return {
         success: true,
-        available: response.data.available
+        available: response.data.available,
       };
     } catch (error) {
-      console.error('Username check error:', error);
+      console.error("Username check error:", error);
       return {
         success: false,
         available: false,
-        message: 'Failed to check username availability.'
+        message: "Failed to check username availability.",
       };
     }
   }
-  
+
   /**
    * Check if an email is available
    * @param {string} email - Email to check
@@ -378,24 +396,24 @@ class AuthService {
    */
   async checkEmail(email) {
     try {
-      const response = await apiClient.post('/check-email', {
-        email
+      const response = await apiClient.post("/check-email", {
+        email,
       });
-      
+
       return {
         success: true,
-        available: response.data.available
+        available: response.data.available,
       };
     } catch (error) {
-      console.error('Email check error:', error);
+      console.error("Email check error:", error);
       return {
         success: false,
         available: false,
-        message: 'Failed to check email availability.'
+        message: "Failed to check email availability.",
       };
     }
   }
-  
+
   /**
    * Check if user is authenticated
    * @returns {Promise<Object>} - Authentication status
@@ -404,7 +422,7 @@ class AuthService {
     // Delegate to the session service
     return sessionService.checkSession();
   }
-  
+
   /**
    * Update user profile
    * @param {Object} profileData - Profile data to update
@@ -412,7 +430,7 @@ class AuthService {
    */
   async updateProfile(profileData) {
     try {
-      const response = await apiClient.post('/api/update-profile', profileData);
+      const response = await apiClient.post("/api/update-profile", profileData);
 
       if (response.data && response.data.success) {
         // Update localStorage with updated user info
@@ -423,54 +441,58 @@ class AuthService {
         return {
           success: true,
           user: response.data.user,
-          message: response.data.message || 'Profile updated successfully.'
+          message: response.data.message || "Profile updated successfully.",
         };
       } else {
         return {
           success: false,
-          message: response.data.message || 'Failed to update profile.'
+          message: response.data.message || "Failed to update profile.",
         };
       }
     } catch (error) {
-      console.error('Profile update error:', error);
+      console.error("Profile update error:", error);
 
-      let errorMessage = 'Failed to update profile. Please try again.';
+      let errorMessage = "Failed to update profile. Please try again.";
 
-      if (error.response && error.response.data && error.response.data.message) {
+      if (
+        error.response &&
+        error.response.data &&
+        error.response.data.message
+      ) {
         errorMessage = error.response.data.message;
       }
 
       return {
         success: false,
-        message: errorMessage
+        message: errorMessage,
       };
     }
   }
-  
+
   /**
    * Get current authentication status from localStorage
    * @returns {Object} Current auth status
    */
   getCurrentAuth() {
-    const userId = localStorage.getItem('userId');
-    const username = localStorage.getItem('username');
-    const userRole = localStorage.getItem('userRole');
-    const timestamp = localStorage.getItem('userDataTimestamp');
-    
+    const userId = localStorage.getItem("userId");
+    const username = localStorage.getItem("username");
+    const userRole = localStorage.getItem("userRole");
+    const timestamp = localStorage.getItem("userDataTimestamp");
+
     if (userId && username) {
       return {
         authenticated: true,
         user: {
           id: userId,
           username,
-          role: userRole || 'agent'
+          role: userRole || "agent",
         },
-        timestamp: timestamp ? parseInt(timestamp) : null
+        timestamp: timestamp ? parseInt(timestamp) : null,
       };
     }
-    
+
     return {
-      authenticated: false
+      authenticated: false,
     };
   }
 }

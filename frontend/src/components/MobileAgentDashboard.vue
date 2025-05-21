@@ -3,73 +3,41 @@
     <div class="page-header">
       <h1>Agent Dashboard <span class="mobile-badge">Mobile</span></h1>
     </div>
-    
+
     <div class="dashboard-tabs">
-      <div 
-        v-for="(tab, index) in tabs" 
-        :key="index" 
-        class="tab-item" 
-        :class="{ active: activeTab === index }"
-        @click="activeTab = index"
-      >
+      <div v-for="(tab, index) in tabs" :key="index" class="tab-item" :class="{ active: activeTab === index }"
+        @click="activeTab = index">
         <div class="tab-icon-container">
           <font-awesome-icon :icon="tab.icon" class="tab-icon" />
-          <span v-if="tab.icon === 'bell' && unreadCount > 0" class="notification-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+          <span v-if="tab.icon === 'bell' && unreadCount > 0" class="notification-badge">{{ unreadCount > 99 ? '99+' :
+            unreadCount }}</span>
         </div>
         <span class="tab-text">{{ tab.name }}</span>
       </div>
     </div>
-    
+
     <div class="tab-content">
-      <MobileAgentStreams 
-        v-if="activeTab === 0"
-        :assignments="assignments"
-        :is-loading="isLoadingAssignments"
-        @refresh="loadAssignments"
-        @open-stream="openStreamDetails"
-      />
+      <MobileAgentStreams v-if="activeTab === 0" :assignments="assignments" :is-loading="isLoadingAssignments"
+        @refresh="loadAssignments" @open-stream="openStreamDetails" />
 
-      <MobileAgentAnalytics 
-        v-else-if="activeTab === 1"
-        :stats="stats"
-      />
+      <MobileAgentAnalytics v-else-if="activeTab === 1" :stats="stats" />
 
-      <MobileAgentMessages
-        v-else-if="activeTab === 2"
-        :conversations="conversations"
-        :selected-conversation="selectedConversation"
-        :messages="activeConversationMessages"
-        :new-message="newMessage"
-        :is-loading="isLoadingMessages"
-        :is-sending="isSendingMessage"
-        @load-conversations="loadConversations"
-        @open-conversation="openConversation"
-        @close-conversation="closeConversation"
-        @send-message="sendMessage"
-      />
+      <MobileAgentMessages v-else-if="activeTab === 2" :conversations="conversations"
+        :selected-conversation="selectedConversation" :messages="activeConversationMessages" :new-message="newMessage"
+        :is-loading="isLoadingMessages" :is-sending="isSendingMessage" @load-conversations="loadConversations"
+        @open-conversation="openConversation" @close-conversation="closeConversation" @send-message="sendMessage" />
 
-      <MobileAgentNotifications
-        v-else-if="activeTab === 3"
-        :notifications="notifications.items"
-        :unread-count="unreadCount"
-        @mark-read="markAsRead"
-        @mark-all-read="markAllAsRead"
-      />
+      <MobileAgentNotifications v-else-if="activeTab === 3" :notifications="notifications.items"
+        :unread-count="unreadCount" @mark-read="markAsRead" @mark-all-read="markAllAsRead" />
 
-      <MobileAgentSettings
-        v-else-if="activeTab === 4"
-        :settings="settings"
-        :is-dark-theme="isDarkTheme"
-        @toggle-setting="toggleSetting"
-        @set-theme="setTheme"
-        @save-settings="saveSettings"
-      />
+      <MobileAgentSettings v-else-if="activeTab === 4" :settings="settings" :is-dark-theme="isDarkTheme"
+        @toggle-setting="toggleSetting" @set-theme="setTheme" @save-settings="saveSettings" />
     </div>
   </div>
 </template>
 
 <script>
-  /* eslint-disable */
+/* eslint-disable */
 import { ref, inject, onMounted, watch, nextTick } from 'vue'
 import { useToast } from 'vue-toastification'
 import AuthService from '../services/AuthService'
@@ -152,7 +120,7 @@ export default {
     }
 
     // Notifications
-    const { 
+    const {
       notifications,
       unreadCount,
       markAsRead,
@@ -201,7 +169,7 @@ export default {
 
     const sendMessage = async (content) => {
       if (!content.trim() || !selectedConversation.value) return
-      
+
       isSendingMessage.value = true
       try {
         // Implementation would go here
@@ -221,13 +189,13 @@ export default {
         const sessionResponse = await axios.get('/api/session')
         currentAgentId.value = sessionResponse.data.user.id
         const streamsResponse = await axios.get('/api/streams')
-        
+
         assignments.value = Object.values(streamsResponse.data)
           .filter(stream => stream.assignments?.some(a => a.agent_id === currentAgentId.value))
           .map(stream => ({
             ...stream,
-            video_url: stream.platform === 'Chaturbate' 
-              ? stream.chaturbate_m3u8_url 
+            video_url: stream.platform === 'Chaturbate'
+              ? stream.chaturbate_m3u8_url
               : stream.stripchat_m3u8_url
           }))
 
@@ -243,7 +211,7 @@ export default {
       stats.value = {
         totalAssignments: assignments.value.length,
         activeStreams: assignments.value.filter(a => a.stream_status === 'live').length,
-        completedToday: assignments.value.filter(a => 
+        completedToday: assignments.value.filter(a =>
           a.completed && new Date(a.completed_at).toDateString() === new Date().toDateString()
         ).length
       }
@@ -282,7 +250,7 @@ export default {
     onMounted(() => {
       loadAssignments()
       if (currentUserId) initializeSocketConnection()
-      
+
       // Load settings from localStorage if available
       const savedSettings = localStorage.getItem('agentSettings')
       if (savedSettings) {
@@ -321,7 +289,7 @@ export default {
       closeConversation,
       sendMessage,
       scrollToBottom,
-      formatNumber: num => num >= 1000 ? `${(num/1000).toFixed(1)}K` : num,
+      formatNumber: num => num >= 1000 ? `${(num / 1000).toFixed(1)}K` : num,
       formatStreamTime: ts => ts ? formatDistance(new Date(ts), new Date(), { addSuffix: true }) : 'Unknown'
     }
   }
@@ -593,7 +561,9 @@ export default {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .empty-state {

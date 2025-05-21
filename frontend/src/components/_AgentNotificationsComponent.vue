@@ -3,18 +3,13 @@
     <!-- Top navigation bar with filters and actions -->
     <div class="top-bar">
       <div class="filter-tabs">
-        <button 
-          v-for="tab in ['All', 'Unread', 'Detections']" 
-          :key="tab"
-          class="tab-btn"
-          :class="{ 'active': mainFilter === tab }"
-          @click="handleMainFilterChange(tab)"
-        >
+        <button v-for="tab in ['All', 'Unread', 'Detections']" :key="tab" class="tab-btn"
+          :class="{ 'active': mainFilter === tab }" @click="handleMainFilterChange(tab)">
           {{ tab }}
           <span v-if="tab === 'Unread'" class="badge">{{ unreadCount }}</span>
         </button>
       </div>
-      
+
       <div class="action-buttons">
         <button class="icon-btn refresh-btn" @click="fetchNotifications" title="Refresh">
           <span class="icon">↻</span>
@@ -26,19 +21,13 @@
           <span class="icon">⋮</span>
         </button>
       </div>
-      
+
       <!-- Dropdown menu -->
       <div v-if="isMenuOpen" class="dropdown-menu">
-        <button 
-          @click="markAllAsRead"
-          :disabled="filteredNotifications.filter(n => !n.read).length === 0"
-        >
+        <button @click="markAllAsRead" :disabled="filteredNotifications.filter(n => !n.read).length === 0">
           Mark All as Read
         </button>
-        <button 
-          @click="isDeleteModalOpen = true"
-          :disabled="filteredNotifications.length === 0"
-        >
+        <button @click="isDeleteModalOpen = true" :disabled="filteredNotifications.length === 0">
           Delete All
         </button>
         <button @click="toggleSound">
@@ -46,20 +35,15 @@
         </button>
       </div>
     </div>
-    
+
     <!-- Sub-filters for detection types -->
     <div v-if="mainFilter === 'Detections'" class="sub-filters">
-      <button 
-        v-for="subTab in ['Visual', 'Audio', 'Chat']" 
-        :key="subTab"
-        class="sub-filter-btn"
-        :class="{ active: detectionSubFilter === subTab }"
-        @click="detectionSubFilter = subTab"
-      >
+      <button v-for="subTab in ['Visual', 'Audio', 'Chat']" :key="subTab" class="sub-filter-btn"
+        :class="{ active: detectionSubFilter === subTab }" @click="detectionSubFilter = subTab">
         {{ subTab }}
       </button>
     </div>
-    
+
     <!-- Main content area -->
     <div class="content-area">
       <!-- Left panel: Notifications list -->
@@ -67,7 +51,7 @@
         <div class="panel-header">
           <h2>Notifications <span class="count">({{ filteredNotifications.length }})</span></h2>
         </div>
-        
+
         <!-- Loading, error, or empty states -->
         <div v-if="loading" class="state-container">
           <div class="loading-spinner"></div>
@@ -81,66 +65,47 @@
           <div class="empty-icon">🔔</div>
           <p>No notifications to display</p>
         </div>
-        
+
         <!-- Notifications list -->
         <div v-else class="notification-list">
           <TransitionGroup name="list" tag="div">
-            <div 
-              v-for="notification in filteredNotifications" 
-              :key="notification.id"
-              class="notification-card"
-              :class="{ 
-                'read': notification.read, 
-                'unread': !notification.read, 
-                'selected': selectedNotification && selectedNotification.id === notification.id,
-                'new-notification': newNotificationIds.includes(notification.id)
-              }"
-              @click="handleNotificationClick(notification)"
-            >
-              <div 
-                class="notification-indicator"
-                :style="{ backgroundColor: getNotificationColor(notification) }"
-              ></div>
-              
+            <div v-for="notification in filteredNotifications" :key="notification.id" class="notification-card" :class="{
+              'read': notification.read,
+              'unread': !notification.read,
+              'selected': selectedNotification && selectedNotification.id === notification.id,
+              'new-notification': newNotificationIds.includes(notification.id)
+            }" @click="handleNotificationClick(notification)">
+              <div class="notification-indicator" :style="{ backgroundColor: getNotificationColor(notification) }">
+              </div>
+
               <div class="notification-content">
                 <div class="notification-header">
                   <span class="notification-type">{{ getNotificationType(notification) }}</span>
                   <span class="notification-time">{{ formatTimestamp(notification.timestamp) }}</span>
                 </div>
-                
+
                 <div class="notification-message">
                   {{ getNotificationMessage(notification) }}
                 </div>
-                
+
                 <div class="notification-meta">
                   <span class="notification-source">
-                    {{ notification.details?.platform || 'System' }} | 
+                    {{ notification.details?.platform || 'System' }} |
                     {{ notification.details?.streamer_name || 'Unknown' }}
                   </span>
-                  <span 
-                    v-if="notification.event_type === 'object_detection' && 
-                         notification.details?.detections?.length" 
-                    class="notification-confidence"
-                  >
+                  <span v-if="notification.event_type === 'object_detection' &&
+                    notification.details?.detections?.length" class="notification-confidence">
                     {{ formatConfidence(notification.details.detections[0].confidence) }}
                   </span>
                 </div>
               </div>
-              
+
               <div class="notification-actions">
-                <button 
-                  v-if="!notification.read" 
-                  class="action-btn read-btn" 
-                  @click.stop="markAsRead(notification.id)"
-                  title="Mark as Read"
-                >
+                <button v-if="!notification.read" class="action-btn read-btn" @click.stop="markAsRead(notification.id)"
+                  title="Mark as Read">
                   ✓
                 </button>
-                <button 
-                  class="action-btn delete-btn" 
-                  @click.stop="deleteNotification(notification.id)"
-                  title="Delete"
-                >
+                <button class="action-btn delete-btn" @click.stop="deleteNotification(notification.id)" title="Delete">
                   ×
                 </button>
               </div>
@@ -148,45 +113,35 @@
           </TransitionGroup>
         </div>
       </div>
-      
+
       <!-- Right panel: Notification details -->
       <div class="details-panel" v-if="selectedNotification || isMobile">
         <div v-if="!selectedNotification && isMobile" class="empty-detail">
           <div class="empty-icon">📋</div>
           <p>Select a notification to view details</p>
         </div>
-        
+
         <div v-else-if="selectedNotification" class="detail-content">
           <div class="detail-header">
             <button v-if="isMobile" class="back-btn" @click="selectedNotification = null">
               &larr; Back
             </button>
             <h2>{{ getNotificationDetailTitle() }}</h2>
-            
+
             <div class="detail-actions">
-              <button 
-                v-if="!selectedNotification.read" 
-                class="action-btn" 
-                @click="markAsRead(selectedNotification.id)"
-              >
+              <button v-if="!selectedNotification.read" class="action-btn" @click="markAsRead(selectedNotification.id)">
                 Mark as Read
               </button>
-              <button 
-                class="action-btn delete-btn" 
-                @click="isDeleteModalOpen = true"
-              >
+              <button class="action-btn delete-btn" @click="isDeleteModalOpen = true">
                 Delete
               </button>
-              <button 
-                v-if="assignedToMe"
-                class="action-btn view-stream-btn"
-                @click="viewStreamDetails(selectedNotification)"
-              >
+              <button v-if="assignedToMe" class="action-btn view-stream-btn"
+                @click="viewStreamDetails(selectedNotification)">
                 View Stream
               </button>
             </div>
           </div>
-          
+
           <!-- Notification details content -->
           <div class="detail-body">
             <div class="detail-field">
@@ -195,12 +150,7 @@
             </div>
             <div class="detail-field">
               <label>Stream URL:</label>
-              <a 
-                :href="selectedNotification.room_url" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                class="url-link"
-              >
+              <a :href="selectedNotification.room_url" target="_blank" rel="noopener noreferrer" class="url-link">
                 {{ truncateUrl(selectedNotification.room_url) }}
               </a>
             </div>
@@ -223,98 +173,79 @@
                 <span v-if="assignedToMe" class="assigned-badge">You</span>
               </span>
             </div>
-            
+
             <!-- Detection-specific details -->
             <div v-if="selectedNotification.event_type === 'object_detection'" class="type-details detection-details">
               <h3>Visual Detection</h3>
-              
+
               <!-- Detection images -->
               <div class="detection-images">
                 <div v-if="selectedNotification.details?.annotated_image" class="image-container">
                   <h4>Annotated Image</h4>
-                  <img 
-                    :src="formatImage(selectedNotification.details.annotated_image)"
-                    alt="Annotated Detection"
-                    class="detection-image"
-                    @click="openImageModal(selectedNotification.details.annotated_image)"
-                  />
+                  <img :src="formatImage(selectedNotification.details.annotated_image)" alt="Annotated Detection"
+                    class="detection-image" @click="openImageModal(selectedNotification.details.annotated_image)" />
                 </div>
-                
+
                 <div v-if="selectedNotification.details?.captured_image" class="image-container">
                   <h4>Captured Image</h4>
-                  <img 
-                    :src="formatImage(selectedNotification.details.captured_image)"
-                    alt="Captured Image"
-                    class="detection-image"
-                    @click="openImageModal(selectedNotification.details.captured_image)"
-                  />
+                  <img :src="formatImage(selectedNotification.details.captured_image)" alt="Captured Image"
+                    class="detection-image" @click="openImageModal(selectedNotification.details.captured_image)" />
                 </div>
               </div>
-              
+
               <!-- Detected objects -->
               <div v-if="selectedNotification.details?.detections?.length" class="detected-objects">
                 <h4>Detected Objects</h4>
                 <div class="detections-grid">
-                  <div 
-                    v-for="(detection, index) in selectedNotification.details.detections" 
-                    :key="index"
-                    class="detection-item"
-                    :class="{ 'high-confidence': detection.confidence > 0.8 }"
-                  >
+                  <div v-for="(detection, index) in selectedNotification.details.detections" :key="index"
+                    class="detection-item" :class="{ 'high-confidence': detection.confidence > 0.8 }">
                     <span class="detection-class">{{ detection.class }}</span>
-                    <span 
-                      class="confidence-badge"
-                      :style="{ backgroundColor: getConfidenceColor(detection.confidence) }"
-                    >
+                    <span class="confidence-badge"
+                      :style="{ backgroundColor: getConfidenceColor(detection.confidence) }">
                       {{ formatConfidence(detection.confidence) }}
                     </span>
                   </div>
                 </div>
               </div>
             </div>
-            
+
             <div v-if="selectedNotification.event_type === 'audio_detection'" class="type-details audio-details">
               <h3>Audio Detection</h3>
-              
+
               <div v-if="selectedNotification.details?.keyword" class="keyword-section">
                 <h4>Flagged Keyword</h4>
                 <div class="keyword-tag">{{ selectedNotification.details.keyword }}</div>
               </div>
-              
+
               <div v-if="selectedNotification.details?.transcript" class="transcript-section">
                 <h4>Transcript</h4>
                 <div class="transcript-text">
                   {{ selectedNotification.details.transcript }}
                 </div>
               </div>
-              
+
               <div v-if="selectedNotification.details?.sentiment_score" class="sentiment-section">
                 <h4>Sentiment Analysis</h4>
-                <div 
-                  class="sentiment-indicator"
-                  :class="getSentimentClass(selectedNotification.details.sentiment_score)"
-                >
+                <div class="sentiment-indicator"
+                  :class="getSentimentClass(selectedNotification.details.sentiment_score)">
                   {{ formatSentiment(selectedNotification.details.sentiment_score) }}
                 </div>
               </div>
             </div>
-            
+
             <div v-if="selectedNotification.event_type === 'chat_detection'" class="type-details chat-details">
               <h3>Chat Detection</h3>
-              
+
               <div v-if="selectedNotification.details?.keywords?.length" class="keyword-section">
                 <h4>Flagged Keywords</h4>
                 <div class="keywords-list">
-                  <span 
-                    v-for="(keyword, index) in selectedNotification.details.keywords" 
-                    :key="index"
-                    class="keyword-tag"
-                  >
+                  <span v-for="(keyword, index) in selectedNotification.details.keywords" :key="index"
+                    class="keyword-tag">
                     {{ keyword }}
                   </span>
                 </div>
               </div>
-              
+
               <div class="message-section">
                 <h4>Chat Message</h4>
                 <div class="chat-message">
@@ -327,16 +258,13 @@
                 </div>
               </div>
             </div>
-            
+
             <div v-if="selectedNotification.event_type === 'stream_created'" class="type-details stream-details">
               <h3>Stream Created</h3>
-              
+
               <div class="stream-info">
                 <p>A new stream has been created and assigned to you.</p>
-                <button 
-                  class="action-btn view-stream-btn"
-                  @click="viewStreamDetails(selectedNotification)"
-                >
+                <button class="action-btn view-stream-btn" @click="viewStreamDetails(selectedNotification)">
                   View Stream Details
                 </button>
               </div>
@@ -345,7 +273,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- Delete confirmation modal -->
     <Teleport to="body">
       <div v-if="isDeleteModalOpen" class="modal-overlay" @click="isDeleteModalOpen = false">
@@ -355,22 +283,21 @@
             <button class="close-btn" @click="isDeleteModalOpen = false">&times;</button>
           </div>
           <div class="modal-body">
-            <p>Are you sure you want to delete {{ selectedNotification ? 'this notification' : 'all notifications' }}?</p>
+            <p>Are you sure you want to delete {{ selectedNotification ? 'this notification' : 'all notifications' }}?
+            </p>
             <p class="warning">This action cannot be undone.</p>
           </div>
           <div class="modal-footer">
             <button class="cancel-btn" @click="isDeleteModalOpen = false">Cancel</button>
-            <button 
-              class="confirm-btn" 
-              @click="selectedNotification ? deleteNotification(selectedNotification.id) : deleteAllNotifications()"
-            >
+            <button class="confirm-btn"
+              @click="selectedNotification ? deleteNotification(selectedNotification.id) : deleteAllNotifications()">
               Delete
             </button>
           </div>
         </div>
       </div>
     </Teleport>
-    
+
     <!-- Image viewer modal -->
     <Teleport to="body">
       <div v-if="imageModalSrc" class="modal-overlay" @click="imageModalSrc = null">
@@ -380,16 +307,11 @@
         </div>
       </div>
     </Teleport>
-    
+
     <!-- Toast notifications -->
     <div class="toast-container">
       <TransitionGroup name="toast">
-        <div 
-          v-for="toast in toasts" 
-          :key="toast.id"
-          class="toast"
-          :class="toast.type"
-        >
+        <div v-for="toast in toasts" :key="toast.id" class="toast" :class="toast.type">
           {{ toast.message }}
         </div>
       </TransitionGroup>
@@ -445,7 +367,7 @@ const unreadCount = computed(() => {
 
 const assignedToMe = computed(() => {
   if (!selectedNotification.value || !props.user) return false;
-  
+
   const assignedAgent = selectedNotification.value.assigned_agent;
   return assignedAgent === props.user.username;
 });
@@ -454,7 +376,7 @@ const assignedToMe = computed(() => {
 const fetchNotifications = async () => {
   loading.value = true;
   error.value = null;
-  
+
   try {
     const response = await axios.get('/api/notifications');
     notifications.value = response.data;
@@ -469,7 +391,7 @@ const fetchNotifications = async () => {
 
 const applyFilters = () => {
   let filtered = [...notifications.value];
-  
+
   // Apply main filter
   if (mainFilter.value === 'Unread') {
     filtered = filtered.filter(n => !n.read);
@@ -486,14 +408,14 @@ const applyFilters = () => {
       return false;
     });
   }
-  
+
   filteredNotifications.value = filtered;
 };
 
 const handleMainFilterChange = (filter) => {
   mainFilter.value = filter;
   applyFilters();
-  
+
   // Deselect notification when changing filters
   if (selectedNotification.value) {
     selectedNotification.value = null;
@@ -545,7 +467,7 @@ const getNotificationMessage = (notification) => {
 
 const getNotificationDetailTitle = () => {
   if (!selectedNotification.value) return '';
-  
+
   if (selectedNotification.value.event_type === 'object_detection') {
     return 'Visual Detection';
   } else if (selectedNotification.value.event_type === 'audio_detection') {
@@ -560,10 +482,10 @@ const getNotificationDetailTitle = () => {
 
 const formatTimestamp = (timestamp, detailed = false) => {
   if (!timestamp) return 'Unknown';
-  
+
   try {
     const date = parseISO(timestamp);
-    
+
     if (detailed) {
       return new Intl.DateTimeFormat('en-US', {
         year: 'numeric',
@@ -574,7 +496,7 @@ const formatTimestamp = (timestamp, detailed = false) => {
         second: '2-digit'
       }).format(date);
     }
-    
+
     return formatDistanceToNow(date, { addSuffix: true });
   } catch (err) {
     console.error('Error formatting timestamp:', err);
@@ -584,12 +506,12 @@ const formatTimestamp = (timestamp, detailed = false) => {
 
 const formatImage = (image) => {
   if (!image) return '';
-  
+
   // Check if it's already a valid URL
   if (image.startsWith('http') || image.startsWith('data:')) {
     return image;
   }
-  
+
   // Otherwise assume it's a base64 string
   return `data:image/jpeg;base64,${image}`;
 };
@@ -607,7 +529,7 @@ const getConfidenceColor = (confidence) => {
 
 const formatSentiment = (score) => {
   if (typeof score !== 'number') return 'Unknown';
-  
+
   if (score < -0.5) return 'Very Negative';
   if (score < -0.2) return 'Negative';
   if (score < 0.2) return 'Neutral';
@@ -617,7 +539,7 @@ const formatSentiment = (score) => {
 
 const getSentimentClass = (score) => {
   if (typeof score !== 'number') return 'neutral';
-  
+
   if (score < -0.5) return 'very-negative';
   if (score < -0.2) return 'negative';
   if (score < 0.2) return 'neutral';
@@ -632,7 +554,7 @@ const truncateUrl = (url) => {
 
 const handleNotificationClick = (notification) => {
   selectedNotification.value = notification;
-  
+
   // On mobile, scroll to details
   if (isMobile.value) {
     nextTick(() => {
@@ -642,7 +564,7 @@ const handleNotificationClick = (notification) => {
       }
     });
   }
-  
+
   // Animate the selection
   setTimeout(() => {
     const selectedCard = document.querySelector('.notification-card.selected');
@@ -660,14 +582,14 @@ const handleNotificationClick = (notification) => {
 const markAsRead = async (id) => {
   try {
     await axios.put(`/api/notifications/${id}/read`);
-    
+
     // Update local state
     const notification = notifications.value.find(n => n.id === id);
     if (notification) {
       notification.read = true;
       applyFilters();
     }
-    
+
     showToast('Notification marked as read', 'success');
   } catch (err) {
     console.error('Error marking notification as read:', err);
@@ -678,13 +600,13 @@ const markAsRead = async (id) => {
 const markAllAsRead = async () => {
   try {
     await axios.put('/api/notifications/read-all');
-    
+
     // Update local state
     notifications.value.forEach(notification => {
       notification.read = true;
     });
     applyFilters();
-    
+
     showToast('All notifications marked as read', 'success');
     isMenuOpen.value = false;
   } catch (err) {
@@ -696,16 +618,16 @@ const markAllAsRead = async () => {
 const deleteNotification = async (id) => {
   try {
     await axios.delete(`/api/notifications/${id}`);
-    
+
     // Update local state
     notifications.value = notifications.value.filter(n => n.id !== id);
     applyFilters();
-    
+
     // Reset selected notification if it's the one being deleted
     if (selectedNotification.value && selectedNotification.value.id === id) {
       selectedNotification.value = null;
     }
-    
+
     isDeleteModalOpen.value = false;
     showToast('Notification deleted', 'success');
   } catch (err) {
@@ -718,12 +640,12 @@ const deleteNotification = async (id) => {
 const deleteAllNotifications = async () => {
   try {
     await axios.delete('/api/notifications');
-    
+
     // Update local state
     notifications.value = [];
     filteredNotifications.value = [];
     selectedNotification.value = null;
-    
+
     isDeleteModalOpen.value = false;
     isMenuOpen.value = false;
     showToast('All notifications deleted', 'success');
@@ -738,9 +660,9 @@ const viewStreamDetails = (notification) => {
   // Find the stream in ongoingStreams that matches the notification
   const stream = props.ongoingStreams.find(s => {
     return s.room_url === notification.room_url ||
-           s.streamer_name === notification.details?.streamer_name;
+      s.streamer_name === notification.details?.streamer_name;
   });
-  
+
   if (stream) {
     emit('view-stream', stream);
     showToast('Opening stream details', 'info');
@@ -768,7 +690,7 @@ const toggleSound = () => {
 const showToast = (message, type = 'info') => {
   const id = toastCounter++;
   toasts.value.push({ id, message, type });
-  
+
   // Auto remove after 3 seconds
   setTimeout(() => {
     toasts.value = toasts.value.filter(toast => toast.id !== id);
@@ -777,60 +699,60 @@ const showToast = (message, type = 'info') => {
 
 const setupSocketConnection = () => {
   // Connect to socket server with namespace
-  socket.value = io('   https://monitor-backend.jetcamstudio.com:5000/notifications', {
-          path: '/ws',
-          transports: ['websocket', 'polling'],
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000,
-          withCredentials: true,
-          autoConnect: true
-        });
-  
+  socket.value = io('   https://monitor-backend.jetcamstudio.com:5000notifications', {
+    path: '/ws',
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    withCredentials: true,
+    autoConnect: true
+  });
+
   // Socket event handlers
   socket.value.on('connect', () => {
     console.log('Connected to notification server');
     showToast('Connected to notification server', 'success');
   });
-  
+
   socket.value.on('connect_error', (error) => {
     console.error('Socket connection error:', error);
   });
-  
+
   socket.value.on('disconnect', () => {
     console.log('Disconnected from notification server');
   });
-  
+
   // Handle new notifications
   socket.value.on('notification', (data) => {
     console.log('New notification received:', data);
-    
+
     // Add to local state if not already present
     if (!notifications.value.some(n => n.id === data.id)) {
       notifications.value.unshift(data);
       newNotificationIds.value.push(data.id);
       applyFilters();
-      
+
       // Remove from newNotificationIds after animation completes
       setTimeout(() => {
         newNotificationIds.value = newNotificationIds.value.filter(id => id !== data.id);
       }, 5000);
-      
+
       // Play sound if enabled
       if (soundEnabled.value) {
         playNotificationSound();
       }
-      
+
       showToast('New notification received', 'info');
     }
   });
-  
+
   // Handle notification updates (read status, etc.)
   socket.value.on('notification_update', (data) => {
     console.log('Notification update received:', data);
-    
+
     const { id, type } = data;
-    
+
     // Update local state
     if (type === 'read') {
       const notification = notifications.value.find(n => n.id === id);
@@ -841,7 +763,7 @@ const setupSocketConnection = () => {
     } else if (type === 'deleted') {
       notifications.value = notifications.value.filter(n => n.id !== id);
       applyFilters();
-      
+
       // Reset selected notification if it's the one being deleted
       if (selectedNotification.value && selectedNotification.value.id === id) {
         selectedNotification.value = null;
@@ -868,9 +790,9 @@ watch([mainFilter, detectionSubFilter], () => {
 onMounted(() => {
   fetchNotifications();
   setupSocketConnection();
-  
+
   window.addEventListener('resize', handleResize);
-  
+
   // Animation for initial load
   nextTick(() => {
     anime({
@@ -887,7 +809,7 @@ onUnmounted(() => {
   if (socket.value) {
     socket.value.disconnect();
   }
-  
+
   window.removeEventListener('resize', handleResize);
 });
 </script>
@@ -1229,7 +1151,8 @@ onUnmounted(() => {
 
 .notification-content {
   flex: 1;
-  min-width: 0; /* For proper text truncation */
+  min-width: 0;
+  /* For proper text truncation */
 }
 
 .notification-header {
@@ -1339,9 +1262,17 @@ onUnmounted(() => {
 }
 
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(66, 153, 225, 0.5); }
-  70% { box-shadow: 0 0 0 10px rgba(66, 153, 225, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(66, 153, 225, 0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(66, 153, 225, 0.5);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(66, 153, 225, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(66, 153, 225, 0);
+  }
 }
 
 /* Empty/Error States */
@@ -1401,7 +1332,9 @@ onUnmounted(() => {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Detail Section */
@@ -1953,45 +1886,45 @@ onUnmounted(() => {
   .content-area {
     flex-direction: column;
   }
-  
+
   .notifications-panel {
     width: 100%;
     border-right: none;
     border-bottom: 1px solid #e1e4e8;
     max-height: 50vh;
   }
-  
+
   .detail-actions {
     flex-wrap: wrap;
   }
-  
+
   .top-bar {
     flex-wrap: wrap;
   }
-  
+
   .filter-tabs {
     width: 100%;
     margin-bottom: 8px;
     justify-content: space-between;
   }
-  
+
   .action-buttons {
     margin-left: auto;
   }
-  
+
   .notification-card {
     padding: 8px;
   }
-  
+
   .notification-message {
     font-size: 13px;
   }
-  
+
   .notification-meta,
   .notification-time {
     font-size: 11px;
   }
-  
+
   .detection-images {
     flex-direction: column;
   }

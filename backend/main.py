@@ -27,9 +27,25 @@ from config import create_app
 from services.notification_service import NotificationService
 from extensions import db
 from models import User
+from monitoring import start_notification_monitor
 
 # Initialize Flask app
 app = create_app()
+
+# Validate critical environment variables
+def validate_env_vars():
+    """Validate critical environment variables at startup."""
+    required_vars = ['FLASK_SECRET_KEY', 'DATABASE_URL']
+    for var in required_vars:
+        if not os.getenv(var):
+            logging.error(f"Missing required environment variable: {var}")
+            raise ValueError(f"Missing required environment variable: {var}")
+    try:
+        float(os.getenv('AUDIO_SAMPLE_DURATION', '10'))
+        logging.info("AUDIO_SAMPLE_DURATION is valid")
+    except ValueError:
+        logging.error("AUDIO_SAMPLE_DURATION must be a valid number")
+        raise ValueError("AUDIO_SAMPLE_DURATION must be a valid number")
 
 # Initialize SocketIO and verify
 try:
@@ -40,15 +56,6 @@ try:
 except Exception as e:
     logging.error(f"Failed to initialize SocketIO: {str(e)}")
     raise
-
-# Immediately start monitoring
-with app.app_context():
-    try:
-        NotificationService.start_scheduler()
-        logging.info("Stream status monitoring initialized on app startup")
-    except Exception as e:
-        logging.error(f"Monitoring initialization failed: {str(e)}")
-        raise
 
 # Parse allowed origins from environment
 allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else ['*']
@@ -138,6 +145,17 @@ with app.app_context():
             logging.info("Default admin user created")
         else:
             logging.info("Admin user already exists")
+                
+        # Validate environment variables
+        validate_env_vars()
+        
+        # Start monitoring for all streams
+        try:
+            start_notification_monitor()
+            logging.info("Started monitoring for all eligible streams")
+        except Exception as e:
+            logging.error(f"Failed to start monitoring for all streams: {str(e)}")
+            raise
                 
     except Exception as e:
         logging.error(f"DB init failed: {str(e)}")

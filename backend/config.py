@@ -61,23 +61,26 @@ class Config:
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', 'https://monitor.jetcamstudio.com,*')
 
     # ─── Monitoring Intervals ────────────────────────────────────────────
-    STREAM_STATUS_CHECK_INTERVAL = int(os.getenv('STREAM_STATUS_CHECK_INTERVAL', 60))
-    VIEWER_COUNT_INTERVAL = int(os.getenv('VIEWER_COUNT_INTERVAL', 30))
-    NOTIFICATION_DEBOUNCE = int(os.getenv('NOTIFICATION_DEBOUNCE', 300))
+    STREAM_STATUS_CHECK_INTERVAL = int(os.getenv('STREAM_STATUS_CHECK_INTERVAL', '60'))
+    VIEWER_COUNT_INTERVAL = int(os.getenv('VIEWER_COUNT_INTERVAL', '30'))
+    NOTIFICATION_DEBOUNCE = int(os.getenv('NOTIFICATION_DEBOUNCE', '300'))
+    AUDIO_SAMPLE_DURATION = float(os.getenv('AUDIO_SAMPLE_DURATION', '30'))
+    AUDIO_BUFFER_SIZE = int(os.getenv('AUDIO_BUFFER_SIZE', '3'))
+    AUDIO_SEGMENT_LENGTH = int(os.getenv('AUDIO_SEGMENT_LENGTH', '15'))
+    AUDIO_ALERT_COOLDOWN = int(os.getenv('AUDIO_ALERT_COOLDOWN', '60'))
+    VISUAL_ALERT_COOLDOWN = int(os.getenv('VISUAL_ALERT_COOLDOWN', '30'))
+    CHAT_ALERT_COOLDOWN = int(os.getenv('CHAT_ALERT_COOLDOWN', '45'))
+    NEGATIVE_SENTIMENT_THRESHOLD = float(os.getenv('NEGATIVE_SENTIMENT_THRESHOLD', '-0.5'))
+    WHISPER_MODEL_SIZE = os.getenv('WHISPER_MODEL_SIZE', 'base')
+    CONTINUOUS_MONITORING = os.getenv('CONTINUOUS_MONITORING', 'true').lower() == 'true'
+    ENABLE_AUDIO_MONITORING = os.getenv('ENABLE_AUDIO_MONITORING', 'true').lower() == 'true'
+    ENABLE_VIDEO_MONITORING = os.getenv('ENABLE_VIDEO_MONITORING', 'true').lower() == 'true'
+    ENABLE_CHAT_MONITORING = os.getenv('ENABLE_CHAT_MONITORING', 'true').lower() == 'true'
 
 def create_app(config_class=Config):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class)
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = config_class.SQLALCHEMY_ENGINE_OPTIONS
-    app.config['CONTINUOUS_MONITORING'] = os.getenv('CONTINUOUS_MONITORING', 'true').lower() == 'true'
-    app.config['ENABLE_AUDIO_MONITORING'] = os.getenv('ENABLE_AUDIO_MONITORING', 'true').lower() == 'true'
-    app.config['ENABLE_VIDEO_MONITORING'] = os.getenv('ENABLE_VIDEO_MONITORING', 'true').lower() == 'true'
-    app.config['ENABLE_CHAT_MONITORING'] = os.getenv('ENABLE_CHAT_MONITORING', 'true').lower() == 'true'
-    app.config['CHAT_ALERT_COOLDOWN'] = int(os.getenv('CHAT_ALERT_COOLDOWN', 60))
-    app.config['VISUAL_ALERT_COOLDOWN'] = int(os.getenv('VISUAL_ALERT_COOLDOWN', 60))
-    app.config['AUDIO_ALERT_COOLDOWN'] = int(os.getenv('AUDIO_ALERT_COOLDOWN', 60))
-    app.config['NEGATIVE_SENTIMENT_THRESHOLD'] = float(os.getenv('NEGATIVE_SENTIMENT_THRESHOLD', -0.5))
-    app.config['WHISPER_MODEL_SIZE'] = os.getenv('WHISPER_MODEL_SIZE', 'base')
 
     try:
         os.makedirs(app.instance_path, exist_ok=True)
