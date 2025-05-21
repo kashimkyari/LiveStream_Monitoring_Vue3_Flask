@@ -9,6 +9,7 @@ from utils.notifications import emit_notification
 from dotenv import load_dotenv
 import base64
 import os
+import threading
 
 # Load environment variables
 load_dotenv()
@@ -23,14 +24,18 @@ logger = logging.getLogger(__name__)
 
 # External dependencies
 _yolo_model = None
-_yolo_lock = None
+_yolo_lock = threading.Lock()  # Initialize the lock with a proper threading.Lock object
 last_visual_alerts = {}
 
 def initialize_video_globals(yolo_model=None, yolo_lock=None):
     """Initialize global variables for YOLO model and lock"""
     global _yolo_model, _yolo_lock
     _yolo_model = yolo_model
-    _yolo_lock = yolo_lock
+    if yolo_lock is not None:
+        _yolo_lock = yolo_lock
+    else:
+        # Ensure _yolo_lock is always a valid lock object
+        _yolo_lock = threading.Lock()
     logger.info("Video globals initialized")
 
 def load_yolo_model():
@@ -40,6 +45,13 @@ def load_yolo_model():
         logger.info("Video monitoring disabled; skipping YOLO model loading")
         return None
     global _yolo_model
+    
+    # Ensure _yolo_lock is not None before using it
+    if _yolo_lock is None:
+        logger.warning("YOLO lock was None, creating a new lock")
+        global _yolo_lock
+        _yolo_lock = threading.Lock()
+        
     with _yolo_lock:
         if _yolo_model is None:
             try:
