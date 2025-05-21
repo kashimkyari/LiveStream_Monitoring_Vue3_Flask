@@ -24,21 +24,19 @@ logger = logging.getLogger(__name__)
 # External dependencies
 _yolo_model = None
 _yolo_lock = None
-ENABLE_VIDEO_MONITORING = True
-VISUAL_ALERT_COOLDOWN = None
 last_visual_alerts = {}
 
 def initialize_video_globals(yolo_model=None, yolo_lock=None):
-    """Initialize global variables from environment"""
-    global _yolo_model, _yolo_lock, ENABLE_VIDEO_MONITORING, VISUAL_ALERT_COOLDOWN
+    """Initialize global variables for YOLO model and lock"""
+    global _yolo_model, _yolo_lock
     _yolo_model = yolo_model
     _yolo_lock = yolo_lock
-    ENABLE_VIDEO_MONITORING = os.getenv('ENABLE_VIDEO_MONITORING', 'true').lower() == 'true'
-    VISUAL_ALERT_COOLDOWN = int(os.getenv('VISUAL_ALERT_COOLDOWN', 60))
+    logger.info("Video globals initialized")
 
 def load_yolo_model():
     """Load the YOLO object detection model"""
-    if not ENABLE_VIDEO_MONITORING:
+    logger.debug(f"Checking video monitoring: {current_app.config['ENABLE_VIDEO_MONITORING']}")
+    if not current_app.config['ENABLE_VIDEO_MONITORING']:
         logger.info("Video monitoring disabled; skipping YOLO model loading")
         return None
     global _yolo_model
@@ -46,7 +44,7 @@ def load_yolo_model():
         if _yolo_model is None:
             try:
                 from ultralytics import YOLO
-                _yolo_model = YOLO("yolov8s.pt", verbose=False)
+                _yolo_model = YOLO("YOLO11m-seg.pt", verbose=False)
                 _yolo_model.verbose = False
                 logger.info("YOLO model loaded successfully")
             except Exception as e:
@@ -113,7 +111,7 @@ def get_stream_assignment(stream_url):
 
 def process_video_frame(frame, stream_url):
     """Detect objects in video frame"""
-    if not ENABLE_VIDEO_MONITORING:
+    if not current_app.config['ENABLE_VIDEO_MONITORING']:
         logger.info(f"Video monitoring disabled for {stream_url}")
         return []
     model = load_yolo_model()
@@ -136,7 +134,7 @@ def process_video_frame(frame, stream_url):
                     continue
                 if cls_name in last_visual_alerts.get(stream_url, {}):
                     last_alert = last_visual_alerts[stream_url][cls_name]
-                    if (now - last_alert).total_seconds() < VISUAL_ALERT_COOLDOWN:
+                    if (now - last_alert).total_seconds() < current_app.config['VISUAL_ALERT_COOLDOWN']:
                         continue
                 last_visual_alerts.setdefault(stream_url, {})[cls_name] = now
                 detections.append({
@@ -163,7 +161,7 @@ def annotate_frame(frame, detections):
 
 def log_video_detection(detections, frame, stream_url):
     """Log video detections with annotated frame"""
-    if not ENABLE_VIDEO_MONITORING or not detections:
+    if not current_app.config['ENABLE_VIDEO_MONITORING'] or not detections:
         return
     platform, streamer = get_stream_info(stream_url)
     assignment_id, agent_id = get_stream_assignment(stream_url)
