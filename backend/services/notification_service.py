@@ -32,6 +32,9 @@ class NotificationService:
     notification_cache = {}
     notification_cache_lock = threading.Lock()  # Thread-safe lock
     NOTIFICATION_DEBOUNCE = 300  # 5 minutes in seconds
+    
+    # Higher debounce time specifically for stream status notifications
+    STREAM_STATUS_DEBOUNCE = 3600  # 1 hour in seconds
 
     # Cache for stream statuses to detect changes
     stream_status_cache = {}
@@ -185,8 +188,13 @@ class NotificationService:
             last_notification = NotificationService.notification_cache.get(cache_key)
             current_time = datetime.utcnow()
             
-            if last_notification and (current_time - last_notification).total_seconds() < NotificationService.NOTIFICATION_DEBOUNCE:
-                logger.info(f"Skipping notification for {cache_key} due to debounce")
+            # Use longer debounce period for stream status notifications
+            debounce_period = (NotificationService.STREAM_STATUS_DEBOUNCE 
+                              if event_type == 'stream_status_update' 
+                              else NotificationService.NOTIFICATION_DEBOUNCE)
+            
+            if last_notification and (current_time - last_notification).total_seconds() < debounce_period:
+                logger.info(f"Skipping notification for {cache_key} due to debounce ({debounce_period}s)")
                 return False
             NotificationService.notification_cache[cache_key] = current_time
             return True
@@ -195,6 +203,11 @@ class NotificationService:
     async def send_telegram_notification(user, event_type, details, platform, streamer, is_image=False, image_data=None):
         """Send a Telegram notification with retry logic."""
         try:
+            # Skip stream status notifications for Telegram
+            if event_type == 'stream_status_update' and not user.role == 'admin':
+                logger.info(f"Skipping Telegram notification for stream status update to {user.username}")
+                return
+                
             telegram_token = os.getenv('TELEGRAM_TOKEN')
             if not telegram_token:
                 logger.error("Telegram token not set in environment variables")
@@ -274,6 +287,17 @@ class NotificationService:
             logger.info(f"Skipping notifications for {user.username} (receive_updates=False)")
             return
 
+        # Special handling for stream status updates
+        if event_type == 'stream_status_update':
+            # For non-admin users, only create in-app notifications (no email/telegram)
+            if user.role != 'admin':
+                # Check if notification should be sent (uses longer debounce period)
+                if NotificationService.should_send_notification(user.id, event_type, room_url or details.get('room_url', '')):
+                    NotificationService.create_in_app_notification(user, event_type, details, room_url, platform, streamer)
+                    logger.info(f"Sent in-app notification only for stream status update to {user.username}")
+                return
+        
+        # Regular notification flow for other event types and for admins
         if not NotificationService.should_send_notification(user.id, event_type, room_url or details.get('room_url', '')):
             return
 
@@ -283,13 +307,13 @@ class NotificationService:
         NotificationService.create_in_app_notification(user, event_type, details, room_url, platform, streamer)
         channels_sent.append('in_app')
 
-        # Email notification
-        if user.email:
+        # Email notification - skip for stream status updates for non-admins
+        if user.email and (event_type != 'stream_status_update' or user.role == 'admin'):
             NotificationService.send_email_notification(user, event_type, details, platform, streamer)
             channels_sent.append('email')
 
-        # Telegram notification
-        if user.telegram_chat_id:
+        # Telegram notification - skip for stream status updates for non-admins
+        if user.telegram_chat_id and (event_type != 'stream_status_update' or user.role == 'admin'):
             asyncio.run(NotificationService.send_telegram_notification(user, event_type, details, platform, streamer, is_image, image_data))
             channels_sent.append('telegram')
 
@@ -357,6 +381,11 @@ class NotificationService:
     def send_email_notification(user, event_type, details, platform, streamer):
         """Send an email notification with correct agent username."""
         try:
+            # Skip email notifications for stream status updates to non-admin users
+            if event_type == 'stream_status_update' and user.role != 'admin':
+                logger.info(f"Skipping email notification for stream status update to {user.username}")
+                return
+                
             room_url = details.get('room_url')
             _, agent_id = NotificationService.get_stream_assignment(room_url) if room_url else (None, None)
             
@@ -518,6 +547,27 @@ class NotificationService:
         """Notify relevant users about a stream status change."""
         from utils.notifications import emit_notification
         try:
+            # Skip notifications for minor status changes
+            if (old_status == 'online' and new_status == 'monitoring') or (old_status == 'monitoring' and new_status == 'online'):
+                logger.info(f"Skipping notification for minor status change from {old_status} to {new_status} for {stream.streamer_username}")
+                # Still update the database
+                notification = DetectionLog(
+                    event_type='stream_status_update',
+                    room_url=stream.room_url,
+                    details={
+                        'message': f"Stream status changed from {old_status} to {new_status}",
+                        'room_url': stream.room_url,
+                        'streamer_username': stream.streamer_username,
+                        'platform': stream.type,
+                        'status': new_status
+                    },
+                    timestamp=datetime.utcnow(),
+                    read=True,  # Mark as read since we're not notifying anyone
+                )
+                db.session.add(notification)
+                db.session.commit()
+                return
+                
             details = {
                 'message': f"Stream status changed from {old_status} to {new_status}",
                 'room_url': stream.room_url,
@@ -533,7 +583,11 @@ class NotificationService:
                     NotificationService.send_user_notification(
                         agent, 'stream_status_update', details, stream.room_url, stream.type, stream.streamer_username
                     )
-            NotificationService.notify_admins('stream_status_update', details, stream.room_url, stream.type, stream.streamer_username)
+            
+            # Only notify admins about offline->online and online->offline transitions
+            if (old_status == 'offline' and new_status in ['online', 'monitoring']) or \
+               (old_status in ['online', 'monitoring'] and new_status == 'offline'):
+                NotificationService.notify_admins('stream_status_update', details, stream.room_url, stream.type, stream.streamer_username)
             
             # Create a DetectionLog entry for the status change
             notification = DetectionLog(
