@@ -234,6 +234,7 @@ export default {
     const urlError = ref('');
     const notesError = ref('');
     const jobId = ref('');
+    const monitor_url = ref('');
     const connectionStatus = ref('none');
     const latency = ref(null);
     const assignmentDetails = ref(null);
@@ -446,7 +447,7 @@ export default {
       }
 
       try {
-        const url = `/api/streams/interactive/sse?job_id=${jobId.value}`;
+        const url = `${monitor_url.value}`;
 
         eventSource = new EventSource(url);
         connectionStatus.value = 'sse';

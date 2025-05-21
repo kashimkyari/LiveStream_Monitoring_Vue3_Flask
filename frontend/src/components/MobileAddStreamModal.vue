@@ -131,8 +131,8 @@ export default {
       errorLoadingAgents.value = false
       errorMessage.value = ''
       try {
-        console.debug('Fetching agents from   https://monitor-backend.jetcamstudio.com:5000api/agents')
-        const response = await axios.get('   https://monitor-backend.jetcamstudio.com:5000api/agents', {
+        console.debug('Fetching agents from    https://monitor-backend.jetcamstudio.com:5000api/agents')
+        const response = await axios.get('    https://monitor-backend.jetcamstudio.com:5000api/agents', {
           headers: {
             'Accept': 'application/json'
           },
@@ -186,7 +186,7 @@ export default {
 
     const connectSSE = (jobId) => {
       if (eventSource.value) eventSource.value.close()
-      const sseUrl = `   https://monitor-backend.jetcamstudio.com:5000api/streams/interactive/sse?job_id=${jobId}`
+      const sseUrl = `    https://monitor-backend.jetcamstudio.com:5000api/streams/interactive/sse?job_id=${jobId}`
       eventSource.value = new EventSource(sseUrl, { withCredentials: true })
 
       eventSource.value.onmessage = (event) => {
@@ -267,7 +267,7 @@ export default {
       isSubmitting.value = true
       try {
         console.debug('Submitting stream creation:', form.value)
-        const response = await axios.post('   https://monitor-backend.jetcamstudio.com:5000api/streams/interactive', form.value, {
+        const response = await axios.post('    https://monitor-backend.jetcamstudio.com:5000api/streams/interactive', form.value, {
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json'

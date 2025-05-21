@@ -14,7 +14,7 @@ import { useToast } from "vue-toastification";
 import sessionService from "./SessionService";
 
 // Define the API base URL - switched to HTTP for better compatibility
-const API_BASE_URL = "   https://monitor-backend.jetcamstudio.com:5000"; // Local development API URL (relative path)
+const API_BASE_URL = "    https://monitor-backend.jetcamstudio.com:5000"; // Local development API URL (relative path)
 
 // Create axios instance with the base URL
 const apiClient = axios.create({

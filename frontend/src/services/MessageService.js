@@ -31,7 +31,7 @@ class MessageService {
    */
   _setupSocketConnection() {
     this._socket = io(
-      "   https://monitor-backend.jetcamstudio.com:5000messages",
+      "    https://monitor-backend.jetcamstudio.com:5000messages",
       {
         path: "/ws",
         transports: ["websocket", "polling"], // Optional: match server config

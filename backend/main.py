@@ -8,6 +8,7 @@ gevent.monkey.patch_all()
 import logging
 import os
 import time
+import fcntl  # For file-based locking
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from werkzeug.security import generate_password_hash
@@ -31,6 +32,9 @@ from monitoring import start_notification_monitor
 
 # Initialize Flask app
 app = create_app()
+
+# Lock file path for monitoring
+MONITOR_LOCK_FILE = '/tmp/livestream_monitoring.lock'
 
 # Validate critical environment variables
 def validate_env_vars():
@@ -112,68 +116,48 @@ def cors_test():
     })
 
 # === Database Initialization ===
-with app.app_context():
-    try:
-        db.create_all()
-        logging.info("Database tables initialized")
-        
-        # === Admin User Creation ===
-        admin_exists = User.query.filter_by(role='admin').first()
-        if not admin_exists:
-            admin_username = os.getenv('DEFAULT_ADMIN_USERNAME')
-            admin_password = os.getenv('DEFAULT_ADMIN_PASSWORD')
-            admin_email = os.getenv('DEFAULT_ADMIN_EMAIL')
-
-            if not all([admin_username, admin_password, admin_email]):
-                if not admin_password:
-                    chars = string.ascii_letters + string.digits + string.punctuation
-                    admin_password = ''.join(secrets.choice(chars) for _ in range(16))
-                    logging.warning(f"Admin password not found. Generated: {admin_password}")
-                    logging.warning("SAVE THIS PASSWORD AND SET ENV VARIABLES!")
-                else:
-                    logging.error("Missing admin credentials in environment variables")
-
-            admin_user = User(
-                username=admin_username or "admin",
-                password=generate_password_hash(admin_password),
-                role='admin',
-                email=admin_email or "admin@example.com",
-                receive_updates=True
-            )
-            db.session.add(admin_user)
-            db.session.commit()
-            logging.info("Default admin user created")
-        else:
-            logging.info("Admin user already exists")
-                
-        # Validate environment variables
-        validate_env_vars()
-        
-        # Start monitoring for all streams
+def initialize_database():
+    """Initialize database and create default admin user."""
+    with app.app_context():
         try:
-            start_notification_monitor()
-            logging.info("Started monitoring for all eligible streams")
-        except Exception as e:
-            logging.error(f"Failed to start monitoring for all streams: {str(e)}")
-            raise
-                
-    except Exception as e:
-        logging.error(f"DB init failed: {str(e)}")
-        raise
+            db.create_all()
+            logging.info("Database tables initialized")
+            
+            # === Admin User Creation ===
+            admin_exists = User.query.filter_by(role='admin').first()
+            if not admin_exists:
+                admin_username = os.getenv('DEFAULT_ADMIN_USERNAME')
+                admin_password = os.getenv('DEFAULT_ADMIN_PASSWORD')
+                admin_email = os.getenv('DEFAULT_ADMIN_EMAIL')
 
-# === Health Check Endpoint ===
-@app.route('/check-health', methods=['GET'])
-def health_check():
-    """Health check endpoint for load balancers and monitoring"""
-    return jsonify({
-        "status": "healthy",
-        "timestamp": time.time(),
-        "version": os.getenv('APP_VERSION', '1.0.0'),
-        "monitoring_enabled": os.getenv('CONTINUOUS_MONITORING', 'true').lower() == 'true',
-        "audio_monitoring": os.getenv('ENABLE_AUDIO_MONITORING', 'true').lower() == 'true',
-        "video_monitoring": os.getenv('ENABLE_VIDEO_MONITORING', 'true').lower() == 'true',
-        "chat_monitoring": os.getenv('ENABLE_CHAT_MONITORING', 'true').lower() == 'true'
-    })
+                if not all([admin_username, admin_password, admin_email]):
+                    if not admin_password:
+                        chars = string.ascii_letters + string.digits + string.punctuation
+                        admin_password = ''.join(secrets.choice(chars) for _ in range(16))
+                        logging.warning(f"Admin password not found. Generated: {admin_password}")
+                        logging.warning("SAVE THIS PASSWORD AND SET ENV VARIABLES!")
+                    else:
+                        logging.error("Missing admin credentials in environment variables")
+
+                admin_user = User(
+                    username=admin_username or "admin",
+                    password=generate_password_hash(admin_password),
+                    role='admin',
+                    email=admin_email or "admin@example.com",
+                    receive_updates=True
+                )
+                db.session.add(admin_user)
+                db.session.commit()
+                logging.info("Default admin user created")
+            else:
+                logging.info("Admin user already exists")
+                
+            # Validate environment variables
+            validate_env_vars()
+            
+        except Exception as e:
+            logging.error(f"DB init failed: {str(e)}")
+            raise
 
 # === SSL Configuration Helper ===
 def configure_ssl_context():
@@ -195,25 +179,65 @@ def configure_ssl_context():
             
     return ssl_context
 
+# === Monitoring Lock ===
+def acquire_monitoring_lock():
+    """Acquire a file-based lock to ensure only one worker starts monitoring."""
+    lock_fd = open(MONITOR_LOCK_FILE, 'w')
+    try:
+        fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        logging.info("Acquired monitoring lock")
+        return lock_fd
+    except IOError:
+        logging.info("Monitoring lock already held by another process")
+        lock_fd.close()
+        return None
+
 # === Main Execution ===
 if __name__ == "__main__":
-    ssl_context = configure_ssl_context()
-    server_mode = "HTTPS" if ssl_context else "HTTP"
-    debug_mode = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
-    logging.info(f"Starting server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
-    
-    # Configure Socket.IO options
-    socketio_kwargs = {
-        'app': app,
-        'host': '0.0.0.0',
-        'port': int(os.getenv('PORT', 5000)),
-        'debug': debug_mode,
-        'use_reloader': debug_mode,
-        'allow_unsafe_werkzeug': True
-    }
-
-    # Only add SSL context if SSL is enabled
-    if ssl_context:
-        socketio_kwargs['ssl_context'] = ssl_context
+    # Perform all initialization steps
+    try:
+        initialize_database()  # Initialize database and admin user
+        ssl_context = configure_ssl_context()  # Configure SSL
+        server_mode = "HTTPS" if ssl_context else "HTTP"
+        debug_mode = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
+        logging.info(f"Starting server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
         
-    NotificationService.socketio.run(**socketio_kwargs)
+        # Attempt to acquire monitoring lock and start monitoring
+        lock_fd = acquire_monitoring_lock()
+        if lock_fd:
+            try:
+                with app.app_context():
+                    start_notification_monitor()
+                    logging.info("Started monitoring for all eligible streams")
+            except Exception as e:
+                logging.error(f"Failed to start monitoring for all streams: {str(e)}")
+                raise
+        else:
+            logging.info("Skipping monitoring startup as another process is handling it")
+        
+        # Configure Socket.IO options
+        socketio_kwargs = {
+            'app': app,
+            'host': '0.0.0.0',
+            'port': int(os.getenv('PORT', 5000)),
+            'debug': debug_mode,
+            'use_reloader': debug_mode,
+            'allow_unsafe_werkzeug': True
+        }
+
+        # Only add SSL context if SSL is enabled
+        if ssl_context:
+            socketio_kwargs['ssl_context'] = ssl_context
+            
+        NotificationService.socketio.run(**socketio_kwargs)
+        
+    except Exception as e:
+        logging.error(f"Application startup failed: {str(e)}")
+        raise
+    finally:
+        # Release the lock file if held
+        if 'lock_fd' in locals() and lock_fd:
+            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+            lock_fd.close()
+            os.remove(MONITOR_LOCK_FILE) if os.path.exists(MONITOR_LOCK_FILE) else None
+            logging.info("Released monitoring lock")

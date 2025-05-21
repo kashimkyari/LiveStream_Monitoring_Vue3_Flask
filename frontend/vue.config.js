@@ -6,7 +6,7 @@ module.exports = defineConfig({
   devServer: {
     proxy: {
       "/api": {
-        target: "   https://monitor-backend.jetcamstudio.com:5000",
+        target: "    https://monitor-backend.jetcamstudio.com:5000",
         changeOrigin: true,
       },
     },

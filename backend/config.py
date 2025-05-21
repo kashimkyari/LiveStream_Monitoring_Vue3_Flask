@@ -4,6 +4,8 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from extensions import db
 from services.notification_service import NotificationService
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
 load_dotenv()
 
@@ -44,16 +46,22 @@ class Config:
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 10,
-        'pool_recycle': 300,
-        'pool_pre_ping': True,
-        'max_overflow': 2,
+        'pool_size': 30,  # Supports higher concurrency, compatible with SQLAlchemy 2.0
+        'pool_recycle': 180,  # Refreshes connections every 3 minutes to avoid stale connections
+        'pool_pre_ping': True,  # Ensures valid connections, supported by SQLAlchemy
+        'max_overflow': 20,  # Handles traffic spikes, compatible with SQLAlchemy
+        'pool_use_lifo': True,  # LIFO for connection reuse, improves performance
+        'pool_timeout': 30,  # Timeout for acquiring connections, prevents hangs
         'connect_args': {
-            'keepalives': 1,
-            'keepalives_idle': 30,
-            'keepalives_interval': 10,
-            'keepalives_count': 5
-        }
+            'keepalives': 1,  # Supported by psycopg2 for stable connections
+            'keepalives_idle': 20,  # Faster reconnection for cloud environments
+            'keepalives_interval': 5,  # Faster keepalive checks
+            'keepalives_count': 5,  # Number of keepalive probes
+            'connect_timeout': 10,  # Prevents hanging on connection attempts
+            'application_name': 'jetcamstudio_app'  # Identifiable name for monitoring, supported by psycopg2
+        },
+        'pool_logging_name': 'jetcamstudio_pool',  # Logs pool events for debugging
+        # 'echo_pool': 'debug'  # Enables pool event logging, compatible with SQLAlchemy
     }
 
     # ─── CORS ────────────────────────────────────────────────────────────
@@ -101,6 +109,18 @@ def create_app(config_class=Config):
     except Exception as e:
         app.logger.error(f"Database init failed: {e}")
         raise
+
+    # ─── Set statement_timeout for each connection ───────────────────────
+    @event.listens_for(Engine, "connect")
+    def set_statement_timeout(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("SET statement_timeout = %s", [5000])  # 5 seconds in milliseconds
+            cursor.close()
+            dbapi_connection.commit()
+        except Exception as e:
+            app.logger.error(f"Failed to set statement_timeout: {e}")
+            cursor.close()
 
     # ─── Initialize Notification Service ────────────────────────────────
     with app.app_context():

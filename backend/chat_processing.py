@@ -400,25 +400,21 @@ def process_chat_messages(messages, room_url):
     return detected
 
 def log_chat_detection(detections, room_url):
-    """Log chat detections grouped by type"""
+    """Log each chat detection individually"""
     if not ENABLE_CHAT_MONITORING or not detections:
         return
     platform, streamer, _ = get_stream_info(room_url)
     assignment_id, agent_id = get_stream_assignment(room_url)
-    grouped = {}
-    for det in detections:
-        type_key = det.get("type", "unknown")
-        grouped.setdefault(type_key, []).append(det)
-    for type_key, group in grouped.items():
-        details = {
-            "detections": group,
-            "timestamp": datetime.now().isoformat(),
-            "streamer_name": streamer,
-            "platform": platform,
-            "assigned_agent": agent_id
-        }
-        event_type = "chat_sentiment_detection" if type_key == "sentiment" else "chat_detection"
-        with current_app.app_context():
+    with current_app.app_context():
+        for det in detections:
+            event_type = "chat_sentiment_detection" if det.get("type") == "sentiment" else "chat_detection"
+            details = {
+                "detection": det,
+                "timestamp": datetime.now().isoformat(),
+                "streamer_name": streamer,
+                "platform": platform,
+                "assigned_agent": agent_id
+            }
             log_entry = DetectionLog(
                 room_url=room_url,
                 event_type=event_type,
@@ -442,3 +438,4 @@ def log_chat_detection(detections, room_url):
                 "assigned_agent": "Unassigned" if not agent_id else "Agent"
             }
             emit_notification(notification_data)
+            logger.info(f"Logged and notified individual {event_type} for {room_url}: {det.get('keyword', det.get('sentiment_score'))}")

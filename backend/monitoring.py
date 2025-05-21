@@ -47,7 +47,10 @@ all_agents_fetched = False
 gevent_pool = Pool(5)
 
 # Directory for saving transcriptions
-TRANSCRIPTION_DIR = "/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/transcriptions/"
+TRANSCRIPTION_DIR = os.getenv('TRANSCRIPTION_DIR', '/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/transcriptions/')   
+
+
+
 
 # Initialize monitoring globals
 def initialize_monitoring():
@@ -324,14 +327,22 @@ def process_combined_detection(app, stream_url, cancel_event):
                         if cancel_event.is_set():
                             break
                         if enable_video_monitoring and packet.stream == video_stream:
-                            for frame in packet.decode():
-                                frame_time = frame.pts * float(video_stream.time_base)
-                                if last_process_time is None or frame_time - last_process_time >= 5:
-                                    img = frame.to_ndarray(format='bgr24')
-                                    detections = process_video_frame(img, stream_url)
-                                    if detections:
-                                        log_video_detection(detections, img, stream_url)
-                                    last_process_time = frame_time
+                            try:
+                                for frame in packet.decode():
+                                    frame_time = frame.pts * float(video_stream.time_base)
+                                    if last_process_time is None or frame_time - last_process_time >= 5:
+                                        img = frame.to_ndarray(format='bgr24')
+                                        detections = process_video_frame(img, stream_url)
+                                        if detections:
+                                            log_video_detection(detections, img, stream_url)
+                                        last_process_time = frame_time
+                            except av.error.InvalidDataError as e:
+                                logger.warning(f"Invalid data error while decoding video packet for {stream_url}: {e}")
+                                continue  # Skip to the next packet
+                            except Exception as e:
+                                logger.error(f"Unexpected error decoding video packet for {stream_url}: {e}")
+                                continue  # Skip to the next packet
+                                    
                         elif enable_audio_monitoring and packet.stream == audio_stream:
                             try:
                                 for frame in packet.decode():

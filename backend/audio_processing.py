@@ -222,6 +222,6 @@ def log_audio_detection(detection, stream_url):
         }
         
         # Use environment variables for alert cooldown
-        audio_alert_cooldown = int(os.getenv('AUDIO_ALERT_COOLDOWN', 60))
+        audio_alert_cooldown = int(os.getenv('AUDIO_ALERT_COOLDOWN', 1800))  # Default to 1800 seconds (30 minutes)
         # Use the configured cooldown when emitting the notification
         emit_notification(notification_data, cooldown=audio_alert_cooldown)

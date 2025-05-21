@@ -412,7 +412,7 @@ export default {
 
     // Initialize Socket.IO
     const initializeSocket = () => {
-      socket = io('   https://monitor-backend.jetcamstudio.com:5000notifications', {
+      socket = io('    https://monitor-backend.jetcamstudio.com:5000notifications', {
         path: '/ws',
         transports: ['websocket'],
         query: { token: localStorage.getItem('token') }
