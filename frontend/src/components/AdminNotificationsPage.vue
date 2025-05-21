@@ -219,16 +219,19 @@
 
             <div v-if="selectedNotification.event_type === 'chat_detection'" class="type-details chat-details">
               <h3>Chat Details</h3>
-              <div class="chat-message">
-                <p>{{ selectedNotification.details?.message || 'No message content' }}</p>
-              </div>
-              <div v-if="selectedNotification.details?.keywords?.length" class="keywords-list">
-                <h4>Flagged Keywords:</h4>
-                <div class="keywords">
-                  <span v-for="(keyword, index) in selectedNotification.details.keywords" :key="index"
-                    class="keyword-tag">
-                    {{ keyword }}
-                  </span>
+              <div v-for="(detection, index) in selectedNotification.details?.detections" :key="index"
+                class="chat-detection-item">
+                <div class="detection-header">
+                  <span class="username">{{ detection.username || 'Unknown' }}</span>
+                  <span class="timestamp">{{ formatTimestamp(detection.timestamp, true) }}</span>
+                </div>
+                <div class="chat-message">
+                  <h4>Message:</h4>
+                  <p>{{ detection.message || 'No message content' }}</p>
+                </div>
+                <div class="keyword">
+                  <h4>Flagged Keyword:</h4>
+                  <span class="keyword-tag">{{ detection.keyword || 'Unknown' }}</span>
                 </div>
               </div>
             </div>
