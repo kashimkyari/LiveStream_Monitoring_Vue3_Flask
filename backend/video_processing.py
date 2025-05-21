@@ -46,10 +46,11 @@ def load_yolo_model():
         return None
     global _yolo_model
     
+    global _yolo_model  # This global declaration is already here
     # Ensure _yolo_lock is not None before using it
     if _yolo_lock is None:
         logger.warning("YOLO lock was None, creating a new lock")
-        global _yolo_lock
+        # Don't redeclare global _yolo_lock here as it's already a global variable
         _yolo_lock = threading.Lock()
         
     with _yolo_lock:
