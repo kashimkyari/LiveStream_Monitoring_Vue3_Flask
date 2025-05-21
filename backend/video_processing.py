@@ -57,7 +57,7 @@ def load_yolo_model():
         if _yolo_model is None:
             try:
                 from ultralytics import YOLO
-                _yolo_model = YOLO("YOLO11m-seg.pt", verbose=False)
+                _yolo_model = YOLO("yolo11x.pt", verbose=False)
                 _yolo_model.verbose = False
                 logger.info("YOLO model loaded successfully")
             except Exception as e:
