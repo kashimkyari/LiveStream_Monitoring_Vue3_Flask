@@ -27,7 +27,7 @@ if enable_ssl:
 bind = "0.0.0.0:5000"
 
 # Worker Configuration
-workers = (2 * multiprocessing.cpu_count()) + 1  # e.g., 9 workers for 4 cores
+workers = (1 * multiprocessing.cpu_count()) + 1  # e.g., 9 workers for 4 cores
 threads = 2  # Allow some threading for I/O-bound tasks
 worker_class = "geventwebsocket.gunicorn.workers.GeventWebSocketWorker"
 timeout = 120  # Increased for long-running tasks
