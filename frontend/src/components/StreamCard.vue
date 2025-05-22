@@ -1,53 +1,43 @@
 <template>
-  <div 
-    :class="[
-      'stream-card',
-      { 'compact-view': isCompactView },
-      { 'dark-theme': isDarkTheme },
-      { 'online': isOnline },
-      { 'offline': !isOnline },
-      { 'detecting': isDetecting },
-      { 'disabled': !isOnline }
-    ]"
-    @click="handleCardClick"
-    @mouseenter="isOnline && canToggleDetection ? addHoverAnimation() : null" 
-    @mouseleave="isOnline && canToggleDetection ? removeHoverAnimation() : null" 
-    ref="streamCard"
-  >
+  <div :class="[
+    'stream-card',
+    { 'compact-view': isCompactView },
+    { 'dark-theme': isDarkTheme },
+    { 'online': isOnline },
+    { 'offline': !isOnline },
+    { 'detecting': isDetecting },
+    { 'disabled': !isOnline }
+  ]" @click="handleCardClick" @mouseenter="isOnline && canToggleDetection ? addHoverAnimation() : null"
+    @mouseleave="isOnline && canToggleDetection ? removeHoverAnimation() : null" ref="streamCard">
     <div class="video-container">
       <video ref="videoPlayer" class="video-player"></video>
       <DetectionBadge v-if="detectionCount > 0" :count="detectionCount" />
-      
+
       <div v-if="isStripchatStream" class="viewer-count-overlay">
         <span class="viewer-count">
           <font-awesome-icon icon="eye" />
           {{ viewers }}
         </span>
       </div>
-      
+
       <div class="stream-overlay" ref="streamOverlay">
         <button class="view-details-btn" :disabled="!isOnline">
           <font-awesome-icon icon="eye" />
           <span class="btn-text">View Details</span>
         </button>
       </div>
-      
+
       <div v-if="!isOnline" class="offline-watermark">
         <span>OFFLINE</span>
       </div>
-      
+
       <div class="detection-controls">
-        <button 
-          class="detection-toggle" 
-          :class="{ 
-            'active': isDetecting, 
-            'loading': isDetectionLoading,
-            'error': detectionError
-          }"
-          @click.stop="toggleDetection"
-          :title="getDetectionButtonTooltip"
-          :disabled="!isOnline || isDetectionLoading"
-        >
+        <button class="detection-toggle" :class="{
+          'active': isDetecting,
+          'loading': isDetectionLoading,
+          'error': detectionError
+        }" @click.stop="toggleDetection" :title="getDetectionButtonTooltip"
+          :disabled="!isOnline || isDetectionLoading">
           <span class="detection-icon">
             <font-awesome-icon v-if="isDetectionLoading" icon="spinner" spin />
             <font-awesome-icon v-else-if="detectionError" icon="exclamation-circle" />
@@ -65,7 +55,7 @@
         </span>
       </div>
       <div class="stream-meta">
-        <div class="agent-badge" :class="{'unassigned': !hasAssignedAgents}">
+        <div class="agent-badge" :class="{ 'unassigned': !hasAssignedAgents }">
           <font-awesome-icon :icon="hasAssignedAgents ? 'user-check' : 'user-clock'" />
           <span>{{ assignedAgentNames || 'Unassigned' }}</span>
         </div>
@@ -75,7 +65,7 @@
           <font-awesome-icon icon="clock" />
           <span>{{ getStreamTime() }}</span>
         </div>
-        <div class="stat-item alert-stat" :class="{'has-alerts': detectionCount > 0}">
+        <div class="stat-item alert-stat" :class="{ 'has-alerts': detectionCount > 0 }">
           <font-awesome-icon icon="bell" />
           <span>{{ detectionCount }} {{ detectionCount === 1 ? 'alert' : 'alerts' }}</span>
         </div>
@@ -133,19 +123,20 @@ export default {
     const isOnline = ref(props.stream.status === 'online' || props.stream.status === 'monitoring')
     const isLoading = ref(true)
     const streamStatus = ref(props.stream.status || 'offline')
-    
+
     const isDetecting = ref(props.stream.is_monitored)
     const isDetectionLoading = ref(false)
     const detectionError = ref(null)
-    
+
     const viewers = ref(0)
     const eventBus = inject('eventBus', null)
     const isDarkTheme = inject('theme', ref(true))
     const isPlaying = ref(false)
-    
+
     const agentCache = ref({})
     const allAgentsFetched = ref(false)
     const socket = io({ autoConnect: false })
+    let statusCheckInterval = null
 
     const isCompactView = computed(() => {
       return props.totalStreams > 5
@@ -257,7 +248,7 @@ export default {
         isLoading.value = false
         return
       }
-      
+
       if (Hls.isSupported() && videoPlayer.value) {
         destroyHls()
         hls = new Hls({
@@ -327,33 +318,64 @@ export default {
       }
     }
 
-    const toggleDetection = async () => {
-      if (isDetectionLoading.value) return
-
-      isDetectionLoading.value = true
-      detectionError.value = null
+    const checkDetectionStatus = async () => {
       try {
-        const response = await axios.post('/api/trigger-detection', {
-          stream_id: props.stream.id,
-          stop: isDetecting.value
-        })
-        
+        const response = await axios.get(`/api/detection-status/${props.stream.id}`)
         isDetecting.value = response.data.isDetecting
         isDetectionLoading.value = response.data.isDetectionLoading
         detectionError.value = response.data.detectionError
-        
-        toast.success(
-          isDetecting.value 
-            ? `Detection started for ${props.stream.streamer_username}` 
-            : `Detection stopped for ${props.stream.streamer_username}`
-        )
-        emit('detection-toggled', { streamId: props.stream.id, isDetecting: isDetecting.value })
+        streamStatus.value = response.data.status || 'offline'
+        isOnline.value = streamStatus.value === 'online' || streamStatus.value === 'monitoring'
       } catch (error) {
-        console.error('Error toggling detection:', error)
+        console.error('Error checking detection status:', error)
         detectionError.value = error.response?.data?.error || error.message
-        toast.error(`Error toggling detection: ${detectionError.value}`)
-      } finally {
-        isDetectionLoading.value = false
+      }
+    }
+
+    const toggleDetection = async () => {
+      if (isDetectionLoading.value) return
+
+      // Check status before toggling to avoid 409 Conflict
+      try {
+        const statusResponse = await axios.get(`/api/detection-status/${props.stream.id}`)
+        if (statusResponse.data.isDetecting === isDetecting.value) {
+          // Status matches, proceed with toggle
+          isDetectionLoading.value = true
+          detectionError.value = null
+          try {
+            const response = await axios.post('/api/trigger-detection', {
+              stream_id: props.stream.id,
+              stop: isDetecting.value
+            })
+
+            isDetecting.value = response.data.isDetecting
+            isDetectionLoading.value = response.data.isDetectionLoading
+            detectionError.value = response.data.detectionError
+
+            toast.success(
+              isDetecting.value
+                ? `Detection started for ${props.stream.streamer_username}`
+                : `Detection stopped for ${props.stream.streamer_username}`
+            )
+            emit('detection-toggled', { streamId: props.stream.id, isDetecting: isDetecting.value })
+          } catch (error) {
+            console.error('Error toggling detection:', error)
+            detectionError.value = error.response?.data?.error || error.message
+            toast.error(`Error toggling detection: ${detectionError.value}`)
+          } finally {
+            isDetectionLoading.value = false
+          }
+        } else {
+          // Status mismatch, update local state
+          isDetecting.value = statusResponse.data.isDetecting
+          isDetectionLoading.value = statusResponse.data.isDetectionLoading
+          detectionError.value = statusResponse.data.detectionError
+          toast.info(`Detection state updated for ${props.stream.streamer_username}`)
+        }
+      } catch (error) {
+        console.error('Error checking detection status before toggle:', error)
+        detectionError.value = error.response?.data?.error || error.message
+        toast.error(`Error checking detection status: ${detectionError.value}`)
       }
     }
 
@@ -374,7 +396,7 @@ export default {
           targets: streamStats.value.querySelectorAll('.stat-item'),
           translateY: [20, 0],
           opacity: [0, 1],
-          delay: anime.stagger(100, {start: 600 + (props.index * 120)}),
+          delay: anime.stagger(100, { start: 600 + (props.index * 120) }),
           easing: 'easeOutQuad',
           duration: 500
         })
@@ -549,7 +571,7 @@ export default {
         }
       })
       socket.on('stream-update', handleStreamUpdate)
-      
+
       initializeVideo()
       addEntranceAnimation()
       fetchAllAgents()
@@ -563,6 +585,10 @@ export default {
         eventBus.$on('stream-update', handleStreamUpdate)
       }
       handleVideoPlayback()
+      // Start periodic status check
+      statusCheckInterval = setInterval(checkDetectionStatus, 15000)
+      // Initial status check
+      checkDetectionStatus()
     })
 
     onBeforeUnmount(() => {
@@ -573,6 +599,11 @@ export default {
       if (eventBus) {
         eventBus.$off('muteAllStreams')
         eventBus.$off('stream-update')
+      }
+      // Clean up status check interval
+      if (statusCheckInterval) {
+        clearInterval(statusCheckInterval)
+        statusCheckInterval = null
       }
     })
 
@@ -727,7 +758,7 @@ export default {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid var(--input-border);
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -987,6 +1018,7 @@ export default {
   .stream-card:not(.compact-view) {
     border-radius: 14px;
   }
+
   .stream-card:not(.compact-view) .stream-title {
     font-size: 1.1rem;
   }
@@ -996,9 +1028,11 @@ export default {
   .stream-card:not(.compact-view) {
     border-radius: 12px;
   }
+
   .stream-card:not(.compact-view) .stream-title {
     font-size: 1rem;
   }
+
   .stream-card:not(.compact-view) .stat-item {
     font-size: 0.8rem;
   }
@@ -1008,49 +1042,79 @@ export default {
   .stream-card {
     border-radius: 10px;
   }
+
   .stream-title {
     font-size: 0.9rem;
   }
+
   .stream-meta {
     margin-bottom: 12px;
   }
+
   .stream-stats {
     padding-top: 12px;
   }
+
   .stat-item {
     font-size: 0.75rem;
   }
+
   .control-btn,
   .action-btn {
     width: 28px;
     height: 28px;
   }
+
   .platform-tag,
   .agent-badge {
     font-size: 0.7rem;
     padding: 2px 8px;
   }
+
   .view-details-btn {
     padding: 8px 16px;
     font-size: 0.9rem;
   }
+
   .view-details-btn .btn-text {
     display: none;
   }
 }
 
 @keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 @keyframes shake {
-  0% { transform: translateX(0); }
-  25% { transform: translateX(-2px); }
-  50% { transform: translateX(2px); }
-  75% { transform: translateX(-2px); }
-  100% { transform: translateX(0); }
+  0% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-2px);
+  }
+
+  50% {
+    transform: translateX(2px);
+  }
+
+  75% {
+    transform: translateX(-2px);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
 }
 
 .pulse-animation {
@@ -1058,8 +1122,13 @@ export default {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .fade-in {
@@ -1185,46 +1254,58 @@ export default {
   .stream-card {
     border-radius: 10px;
   }
+
   .stream-title {
     font-size: 0.9rem;
   }
+
   .stream-meta {
     margin-bottom: 12px;
   }
+
   .stream-stats {
     padding-top: 12px;
   }
+
   .stat-item {
     font-size: 0.75rem;
   }
+
   .control-btn,
   .action-btn {
     width: 28px;
     height: 28px;
   }
+
   .platform-tag,
   .agent-badge {
     font-size: 0.7rem;
     padding: 2px 8px;
   }
+
   .view-details-btn {
     padding: 8px 16px;
     font-size: 0.9rem;
   }
+
   .view-details-btn .btn-text {
     display: none;
   }
+
   .list-view .video-container {
     width: 70px;
     min-width: 70px;
     height: 40px;
   }
+
   .list-view .stream-title {
     font-size: 0.85rem;
   }
+
   .list-view .detection-controls {
     right: 0.25rem;
   }
+
   .list-view .quick-actions {
     right: 2.5rem;
   }

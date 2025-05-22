@@ -39,8 +39,7 @@ def initialize_video_globals(yolo_model=None, yolo_lock=None):
     logger.info("Video globals initialized")
 
 def load_yolo_model():
-    """Load the YOLO object detection model"""
-    # Always declare globals at the beginning of the function
+    """Load the YOLO object detection model with NNPACK disabled"""
     global _yolo_model, _yolo_lock
     
     logger.debug(f"Checking video monitoring: {current_app.config.get('ENABLE_VIDEO_MONITORING', False)}")
@@ -57,9 +56,12 @@ def load_yolo_model():
         if _yolo_model is None:
             try:
                 from ultralytics import YOLO
+                # Disable NNPACK to avoid unsupported hardware warnings
+                import torch
+                torch.backends.nnpack.enabled = False
                 _yolo_model = YOLO("yolov8s.pt", verbose=False)
                 _yolo_model.verbose = False
-                logger.info("YOLO model loaded successfully")
+                logger.info("YOLO model loaded successfully with NNPACK disabled")
             except Exception as e:
                 logger.error(f"Error loading YOLO model: {e}")
                 _yolo_model = None

@@ -30,13 +30,10 @@ class MessageService {
    * @private
    */
   _setupSocketConnection() {
-    this._socket = io(
-      "    https://monitor-backend.jetcamstudio.com:5000messages",
-      {
-        path: "/ws",
-        transports: ["websocket", "polling"], // Optional: match server config
-      }
-    );
+    this._socket = io("     http://localhost:5000messages", {
+      path: "/ws",
+      transports: ["websocket", "polling"], // Optional: match server config
+    });
 
     // Listen for message events
     this._socket.on("new_message", (message) => {

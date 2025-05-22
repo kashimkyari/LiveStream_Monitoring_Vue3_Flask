@@ -4,10 +4,9 @@ import time
 import requests
 import threading
 from flask import current_app
-from flask_socketio import SocketIO
-from extensions import db, scheduler
+from extensions import db
 from models import User, DetectionLog, ChatMessage, Stream, Assignment
-from utils.notifications import agent_cache
+from utils.notifications import emit_notification, emit_message_update
 from datetime import datetime, timedelta
 import smtplib
 from email.mime.text import MIMEText
@@ -26,57 +25,53 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class NotificationService:
-    socketio = None  # Class attribute for SocketIO
-    app = None  # Class attribute for Flask app
-    # Cache for recent notifications to prevent spamming
+    socketio = None
+    app = None
+    scheduler = None
     notification_cache = {}
-    notification_cache_lock = threading.Lock()  # Thread-safe lock
-    NOTIFICATION_DEBOUNCE = 300  # 5 minutes in seconds
-    
-    # Higher debounce time specifically for stream status notifications
-    STREAM_STATUS_DEBOUNCE = 3600  # 1 hour in seconds
-
-    # Cache for stream statuses to detect changes
+    notification_cache_lock = threading.Lock()
+    NOTIFICATION_DEBOUNCE = int(os.getenv('NOTIFICATION_DEBOUNCE', 600))  # 10 minutes
+    STREAM_STATUS_DEBOUNCE = int(os.getenv('STREAM_STATUS_DEBOUNCE', 7200))  # 2 hours
     stream_status_cache = {}
-
-    # Scheduler for background tasks
-    scheduler = BackgroundScheduler()
+    status_aggregation_cache = {}
 
     @staticmethod
     def init(app):
         """Initialize NotificationService with Flask app and SocketIO."""
         try:
             NotificationService.app = app
-            from utils.notifications import init_socketio
-            NotificationService.socketio = init_socketio(app)
-            logger.info("NotificationService initialized with Flask app and SocketIO")
+            NotificationService.socketio = app.extensions['socketio']
+            NotificationService.scheduler = BackgroundScheduler()
+            logger.info("NotificationService initialized with Flask app, SocketIO, and scheduler")
         except Exception as e:
             logger.error(f"Failed to initialize NotificationService: {str(e)}")
             raise
 
     @staticmethod
-    def start_scheduler():
+    def start_scheduler(detection_only=False):
         """Start the background scheduler for stream status monitoring."""
-        if not NotificationService.scheduler.running:
-            NotificationService.scheduler.add_job(
-                NotificationService.check_stream_statuses,
-                trigger=IntervalTrigger(seconds=60),
-                id='stream_status_check',
-                replace_existing=True
-            )
-            NotificationService.scheduler.start()
-            logger.info("Background scheduler started for stream status monitoring")
-        else:
-            logger.info("Scheduler already running")
+        try:
+            if not NotificationService.scheduler.running:
+                if not detection_only:
+                    NotificationService.scheduler.add_job(
+                        NotificationService.check_stream_statuses,
+                        trigger=IntervalTrigger(seconds=int(os.getenv('STREAM_STATUS_CHECK_INTERVAL', 60))),
+                        id='stream_status_check',
+                        replace_existing=True
+                    )
+                NotificationService.scheduler.start()
+                logger.info("Background scheduler started for stream status monitoring")
+            else:
+                logger.info("Scheduler already running")
+        except Exception as e:
+            logger.error(f"Failed to start scheduler: {str(e)}")
+            raise
 
     @staticmethod
     def check_stream_statuses():
-        """Periodically check the status of all streams and trigger notifications."""
+        """Periodically check the status of all streams and aggregate notifications."""
         start_time = time.time()
         try:
-            if not NotificationService.app:
-                logger.error("Flask app not initialized in NotificationService")
-                return
             with NotificationService.app.app_context():
                 streams = Stream.query.all()
                 logger.debug(f"Checking {len(streams)} streams")
@@ -91,19 +86,51 @@ class NotificationService:
                         db.session.commit()
                         
                         NotificationService.stream_status_cache[stream.id] = new_status
-                        NotificationService.notify_stream_status_change(stream, old_status, new_status)
+                        cache_key = f"stream_{stream.id}_status"
+                        if cache_key not in NotificationService.status_aggregation_cache:
+                            NotificationService.status_aggregation_cache[cache_key] = {
+                                'stream': stream,
+                                'old_status': old_status,
+                                'new_status': new_status,
+                                'count': 1,
+                                'last_updated': datetime.utcnow()
+                            }
+                        else:
+                            NotificationService.status_aggregation_cache[cache_key]['count'] += 1
+                            NotificationService.status_aggregation_cache[cache_key]['new_status'] = new_status
+                            NotificationService.status_aggregation_cache[cache_key]['last_updated'] = datetime.utcnow()
+                NotificationService.process_aggregated_notifications()
                 logger.debug(f"Stream status check completed in {time.time() - start_time:.2f} seconds")
         except Exception as e:
             logger.error(f"Error checking stream statuses: {str(e)}")
-            try:
-                with NotificationService.app.app_context():
-                    db.session.rollback()
-            except Exception as rollback_e:
-                logger.error(f"Failed to rollback session: {str(rollback_e)}")
+            db.session.rollback()
         finally:
             elapsed_time = time.time() - start_time
             if elapsed_time > 60:
                 logger.warning(f"Stream status check took {elapsed_time:.2f} seconds, exceeding interval")
+
+    @staticmethod
+    def process_aggregated_notifications():
+        """Process aggregated status changes and send consolidated notifications."""
+        try:
+            with NotificationService.app.app_context():
+                for cache_key, data in list(NotificationService.status_aggregation_cache.items()):
+                    stream = data['stream']
+                    old_status = data['old_status']
+                    new_status = data['new_status']
+                    count = data['count']
+                    last_updated = data['last_updated']
+                    
+                    if (datetime.utcnow() - last_updated).total_seconds() < NotificationService.NOTIFICATION_DEBOUNCE:
+                        continue
+                        
+                    # Only notify stream status changes from main app
+                    if NotificationService.app.name != 'monitor_app':
+                        NotificationService.notify_stream_status_change(stream, old_status, new_status, count)
+                    del NotificationService.status_aggregation_cache[cache_key]
+        except Exception as e:
+            logger.error(f"Error processing aggregated notifications: {str(e)}")
+            db.session.rollback()
 
     @staticmethod
     def get_stream_status(stream):
@@ -117,17 +144,14 @@ class NotificationService:
                 url = stream.room_url
 
             response = requests.head(url, timeout=5)
-            if response.status_code == 200:
-                return 'online' if not stream.is_monitored else 'monitoring'
-            else:
-                return 'offline'
+            return 'online' if response.status_code == 200 else 'offline'
         except requests.RequestException as e:
             logger.warning(f"Failed to check status for stream {stream.streamer_username}: {str(e)}")
             return 'offline'
 
     @staticmethod
     def get_stream_assignment(room_url):
-        """Get assignment info for a stream, ensuring correct agent_id."""
+        """Get assignment info for a stream."""
         try:
             stream = Stream.query.filter_by(room_url=room_url).first()
             if not stream:
@@ -145,16 +169,8 @@ class NotificationService:
                 return None, None
             
             query = Assignment.query.filter_by(stream_id=stream.id, status='active')
-            assignments = query.all()
-            
-            if not assignments:
-                logger.info(f"No active assignments found for stream: {room_url}")
-                return None, None
-            
-            assignment = assignments[0]
-            agent_id = assignment.agent_id
-            NotificationService.fetch_agent_username(agent_id)
-            return assignment.id, agent_id
+            assignment = query.first()
+            return (assignment.id, assignment.agent_id) if assignment else (None, None)
         except Exception as e:
             logger.error(f"Error fetching assignment for stream {room_url}: {e}")
             return None, None
@@ -162,6 +178,7 @@ class NotificationService:
     @staticmethod
     def fetch_agent_username(agent_id):
         """Fetch a single agent's username and cache it."""
+        from utils.notifications import agent_cache
         if agent_id in agent_cache:
             return agent_cache[agent_id]
         try:
@@ -183,15 +200,13 @@ class NotificationService:
     @staticmethod
     def should_send_notification(user_id, event_type, room_url):
         """Check if a notification should be sent based on recent notifications."""
-        cache_key = f"{user_id}_{event_type}_{room_url}"
-        with NotificationService.notification_cache_lock:  # Thread-safe access
+        cache_key = f"{user_id}_{event_type}_{room_url or 'global'}"
+        with NotificationService.notification_cache_lock:
             last_notification = NotificationService.notification_cache.get(cache_key)
             current_time = datetime.utcnow()
-            
-            # Use longer debounce period for stream status notifications
             debounce_period = (NotificationService.STREAM_STATUS_DEBOUNCE 
-                              if event_type == 'stream_status_update' 
-                              else NotificationService.NOTIFICATION_DEBOUNCE)
+                             if event_type == 'stream_status_update' 
+                             else NotificationService.NOTIFICATION_DEBOUNCE)
             
             if last_notification and (current_time - last_notification).total_seconds() < debounce_period:
                 logger.info(f"Skipping notification for {cache_key} due to debounce ({debounce_period}s)")
@@ -202,145 +217,89 @@ class NotificationService:
     @staticmethod
     async def send_telegram_notification(user, event_type, details, platform, streamer, is_image=False, image_data=None):
         """Send a Telegram notification with retry logic."""
-        try:
-            # Skip stream status notifications for Telegram
-            if event_type == 'stream_status_update' and not user.role == 'admin':
-                logger.info(f"Skipping Telegram notification for stream status update to {user.username}")
-                return
+        if event_type == 'stream_status_update':
+            logger.info(f"Skipping Telegram notification for stream status update to {user.username}")
+            return
                 
-            telegram_token = os.getenv('TELEGRAM_TOKEN')
-            if not telegram_token:
-                logger.error("Telegram token not set in environment variables")
-                return
+        telegram_token = os.getenv('TELEGRAM_TOKEN')
+        if not telegram_token or not user.telegram_chat_id:
+            logger.error(f"Telegram not configured for user {user.username}")
+            return
 
-            if not user.telegram_chat_id:
-                logger.error(f"No valid Telegram chat ID for user {user.username}")
-                return
+        bot = Bot(token=telegram_token)
+        room_url = details.get('room_url')
+        _, agent_id = NotificationService.get_stream_assignment(room_url) if room_url else (None, None)
+        assigned_agent = NotificationService.fetch_agent_username(agent_id) if agent_id else details.get('assigned_agent', 'Unassigned')
 
-            # Initialize Telegram bot with async client
-            bot = Bot(token=telegram_token)
+        message = (
+            f"🚨 New {event_type.replace('_', ' ').title()}\n"
+            f"Platform: {platform or 'Unknown'}\n"
+            f"Streamer: {streamer or 'Unknown'}\n"
+            f"Assigned Agent: {assigned_agent}\n"
+            f"URL: {room_url or 'No URL provided'}\n"
+            f"Details: {details.get('message', 'No details provided')}"
+        )
 
-            # Determine assigned agent username
-            room_url = details.get('room_url')
-            _, agent_id = NotificationService.get_stream_assignment(room_url) if room_url else (None, None)
-            assigned_agent = None
-            if agent_id:
-                assigned_agent = NotificationService.fetch_agent_username(agent_id)
-            elif 'assigned_agent' in details:
-                try:
-                    agent_id = int(details['assigned_agent'])
-                    assigned_agent = NotificationService.fetch_agent_username(agent_id)
-                except (ValueError, TypeError):
-                    assigned_agent = details['assigned_agent']
+        max_retries = int(os.getenv('TELEGRAM_MAX_RETRIES', 3))
+        retry_delay = int(os.getenv('TELEGRAM_RETRY_DELAY', 2))
 
-            message = details.get('message', (
-                f"🚨 New {event_type.replace('_', ' ').title()}\n"
-                f"Platform: {platform or 'Unknown'}\n"
-                f"Streamer: {streamer or 'Unknown'}\n"
-                f"Assigned Agent: {assigned_agent or 'Unassigned'}\n"
-                f"URL: {details.get('room_url', 'No URL provided')}\n"
-                f"Details: {details.get('message', 'No details provided')}"
-            ))
-
-            max_retries = int(os.getenv('TELEGRAM_MAX_RETRIES', 3))
-            retry_delay = int(os.getenv('TELEGRAM_RETRY_DELAY', 2))
-
-            for attempt in range(max_retries):
-                try:
-                    if is_image and image_data:
-                        if not isinstance(image_data, bytes) or len(image_data) == 0:
-                            logger.warning(f"Invalid image data for Telegram notification to {user.username}")
-                            await bot.send_message(chat_id=user.telegram_chat_id, text=message)
-                        else:
-                            from io import BytesIO
-                            photo_file = BytesIO(image_data)
-                            photo_file.seek(0)
-                            await bot.send_photo(chat_id=user.telegram_chat_id, photo=photo_file, caption=message)
-                    else:
-                        await bot.send_message(chat_id=user.telegram_chat_id, text=message)
-                    logger.info(f"Sent Telegram message to {user.telegram_chat_id} for {event_type}")
-                    break
-                except TelegramError as te:
-                    if attempt < max_retries - 1:
-                        logger.warning(f"Telegram attempt {attempt + 1} failed for {user.telegram_chat_id}: {str(te)}. Retrying...")
-                        await asyncio.sleep(retry_delay)
-                    else:
-                        logger.error(f"Failed to send Telegram to {user.telegram_chat_id} after {max_retries} attempts: {str(te)}")
-                        if "chat not found" in str(te).lower():
-                            logger.error(f"Invalid chat ID {user.telegram_chat_id} for user {user.username}")
-                        elif "blocked by user" in str(te).lower():
-                            logger.error(f"Bot blocked by user {user.username} (chat_id: {user.telegram_chat_id})")
-                        elif "timeout" in str(te).lower():
-                            logger.error(f"Timeout error sending Telegram message to {user.telegram_chat_id}")
-                        else:
-                            logger.error(f"Unexpected Telegram error: {str(te)}")
-                except Exception as e:
-                    logger.error(f"Unexpected error sending Telegram to {user.telegram_chat_id}: {str(e)}")
-                    break
-        except Exception as e:
-            logger.error(f"Failed to initialize Telegram bot for {user.telegram_chat_id}: {str(e)}")
+        for attempt in range(max_retries):
+            try:
+                if is_image and image_data:
+                    from io import BytesIO
+                    photo_file = BytesIO(image_data)
+                    photo_file.seek(0)
+                    await bot.send_photo(chat_id=user.telegram_chat_id, photo=photo_file, caption=message)
+                else:
+                    await bot.send_message(chat_id=user.telegram_chat_id, text=message)
+                logger.info(f"Sent Telegram message to {user.telegram_chat_id} for {event_type}")
+                break
+            except TelegramError as te:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Telegram attempt {attempt + 1} failed: {str(te)}. Retrying...")
+                    await asyncio.sleep(retry_delay)
+                else:
+                    logger.error(f"Failed to send Telegram after {max_retries} attempts: {str(te)}")
+            except Exception as e:
+                logger.error(f"Unexpected error sending Telegram: {str(e)}")
+                break
 
     @staticmethod
     def send_user_notification(user, event_type, details, room_url=None, platform=None, streamer=None, is_image=False, image_data=None):
         """Send notifications to a user based on their preferences."""
-        if not user.receive_updates:
-            logger.info(f"Skipping notifications for {user.username} (receive_updates=False)")
+        if not user.receive_updates or (event_type == 'stream_status_update' and user.role != 'admin'):
+            logger.info(f"Skipping notifications for {user.username} (event: {event_type})")
             return
 
-        # Special handling for stream status updates
-        if event_type == 'stream_status_update':
-            # For non-admin users, only create in-app notifications (no email/telegram)
-            if user.role != 'admin':
-                # Check if notification should be sent (uses longer debounce period)
-                if NotificationService.should_send_notification(user.id, event_type, room_url or details.get('room_url', '')):
-                    NotificationService.create_in_app_notification(user, event_type, details, room_url, platform, streamer)
-                    logger.info(f"Sent in-app notification only for stream status update to {user.username}")
-                return
-        
-        # Regular notification flow for other event types and for admins
+        # Skip stream status notifications in monitor app
+        if event_type == 'stream_status_update' and NotificationService.app.name == 'monitor_app':
+            logger.info(f"Skipping stream status notification in monitor app for {user.username}")
+            return
+
         if not NotificationService.should_send_notification(user.id, event_type, room_url or details.get('room_url', '')):
             return
 
         channels_sent = []
-
-        # In-app notification
         NotificationService.create_in_app_notification(user, event_type, details, room_url, platform, streamer)
         channels_sent.append('in_app')
 
-        # Email notification - skip for stream status updates for non-admins
         if user.email and (event_type != 'stream_status_update' or user.role == 'admin'):
             NotificationService.send_email_notification(user, event_type, details, platform, streamer)
             channels_sent.append('email')
 
-        # Telegram notification - skip for stream status updates for non-admins
         if user.telegram_chat_id and (event_type != 'stream_status_update' or user.role == 'admin'):
             asyncio.run(NotificationService.send_telegram_notification(user, event_type, details, platform, streamer, is_image, image_data))
             channels_sent.append('telegram')
 
         if channels_sent:
             logger.info(f"Sent notifications to {user.username} via {', '.join(channels_sent)} for {event_type}")
-        else:
-            logger.info(f"No notifications sent to {user.username} for {event_type}")
 
     @staticmethod
     def create_in_app_notification(user, event_type, details, room_url=None, platform=None, streamer=None):
-        """Create an in-app notification with correct agent assignment."""
-        from utils.notifications import emit_notification
+        """Create an in-app notification."""
         try:
             assignment_id, agent_id = NotificationService.get_stream_assignment(room_url) if room_url else (None, None)
-            
-            assigned_agent_username = None
-            if user.role == 'agent':
-                assigned_agent_username = user.username
-                agent_id = user.id
-            elif agent_id:
-                assigned_agent_username = NotificationService.fetch_agent_username(agent_id)
-            elif 'assigned_agent' in details and details['assigned_agent']:
-                try:
-                    agent_id = int(details['assigned_agent'])
-                    assigned_agent_username = NotificationService.fetch_agent_username(agent_id)
-                except (ValueError, TypeError):
-                    assigned_agent_username = details['assigned_agent']
+            assigned_agent = user.username if user.role == 'agent' else NotificationService.fetch_agent_username(agent_id) if agent_id else 'Unassigned'
 
             notification = DetectionLog(
                 event_type=event_type,
@@ -349,7 +308,7 @@ class NotificationService:
                     **details,
                     'platform': platform or details.get('platform', 'Unknown'),
                     'streamer_name': streamer or details.get('streamer_username', 'Unknown'),
-                    'assigned_agent': assigned_agent_username or 'Unassigned',
+                    'assigned_agent': assigned_agent,
                 },
                 timestamp=datetime.utcnow(),
                 read=False,
@@ -369,7 +328,7 @@ class NotificationService:
                 "room_url": notification.room_url,
                 "streamer": notification.details.get('streamer_name', 'Unknown'),
                 "platform": notification.details.get('platform', 'Unknown'),
-                "assigned_agent": assigned_agent_username or 'Unassigned',
+                "assigned_agent": assigned_agent,
             }
             emit_notification(notification_data)
             logger.info(f"Emitted in-app notification for {event_type} to user {user.username}")
@@ -379,33 +338,23 @@ class NotificationService:
 
     @staticmethod
     def send_email_notification(user, event_type, details, platform, streamer):
-        """Send an email notification with correct agent username."""
+        """Send an email notification."""
+        if event_type == 'stream_status_update':
+            logger.info(f"Skipping email notification for stream status update to {user.username}")
+            return
+
         try:
-            # Skip email notifications for stream status updates to non-admin users
-            if event_type == 'stream_status_update' and user.role != 'admin':
-                logger.info(f"Skipping email notification for stream status update to {user.username}")
-                return
-                
             room_url = details.get('room_url')
             _, agent_id = NotificationService.get_stream_assignment(room_url) if room_url else (None, None)
-            
-            assigned_agent = None
-            if agent_id:
-                assigned_agent = NotificationService.fetch_agent_username(agent_id)
-            elif 'assigned_agent' in details:
-                try:
-                    agent_id = int(details['assigned_agent'])
-                    assigned_agent = NotificationService.fetch_agent_username(agent_id)
-                except (ValueError, TypeError):
-                    assigned_agent = details['assigned_agent']
+            assigned_agent = NotificationService.fetch_agent_username(agent_id) if agent_id else details.get('assigned_agent', 'Unassigned')
 
             msg = MIMEText(
                 f"New {event_type.replace('_', ' ').title()} Alert\n"
                 f"Platform: {platform or 'Unknown'}\n"
                 f"Streamer: {streamer or 'Unknown'}\n"
-                f"Assigned Agent: {assigned_agent or 'Unassigned'}\n"
+                f"Assigned Agent: {assigned_agent}\n"
                 f"Details: {details.get('message', 'No details provided')}\n"
-                f"URL: {details.get('room_url', 'No URL provided')}"
+                f"URL: {room_url or 'No URL provided'}"
             )
             msg['Subject'] = f"[StreamMonitor] {event_type.replace('_', ' ').title()} Notification"
             msg['From'] = os.getenv('MAIL_DEFAULT_SENDER', 'noreply@jetcamstudio.com')
@@ -419,36 +368,31 @@ class NotificationService:
                     with smtplib.SMTP(os.getenv('MAIL_SERVER', 'smtp.gmail.com'), int(os.getenv('MAIL_PORT', 587))) as server:
                         if os.getenv('MAIL_USE_TLS', 'True').lower() == 'true':
                             server.starttls()
-                        server.login(
-                            os.getenv('MAIL_USERNAME'),
-                            os.getenv('MAIL_PASSWORD')
-                        )
+                        server.login(os.getenv('MAIL_USERNAME'), os.getenv('MAIL_PASSWORD'))
                         server.send_message(msg)
                     logger.info(f"Sent email to {user.email} for {event_type}")
                     break
                 except Exception as e:
                     if attempt < max_retries - 1:
-                        logger.warning(f"Email attempt {attempt + 1} failed for {user.email}: {str(e)}. Retrying...")
+                        logger.warning(f"Email attempt {attempt + 1} failed: {str(e)}. Retrying...")
                         time.sleep(retry_delay)
                     else:
-                        logger.error(f"Failed to send email to {user.email} after {max_retries} attempts: {str(e)}")
+                        logger.error(f"Failed to send email to {user.email}: {str(e)}")
         except Exception as e:
             logger.error(f"Failed to send email to {user.email}: {str(e)}")
 
     @staticmethod
     def notify_admins(event_type, details, room_url=None, platform=None, streamer=None):
-        """Notify all admins with appropriate channels."""
+        """Notify all admins."""
+        if event_type == 'stream_status_update' and NotificationService.app.name == 'monitor_app':
+            logger.info("Skipping stream status notification in monitor app")
+            return
+
         admins = User.query.filter_by(role='admin', receive_updates=True).all()
         room_url = room_url or details.get('room_url')
         _, agent_id = NotificationService.get_stream_assignment(room_url) if room_url else (None, None)
-        if agent_id:
-            details['assigned_agent'] = NotificationService.fetch_agent_username(agent_id)
-        elif 'assigned_agent' in details and details['assigned_agent']:
-            try:
-                agent_id = int(details['assigned_agent'])
-                details['assigned_agent'] = NotificationService.fetch_agent_username(agent_id)
-            except (ValueError, TypeError):
-                pass
+        details['assigned_agent'] = NotificationService.fetch_agent_username(agent_id) if agent_id else 'Unassigned'
+        
         for admin in admins:
             NotificationService.send_user_notification(
                 admin, event_type, details, room_url, platform, streamer
@@ -457,7 +401,6 @@ class NotificationService:
     @staticmethod
     def notify_assignment(agent, stream, assigner, notes=None, priority='normal'):
         """Notify an agent about a new assignment."""
-        from utils.notifications import emit_message_update
         details = {
             'message': f"New stream assignment: {stream.streamer_username}",
             'room_url': stream.room_url,
@@ -502,7 +445,6 @@ class NotificationService:
     @staticmethod
     def notify_unassignment(agent, stream, assigner):
         """Notify an agent about an unassignment."""
-        from utils.notifications import emit_message_update
         details = {
             'message': f"Stream unassigned: {stream.streamer_username}",
             'room_url': stream.room_url,
@@ -543,37 +485,26 @@ class NotificationService:
             db.session.rollback()
 
     @staticmethod
-    def notify_stream_status_change(stream, old_status, new_status):
+    def notify_stream_status_change(stream, old_status, new_status, change_count=1):
         """Notify relevant users about a stream status change."""
-        from utils.notifications import emit_notification
+        if NotificationService.app.name == 'monitor_app':
+            logger.info(f"Skipping stream status notification in monitor app for {stream.streamer_username}")
+            return
+
         try:
-            # Skip notifications for minor status changes
             if (old_status == 'online' and new_status == 'monitoring') or (old_status == 'monitoring' and new_status == 'online'):
-                logger.info(f"Skipping notification for minor status change from {old_status} to {new_status} for {stream.streamer_username}")
-                # Still update the database
-                notification = DetectionLog(
-                    event_type='stream_status_update',
-                    room_url=stream.room_url,
-                    details={
-                        'message': f"Stream status changed from {old_status} to {new_status}",
-                        'room_url': stream.room_url,
-                        'streamer_username': stream.streamer_username,
-                        'platform': stream.type,
-                        'status': new_status
-                    },
-                    timestamp=datetime.utcnow(),
-                    read=True,  # Mark as read since we're not notifying anyone
-                )
-                db.session.add(notification)
-                db.session.commit()
+                logger.info(f"Skipping notification for minor status change from {old_status} to {new_status}")
                 return
                 
+            message = (f"Stream status changed from {old_status} to {new_status} ({change_count} changes)" 
+                      if change_count > 1 else f"Stream status changed from {old_status} to {new_status}")
             details = {
-                'message': f"Stream status changed from {old_status} to {new_status}",
+                'message': message,
                 'room_url': stream.room_url,
                 'streamer_username': stream.streamer_username,
                 'platform': stream.type,
-                'status': new_status
+                'status': new_status,
+                'change_count': change_count
             }
             assignment_id, agent_id = NotificationService.get_stream_assignment(stream.room_url)
             if agent_id:
@@ -584,12 +515,10 @@ class NotificationService:
                         agent, 'stream_status_update', details, stream.room_url, stream.type, stream.streamer_username
                     )
             
-            # Only notify admins about offline->online and online->offline transitions
             if (old_status == 'offline' and new_status in ['online', 'monitoring']) or \
                (old_status in ['online', 'monitoring'] and new_status == 'offline'):
                 NotificationService.notify_admins('stream_status_update', details, stream.room_url, stream.type, stream.streamer_username)
             
-            # Create a DetectionLog entry for the status change
             notification = DetectionLog(
                 event_type='stream_status_update',
                 room_url=stream.room_url,
@@ -616,32 +545,5 @@ class NotificationService:
             emit_notification(notification_data)
             logger.info(f"Emitted stream status update for {stream.streamer_username}: {new_status}")
         except Exception as e:
-            logger.error(f"Failed to notify stream status change for {stream.streamer_username}: {str(e)}")
+            logger.error(f"Failed to notify stream status change: {str(e)}")
             db.session.rollback()
-
-    @classmethod
-    def schedule_status_check(cls):
-        try:
-            if not scheduler.running:
-                scheduler.start()
-            
-            # Remove existing job if it exists
-            scheduler.remove_job('check_stream_statuses', jobstore='default')
-            
-            # Add new job with error handling
-            scheduler.add_job(
-                cls.check_stream_statuses,
-                'interval',
-                minutes=1,
-                id='check_stream_statuses',
-                replace_existing=True,
-                max_instances=1,
-                coalesce=True
-            )
-        except RuntimeError as e:
-            if "cannot schedule new futures after shutdown" in str(e):
-                logging.warning("Scheduler was shut down, attempting restart...")
-                scheduler.start()
-                cls.schedule_status_check()  # Retry scheduling
-            else:
-                raise

@@ -1,4 +1,4 @@
-# extensions.py
+# monitor_extensions.py
 import logging
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 
 db = SQLAlchemy()
 migrate = Migrate()
-socketio = SocketIO(async_mode='eventlet')  # Use eventlet for async
+socketio = SocketIO(async_mode='eventlet')  # Use eventlet for monitor app
 
-# Configure executors with larger pool size and proper shutdown
+# Configure executors
 executors = {
-    'default': ThreadPoolExecutor(1)  # Increase thread pool size
+    'default': ThreadPoolExecutor(1)
 }
 
-# Create scheduler with better configuration
+# Create scheduler
 scheduler = BackgroundScheduler(
     executors=executors,
     job_defaults={
@@ -31,13 +31,13 @@ scheduler = BackgroundScheduler(
 
 def init_extensions(app):
     try:
-        logger.info("Initializing SQLAlchemy")
+        logger.info("Initializing SQLAlchemy (monitor)")
         db.init_app(app)
-        logger.info("Initializing Flask-Migrate")
+        logger.info("Initializing Flask-Migrate (monitor)")
         migrate.init_app(app, db)
-        logger.info("Initializing Flask-SocketIO")
+        logger.info("Initializing Flask-SocketIO (monitor)")
         socketio.init_app(app)
-        logger.info("Flask-SocketIO initialized successfully")
+        logger.info("Flask-SocketIO initialized successfully (monitor)")
     except Exception as e:
-        logger.error(f"Error initializing extensions: {str(e)}")
+        logger.error(f"Error initializing monitor extensions: {str(e)}")
         raise

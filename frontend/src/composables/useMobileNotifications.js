@@ -98,13 +98,10 @@ export function useMobileNotifications() {
   };
   const setupSocket = () => {
     // Create the socket instance and assign to the ref
-    socket.value = io(
-      `    https://monitor-backend.jetcamstudio.com:5000notifications`,
-      {
-        path: "/ws",
-        transports: ["websocket", "polling"],
-      }
-    );
+    socket.value = io(`     http://localhost:5000notifications`, {
+      path: "/ws",
+      transports: ["websocket", "polling"],
+    });
 
     // Use socket.value to access the actual Socket.IO instance
     socket.value.on("connect", () => {

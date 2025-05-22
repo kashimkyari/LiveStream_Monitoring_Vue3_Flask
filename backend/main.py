@@ -7,215 +7,70 @@ gevent.monkey.patch_all()
 
 import logging
 import os
-import time
-import fcntl  # For file-based locking
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify
+from flask import jsonify
 from werkzeug.security import generate_password_hash
 import secrets
 import string
-from flask_cors import CORS
+from config import create_app, configure_ssl_context
+from extensions import db, socketio
+from models import User
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
 )
+logger = logging.getLogger(__name__)
 
 load_dotenv()
-
-from config import create_app
-from services.notification_service import NotificationService
-from extensions import db
-from models import User
-from monitoring import start_notification_monitor
 
 # Initialize Flask app
 app = create_app()
 
-# Lock file path for monitoring
-MONITOR_LOCK_FILE = '/tmp/livestream_monitoring.lock'
-
-# Validate critical environment variables
-def validate_env_vars():
-    """Validate critical environment variables at startup."""
-    required_vars = ['FLASK_SECRET_KEY', 'DATABASE_URL']
-    for var in required_vars:
-        if not os.getenv(var):
-            logging.error(f"Missing required environment variable: {var}")
-            raise ValueError(f"Missing required environment variable: {var}")
-    try:
-        float(os.getenv('AUDIO_SAMPLE_DURATION', '10'))
-        logging.info("AUDIO_SAMPLE_DURATION is valid")
-    except ValueError:
-        logging.error("AUDIO_SAMPLE_DURATION must be a valid number")
-        raise ValueError("AUDIO_SAMPLE_DURATION must be a valid number")
-
-# Initialize SocketIO and verify
-try:
-    NotificationService.init(app)
-    if not hasattr(NotificationService, 'socketio'):
-        raise AttributeError("SocketIO failed to initialize on NotificationService")
-    logging.info("SocketIO initialized successfully")
-except Exception as e:
-    logging.error(f"Failed to initialize SocketIO: {str(e)}")
-    raise
-
-# Parse allowed origins from environment
-allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else ['*']
-if 'https://monitor.jetcamstudio.com' not in allowed_origins and '*' not in allowed_origins:
-    allowed_origins.append('https://monitor.jetcamstudio.com')
-logging.info(f"Allowed origins configured: {allowed_origins}")
-
-# Configure CORS for Flask app
-CORS(app, resources={r"/api/*": {"origins": allowed_origins}, r"/socket.io/*": {"origins": allowed_origins}})
-
-# Register a before_request handler for CORS
-@app.before_request
-def handle_preflight():
-    """Special handling for CORS preflight requests"""
-    if request.method == 'OPTIONS':
-        response = app.make_default_options_response()
-        origin = request.headers.get('Origin', '*')
-        
-        if origin in allowed_origins:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control'
-            response.headers['Access-Control-Max-Age'] = '600'
-        return response
-
-# Add after_request handler to set CORS headers for all responses
-@app.after_request
-def add_cors_headers(response):
-    """Add CORS headers to all responses"""
-    origin = request.headers.get('Origin')
-    if origin and origin in allowed_origins:
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control'
-    return response
-
-# Add CORS test endpoint for debugging
-@app.route('/cors-test', methods=['GET', 'OPTIONS'])
-def cors_test():
-    """Test endpoint for CORS configuration"""
-    if request.method == 'OPTIONS':
-        return app.make_default_options_response()
-    
-    return jsonify({
-        "message": "CORS test successful",
-        "your_origin": request.headers.get('Origin', 'No origin header'),
-        "request_protocol": request.headers.get('X-Forwarded-Proto', 'https'),
-        "request_headers": dict(request.headers),
-        "cors_enabled": True,
-        "cors_mode": "HTTPS with credentials enabled",
-        "credentials_supported": True
-    })
-
-# === Database Initialization ===
+# Database initialization
 def initialize_database():
     """Initialize database and create default admin user."""
     with app.app_context():
         try:
             db.create_all()
-            logging.info("Database tables initialized")
-            
-            # === Admin User Creation ===
+            logger.info("Database tables initialized")
             admin_exists = User.query.filter_by(role='admin').first()
             if not admin_exists:
-                admin_username = os.getenv('DEFAULT_ADMIN_USERNAME')
+                admin_username = os.getenv('DEFAULT_ADMIN_USERNAME', 'admin')
                 admin_password = os.getenv('DEFAULT_ADMIN_PASSWORD')
-                admin_email = os.getenv('DEFAULT_ADMIN_EMAIL')
-
-                if not all([admin_username, admin_password, admin_email]):
-                    if not admin_password:
-                        chars = string.ascii_letters + string.digits + string.punctuation
-                        admin_password = ''.join(secrets.choice(chars) for _ in range(16))
-                        logging.warning(f"Admin password not found. Generated: {admin_password}")
-                        logging.warning("SAVE THIS PASSWORD AND SET ENV VARIABLES!")
-                    else:
-                        logging.error("Missing admin credentials in environment variables")
-
+                admin_email = os.getenv('DEFAULT_ADMIN_EMAIL', 'admin@example.com')
+                if not admin_password:
+                    chars = string.ascii_letters + string.digits + string.punctuation
+                    admin_password = ''.join(secrets.choice(chars) for _ in range(16))
+                    logger.warning(f"Admin password not found. Generated: {admin_password}")
+                    logger.warning("SAVE THIS PASSWORD AND SET ENV VARIABLES!")
                 admin_user = User(
-                    username=admin_username or "admin",
+                    username=admin_username,
                     password=generate_password_hash(admin_password),
                     role='admin',
-                    email=admin_email or "admin@example.com",
+                    email=admin_email,
                     receive_updates=True
                 )
                 db.session.add(admin_user)
                 db.session.commit()
-                logging.info("Default admin user created")
+                logger.info("Default admin user created")
             else:
-                logging.info("Admin user already exists")
-                
-            # Validate environment variables
-            validate_env_vars()
-            
+                logger.info("Admin user already exists")
         except Exception as e:
-            logging.error(f"DB init failed: {str(e)}")
+            logger.error(f"DB init failed: {str(e)}")
             raise
 
-# === SSL Configuration Helper ===
-def configure_ssl_context():
-    """Configure SSL context for the Flask application"""
-    ssl_context = None
-    enable_ssl = os.getenv('ENABLE_SSL', 'false').lower() == 'true'
-    
-    if enable_ssl:
-        cert_dir = os.getenv('CERT_DIR', '/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend')
-        certfile = os.getenv('SSL_CERT_PATH', os.path.join(cert_dir, 'fullchain.pem'))
-        keyfile = os.getenv('SSL_KEY_PATH', os.path.join(cert_dir, 'privkey.pem'))
-        
-        if os.path.exists(certfile) and os.path.exists(keyfile):
-            ssl_context = (certfile, keyfile)
-            logging.info(f"SSL Enabled with cert: {certfile} and key: {keyfile}")
-        else:
-            logging.error(f"SSL certificate files not found at {certfile} and {keyfile}")
-            raise FileNotFoundError("SSL certificate files not found")
-            
-    return ssl_context
-
-# === Monitoring Lock ===
-def acquire_monitoring_lock():
-    """Acquire a file-based lock to ensure only one worker starts monitoring."""
-    lock_fd = open(MONITOR_LOCK_FILE, 'w')
-    try:
-        fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        logging.info("Acquired monitoring lock")
-        return lock_fd
-    except IOError:
-        logging.info("Monitoring lock already held by another process")
-        lock_fd.close()
-        return None
-
-# === Main Execution ===
+# Main execution
 if __name__ == "__main__":
-    # Perform all initialization steps
     try:
-        initialize_database()  # Initialize database and admin user
-        ssl_context = configure_ssl_context()  # Configure SSL
+        initialize_database()
+        ssl_context = configure_ssl_context()
         server_mode = "HTTPS" if ssl_context else "HTTP"
         debug_mode = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
-        logging.info(f"Starting server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
+        logger.info(f"Starting server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
         
-        # Attempt to acquire monitoring lock and start monitoring
-        lock_fd = acquire_monitoring_lock()
-        if lock_fd:
-            try:
-                with app.app_context():
-                    start_notification_monitor()
-                    logging.info("Started monitoring for all eligible streams")
-            except Exception as e:
-                logging.error(f"Failed to start monitoring for all streams: {str(e)}")
-                raise
-        else:
-            logging.info("Skipping monitoring startup as another process is handling it")
-        
-        # Configure Socket.IO options
         socketio_kwargs = {
             'app': app,
             'host': '0.0.0.0',
@@ -224,20 +79,10 @@ if __name__ == "__main__":
             'use_reloader': debug_mode,
             'allow_unsafe_werkzeug': True
         }
-
-        # Only add SSL context if SSL is enabled
         if ssl_context:
             socketio_kwargs['ssl_context'] = ssl_context
-            
-        NotificationService.socketio.run(**socketio_kwargs)
-        
+
+        socketio.run(**socketio_kwargs)
     except Exception as e:
-        logging.error(f"Application startup failed: {str(e)}")
+        logger.error(f"Application startup failed: {str(e)}")
         raise
-    finally:
-        # Release the lock file if held
-        if 'lock_fd' in locals() and lock_fd:
-            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
-            lock_fd.close()
-            os.remove(MONITOR_LOCK_FILE) if os.path.exists(MONITOR_LOCK_FILE) else None
-            logging.info("Released monitoring lock")

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import av
 import json
 import hashlib
+import requests
 from flask import current_app
 from models import (
     ChatKeyword, FlaggedObject, DetectionLog, Stream, User, Assignment,
@@ -21,6 +22,7 @@ from audio_processing import process_audio_segment, log_audio_detection
 from video_processing import process_video_frame, log_video_detection
 from chat_processing import fetch_chat_messages, process_chat_messages, log_chat_detection, initialize_chat_globals, load_sentiment_analyzer, fetch_chaturbate_room_uid
 from dotenv import load_dotenv
+from time import time
 
 # Load environment variables
 load_dotenv()
@@ -44,13 +46,10 @@ last_chat_alerts = {}
 stream_processors = {}
 agent_cache = {}
 all_agents_fetched = False
-gevent_pool = Pool(5)
+gevent_pool = Pool(1)  # Limit to one worker to prevent duplicates
 
-# Directory for saving transcriptions
-TRANSCRIPTION_DIR = os.getenv('TRANSCRIPTION_DIR', '/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/transcriptions/')   
-
-
-
+# Directory for transcriptions
+TRANSCRIPTION_DIR = os.getenv('TRANSCRIPTION_DIR', '/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend/transcriptions/')
 
 # Initialize monitoring globals
 def initialize_monitoring():
@@ -112,6 +111,8 @@ def load_yolo_model():
         if _yolo_model is None:
             try:
                 from ultralytics import YOLO
+                import torch
+                torch.backends.nnpack.enabled = False  # Disable NNPACK to avoid warnings
                 _yolo_model = YOLO("yolov8s.pt", verbose=False)
                 _yolo_model.verbose = False
                 logger.info("YOLO model loaded successfully")
@@ -215,22 +216,17 @@ def get_stream_assignment(stream_url):
                 sc_stream = StripchatStream.query.filter_by(stripchat_m3u8_url=stream_url).first()
                 if sc_stream:
                     stream = Stream.query.get(sc_stream.id)
-        
         if not stream:
             logger.warning(f"No stream found for URL: {stream_url}")
             return None, None
-        
         query = Assignment.query.options(
             joinedload(Assignment.agent),
             joinedload(Assignment.stream)
         ).filter_by(stream_id=stream.id)
-        
         assignments = query.all()
-        
         if not assignments:
             logger.info(f"No assignments found for stream: {stream_url}")
             return None, None
-        
         assignment = assignments[0]
         agent_id = assignment.agent_id
         fetch_agent_username(agent_id)
@@ -239,41 +235,42 @@ def get_stream_assignment(stream_url):
 def save_transcription_to_json(stream_url, transcript, detected_keywords):
     """Save transcription to a JSON file with metadata"""
     try:
-        # Create transcriptions directory if it doesn't exist
         os.makedirs(TRANSCRIPTION_DIR, exist_ok=True)
-        
-        # Generate a short hash of the stream_url for filename
         url_hash = hashlib.md5(stream_url.encode()).hexdigest()[:8]
-        
-        # Generate timestamp for filename (format: YYYYMMDD_HHMMSS)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Create filename
         filename = f"transcription_{url_hash}_{timestamp}.json"
         filepath = os.path.join(TRANSCRIPTION_DIR, filename)
-        
-        # Prepare JSON data
         data = {
             "stream_url": stream_url,
             "timestamp": datetime.now().isoformat(),
             "transcription": transcript,
             "detected_keywords": detected_keywords
         }
-        
-        # Write to JSON file
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
-        
         logger.info(f"Saved transcription to {filepath}")
-        
     except Exception as e:
         logger.error(f"Error saving transcription to JSON for {stream_url}: {e}")
 
-# Main processing loop
+def check_stream_availability(stream_url, timeout=10):
+    """Check if the stream URL is accessible"""
+    try:
+        response = requests.head(stream_url, timeout=timeout)
+        if response.status_code == 200:
+            logger.debug(f"Stream URL {stream_url} is accessible")
+            return True
+        else:
+            logger.warning(f"Stream URL {stream_url} returned status code {response.status_code}")
+            return False
+    except requests.RequestException as e:
+        logger.error(f"Error checking stream availability for {stream_url}: {e}")
+        return False
+
 def process_combined_detection(app, stream_url, cancel_event):
-    """Main monitoring loop processing audio, video, and chat from M3U8 stream"""
+    """Main monitoring loop processing audio, video, and chat from M3U8 stream with separate AV containers"""
     with app.app_context():
         logger.info(f"Starting monitoring for {stream_url}")
+        # Query stream info to get the stream ID
         stream = Stream.query.filter_by(room_url=stream_url).first()
         if not stream:
             cb_stream = ChaturbateStream.query.filter_by(chaturbate_m3u8_url=stream_url).first()
@@ -283,10 +280,10 @@ def process_combined_detection(app, stream_url, cancel_event):
                 sc_stream = StripchatStream.query.filter_by(stripchat_m3u8_url=stream_url).first()
                 if sc_stream:
                     stream = Stream.query.get(sc_stream.id)
-        
         if not stream:
             logger.error(f"Stream not found for URL: {stream_url}")
             return
+        stream_id = stream.id  # Store stream ID for re-querying
 
         enable_video_monitoring = os.getenv('ENABLE_VIDEO_MONITORING', 'true').lower() == 'true'
         enable_audio_monitoring = os.getenv('ENABLE_AUDIO_MONITORING', 'true').lower() == 'true'
@@ -298,52 +295,108 @@ def process_combined_detection(app, stream_url, cancel_event):
 
         last_chat_process_time = None
         keywords = refresh_flagged_keywords()
+        max_retries = 3
+        retry_delay = 10  # Seconds between retries
+        frame_process_times = {}  # Dictionary to store last process time per stream
 
         while not cancel_event.is_set():
-            db.session.refresh(stream)
-            if stream.status == 'offline':
-                logger.info(f"Stopping monitoring for offline stream: {stream.id}")
-                stop_monitoring(stream)
-                break
-
-            if enable_video_monitoring or enable_audio_monitoring:
+            with app.app_context():
+                # Re-query the stream to ensure it's in the current session
+                stream = Stream.query.get(stream_id)
+                if not stream:
+                    logger.error(f"Stream with ID {stream_id} no longer exists")
+                    break
                 try:
-                    container = av.open(stream_url, timeout=60)
-                    logger.info(f"Stream opened successfully: {stream_url}")
-                    video_stream = next((s for s in container.streams if s.type == 'video'), None) if enable_video_monitoring else None
-                    audio_stream = next((s for s in container.streams if s.type == 'audio'), None) if enable_audio_monitoring else None
-                    
-                    if not (video_stream or audio_stream or enable_chat_monitoring):
-                        logger.error(f"No enabled monitoring types for {stream_url}")
-                        gevent.sleep(10)
-                        continue
+                    db.session.refresh(stream)
+                    if stream.status == 'offline':
+                        logger.info(f"Stopping monitoring for offline stream: {stream.id}")
+                        stop_monitoring(stream)
+                        break
+                except Exception as e:
+                    logger.error(f"Error refreshing stream {stream_id}: {e}")
+                    break
 
-                    audio_buffer = []
-                    total_audio_duration = 0
-                    sample_rate = audio_stream.rate if audio_stream else 16000
-                    last_process_time = None
+            if enable_video_monitoring:
+                retry_count = 0
+                stream_available = False
+                while retry_count < max_retries and not cancel_event.is_set():
+                    if check_stream_availability(stream_url):
+                        stream_available = True
+                        break
+                    logger.warning(f"Stream {stream_url} unavailable, retrying ({retry_count + 1}/{max_retries})")
+                    retry_count += 1
+                    gevent.sleep(retry_delay)
 
-                    for packet in container.demux():
-                        if cancel_event.is_set():
-                            break
-                        if enable_video_monitoring and packet.stream == video_stream:
+                if not stream_available:
+                    logger.error(f"Stream {stream_url} is offline or inaccessible after {max_retries} retries")
+                    with app.app_context():
+                        stream = Stream.query.get(stream_id)
+                        if stream:
+                            stream.status = 'offline'
+                            db.session.commit()
+                            stop_monitoring(stream)
+                    break
+
+                try:
+                    video_container = av.open(stream_url, timeout=60)
+                    logger.info(f"Video stream opened successfully: {stream_url}")
+                    video_stream = next((s for s in video_container.streams if s.type == 'video'), None)
+                    if video_stream:
+                        for packet in video_container.demux(video_stream):
+                            if cancel_event.is_set():
+                                break
                             try:
                                 for frame in packet.decode():
                                     frame_time = frame.pts * float(video_stream.time_base)
+                                    last_process_time = frame_process_times.get(stream_url)
                                     if last_process_time is None or frame_time - last_process_time >= 5:
                                         img = frame.to_ndarray(format='bgr24')
                                         detections = process_video_frame(img, stream_url)
                                         if detections:
                                             log_video_detection(detections, img, stream_url)
-                                        last_process_time = frame_time
+                                        frame_process_times[stream_url] = frame_time
+                                        logger.debug(f"Processed frame for {stream_url} at time {frame_time}")
                             except av.error.InvalidDataError as e:
                                 logger.warning(f"Invalid data error while decoding video packet for {stream_url}: {e}")
-                                continue  # Skip to the next packet
+                                continue
                             except Exception as e:
                                 logger.error(f"Unexpected error decoding video packet for {stream_url}: {e}")
-                                continue  # Skip to the next packet
-                                    
-                        elif enable_audio_monitoring and packet.stream == audio_stream:
+                                continue
+                    video_container.close()
+                except av.error.EOFError as e:
+                    logger.error(f"EOF error opening video stream {stream_url}: {e}")
+                    with app.app_context():
+                        stream = Stream.query.get(stream_id)
+                        if stream:
+                            stream.status = 'offline'
+                            db.session.commit()
+                            stop_monitoring(stream)
+                    break
+                except av.error.OSError as e:
+                    logger.error(f"OS error opening video stream {stream_url}: {e}")
+                    gevent.sleep(retry_delay)
+                    continue
+                except av.error.ValueError as e:
+                    logger.error(f"Value error opening video stream {stream_url}: {e}")
+                    gevent.sleep(retry_delay)
+                    continue
+                except Exception as e:
+                    logger.error(f"Unexpected error opening video stream {stream_url}: {e}")
+                    gevent.sleep(retry_delay)
+                    continue
+
+            if enable_audio_monitoring:
+                try:
+                    audio_container = av.open(stream_url, timeout=60)
+                    logger.info(f"Audio stream opened successfully: {stream_url}")
+                    audio_stream = next((s for s in audio_container.streams if s.type == 'audio'), None)
+                    if audio_stream:
+                        audio_buffer = []
+                        total_audio_duration = 0
+                        sample_rate = audio_stream.rate if audio_stream else 16000
+                        for packet in audio_container.demux(audio_stream):
+                            if cancel_event.is_set():
+                                break
                             try:
                                 for frame in packet.decode():
                                     audio_data = frame.to_ndarray().flatten().astype(np.float32) / 32768.0
@@ -353,17 +406,13 @@ def process_combined_detection(app, stream_url, cancel_event):
                                     if total_audio_duration >= current_app.config['AUDIO_SAMPLE_DURATION']:
                                         combined_audio = np.concatenate(audio_buffer)
                                         detections, transcript = process_audio_segment(combined_audio, sample_rate, stream_url)
-                                        # Log transcription
                                         logger.info(f"Transcription for {stream_url} at {datetime.now().isoformat()}:\n{transcript}")
-                                        # Check for keywords
                                         detected_keywords = []
                                         if keywords and transcript:
                                             detected_keywords = [kw for kw in keywords if kw in transcript.lower()]
                                             if detected_keywords:
                                                 logger.info(f"Keywords detected in transcription: {detected_keywords}")
-                                        # Save transcription to JSON
                                         save_transcription_to_json(stream_url, transcript, detected_keywords)
-                                        # Handle detections
                                         for detection in detections:
                                             log_audio_detection(detection, stream_url)
                                             platform, streamer = get_stream_info(stream_url)
@@ -384,7 +433,6 @@ def process_combined_detection(app, stream_url, cancel_event):
                                                 "assigned_agent": "Unassigned"
                                             }
                                             emit_notification(notification_data)
-                                        # Additional alert for detected keywords
                                         if detected_keywords:
                                             platform, streamer = get_stream_info(stream_url)
                                             notification_data = {
@@ -409,15 +457,15 @@ def process_combined_detection(app, stream_url, cancel_event):
                             except Exception as e:
                                 logger.error(f"Error processing audio frame for {stream_url}: {e}")
                                 continue
-                    container.close()
+                    audio_container.close()
                 except av.error.OSError as e:
-                    logger.error(f"OS error opening stream {stream_url}: {e}", exc_info=True)
+                    logger.error(f"OS error opening audio stream {stream_url}: {e}", exc_info=True)
                     gevent.sleep(10)
                 except av.error.ValueError as e:
-                    logger.error(f"Value error opening stream {stream_url}: {e}", exc_info=True)
+                    logger.error(f"Value error opening audio stream {stream_url}: {e}", exc_info=True)
                     gevent.sleep(10)
                 except Exception as e:
-                    logger.error(f"Unexpected error opening stream {stream_url}: {e}", exc_info=True)
+                    logger.error(f"Unexpected error opening audio stream {stream_url}: {e}", exc_info=True)
                     gevent.sleep(10)
 
             if enable_chat_monitoring:
@@ -429,13 +477,14 @@ def process_combined_detection(app, stream_url, cancel_event):
                     last_chat_process_time = current_time
             
             if not (enable_video_monitoring or enable_audio_monitoring):
-                gevent.sleep(10)  # Sleep if only chat monitoring is enabled to avoid tight loop
+                gevent.sleep(10)
 
         logger.info(f"Stopped monitoring {stream_url}")
 
-# Main monitoring control
 def start_monitoring(stream):
     """Start monitoring a stream for detections, fetching and saving broadcaster_uid for Chaturbate streams if needed"""
+    start_time = time()
+    current_app.logger.info(f"Starting monitoring for stream {stream.id}")
     if not stream:
         logger.error("Stream not provided")
         return False
@@ -452,7 +501,6 @@ def start_monitoring(stream):
             logger.info(f"Stream already monitored: {stream.room_url}")
             return True
         
-        # For Chaturbate streams, ensure broadcaster_uid is fetched and saved
         if stream.type.lower() == 'chaturbate':
             cb_stream = ChaturbateStream.query.get(stream.id)
             if cb_stream and not cb_stream.broadcaster_uid:
@@ -472,13 +520,15 @@ def start_monitoring(stream):
         stream.is_monitored = True
         db.session.commit()
     
-    # Initialize globals before starting
-    initialize_monitoring()
-    
     stream_url = get_m3u8_url(stream)
     if not stream_url:
         logger.error(f"No valid m3u8 URL for stream: {stream.id}")
         return False
+    
+    # Check if stream is already being monitored
+    if stream_url in stream_processors:
+        logger.info(f"Stream {stream_url} is already being monitored by another worker")
+        return True
     
     logger.info(f"Starting monitoring for {stream_url}")
     cancel_event = gevent.event.Event()
@@ -493,12 +543,16 @@ def start_monitoring(stream):
         'id': stream.id,
         'url': stream_url,
         'status': 'monitoring',
-        'type': stream.type
+        'type': stream.type,
+        'isDetecting': True
     })
+    current_app.logger.info(f"start_monitoring took {time() - start_time:.2f} seconds")
     return True
 
 def stop_monitoring(stream):
     """Stop monitoring a stream"""
+    start_time = time()
+    current_app.logger.info(f"Stopping monitoring for stream {stream.id}")
     if not stream:
         logger.error("Stream not provided")
         return
@@ -524,8 +578,10 @@ def stop_monitoring(stream):
         'id': stream.id,
         'url': stream_url,
         'status': 'stopped',
-        'type': stream.type
+        'type': stream.type,
+        'isDetecting': False
     })
+    current_app.logger.info(f"stop_monitoring took {time() - start_time:.2f} seconds")
 
 def refresh_and_monitor_streams(stream_ids):
     """Refresh and monitor selected streams"""
@@ -614,6 +670,3 @@ __all__ = [
     'refresh_and_monitor_streams',
     'initialize_monitoring'
 ]
-
-if __name__ == "__main__":
-    print("Livestream monitoring system - import this module to use")

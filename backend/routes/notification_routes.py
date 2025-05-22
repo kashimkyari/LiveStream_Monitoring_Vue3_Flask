@@ -1,11 +1,11 @@
 # routes/notification_routes.py
 from flask import Blueprint, request, jsonify, session
 from extensions import db
-from models import DetectionLog, User, Stream, Assignment, Log, ChatMessage
+from models import DetectionLog, User, Stream, Assignment
 from utils import login_required
 from sqlalchemy import or_
 from datetime import datetime, timedelta
-from utils.notifications import emit_notification, emit_notification_update, emit_message_update
+from utils.notifications import emit_notification, emit_notification_update
 from sqlalchemy.orm import joinedload
 from services.notification_service import NotificationService
 import logging
@@ -42,7 +42,6 @@ def get_stream_assignment(stream_url):
     return NotificationService.get_stream_assignment(stream_url)
 
 @notification_bp.route("/api/streams/<int:stream_id>/status", methods=["POST"])
-
 def update_stream_status(stream_id):
     """Update stream status and emit notification if necessary"""
     try:
@@ -113,53 +112,40 @@ def update_stream_status(stream_id):
         logging.error(f"Error updating stream status: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@notification_bp.route("/api/logs", methods=["GET"])
-
-def get_logs():
-    try:
-        logs1 = Log.query.order_by(Log.timestamp.desc()).limit(100).all()
-        logs2 = DetectionLog.query.order_by(DetectionLog.timestamp.desc()).limit(100).all()
-        all_logs = logs1 + logs2
-        all_logs.sort(key=lambda x: x.timestamp, reverse=True)
-        recent_logs = all_logs[:100]
-        return jsonify([{
-            "id": log.id,
-            "event_type": log.event_type,
-            "timestamp": log.timestamp.isoformat(),
-            "details": log.details,
-            "read": log.read
-        } for log in recent_logs])
-    except Exception as e:
-        return jsonify({"message": "Error fetching dashboard data", "error": str(e)}), 500
-
 @notification_bp.route("/api/notifications", methods=["GET"])
-
 def get_all_notifications():
+    """Fetch notifications with pagination and optimized agent filtering"""
     try:
         user_id = session.get("user_id")
         user_role = session.get("user_role")
         
-        notifications = DetectionLog.query.order_by(DetectionLog.timestamp.desc()).all()
+        # Pagination parameters
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 50))
+        
+        query = DetectionLog.query.options(joinedload(DetectionLog.assigned_user))
         
         if user_role == "agent":
             agent = User.query.get(user_id)
             if not agent:
                 return jsonify({"error": "Agent not found"}), 404
                 
-            assigned_streams = [assignment.stream_id for assignment in agent.assignments]
-            relevant_notifications = []
+            # Get assigned stream IDs
+            assigned_stream_ids = [assignment.stream_id for assignment in agent.assignments]
             
-            for notification in notifications:
-                if notification.assigned_agent and int(notification.assigned_agent) == user_id:
-                    relevant_notifications.append(notification)
-                    continue
-                    
-                stream = Stream.query.filter_by(room_url=notification.room_url).first()
-                if stream and stream.id in assigned_streams:
-                    relevant_notifications.append(notification)
-                    
-            notifications = relevant_notifications
-            
+            # Optimized query: filter by assigned_agent or assigned streams
+            query = query.join(Assignment, DetectionLog.assignment_id == Assignment.id, isouter=True).filter(
+                or_(
+                    DetectionLog.assigned_agent == user_id,
+                    Assignment.stream_id.in_(assigned_stream_ids)
+                )
+            )
+        
+        # Apply pagination and ordering
+        notifications = query.order_by(DetectionLog.timestamp.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        ).items
+        
         return jsonify([{
             "id": n.id,
             "event_type": n.event_type,
@@ -172,23 +158,40 @@ def get_all_notifications():
             "assigned_agent": agent_cache.get(n.assigned_agent, "Unassigned") if n.assigned_agent else "Unassigned"
         } for n in notifications]), 200
     except Exception as e:
+        logging.error(f"Error fetching notifications: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications", methods=["POST"])
-
 def create_notification():
+    """Create a new notification, avoiding duplicates based on event_type, room_url, and details"""
     try:
         data = request.get_json()
         
         if not data.get('event_type') or not data.get('room_url'):
             return jsonify({"error": "Missing required fields: event_type, room_url"}), 400
             
+        # Check for existing notification to prevent duplicates
+        current_time = datetime.utcnow()
+        recent_time = current_time - timedelta(seconds=DEBOUNCE_INTERVAL)
+        existing_notification = DetectionLog.query.filter(
+            DetectionLog.event_type == data['event_type'],
+            DetectionLog.room_url == data['room_url'],
+            DetectionLog.details == data.get('details', {}),
+            DetectionLog.timestamp >= recent_time
+        ).first()
+        
+        if existing_notification:
+            return jsonify({
+                "message": "Notification already exists",
+                "notification_id": existing_notification.id
+            }), 200
+            
         assignment_id, agent_id = get_stream_assignment(data.get('room_url'))
         
         notification = DetectionLog(
             event_type=data.get('event_type'),
             room_url=data.get('room_url'),
-            timestamp=datetime.utcnow(),
+            timestamp=current_time,
             details=data.get('details', {}),
             read=data.get('read', False),
             assigned_agent=agent_id,
@@ -238,11 +241,12 @@ def create_notification():
         }), 201
     except Exception as e:
         db.session.rollback()
+        logging.error(f"Error creating notification: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/<int:notification_id>", methods=["GET"])
-
 def get_notification(notification_id):
+    """Fetch a single notification"""
     try:
         user_id = session.get("user_id")
         user_role = session.get("user_role")
@@ -275,11 +279,12 @@ def get_notification(notification_id):
             "assigned_agent": agent_cache.get(notification.assigned_agent, "Unassigned") if notification.assigned_agent else "Unassigned"
         }), 200
     except Exception as e:
+        logging.error(f"Error fetching notification: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/<int:notification_id>", methods=["PUT"])
-
 def update_notification(notification_id):
+    """Update an existing notification"""
     try:
         notification = DetectionLog.query.get(notification_id)
         if not notification:
@@ -337,11 +342,12 @@ def update_notification(notification_id):
         }), 200
     except Exception as e:
         db.session.rollback()
+        logging.error(f"Error updating notification: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/<int:notification_id>/read", methods=["PUT"])
-
 def mark_notification_read(notification_id):
+    """Mark a notification as read"""
     try:
         user_id = session.get("user_id")
         user_role = session.get("user_role")
@@ -371,11 +377,12 @@ def mark_notification_read(notification_id):
         
         return jsonify({"message": "Notification marked as read"}), 200
     except Exception as e:
+        logging.error(f"Error marking notification as read: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/read-all", methods=["PUT"])
-
 def mark_all_notifications_read():
+    """Mark all relevant notifications as read"""
     try:
         user_id = session.get("user_id")
         user_role = session.get("user_role")
@@ -391,27 +398,27 @@ def mark_all_notifications_read():
                 return jsonify({"error": "Agent not found"}), 404
 
             assigned_streams = [assignment.stream_id for assignment in agent.assignments]
-            notifications = DetectionLog.query.all()
+            notifications = DetectionLog.query.join(Assignment, DetectionLog.assignment_id == Assignment.id, isouter=True).filter(
+                or_(
+                    DetectionLog.assigned_agent == user_id,
+                    Assignment.stream_id.in_(assigned_streams)
+                )
+            ).all()
 
             for notification in notifications:
-                if notification.assigned_agent == user_id:
-                    notification.read = True
-                    emit_notification_update(notification.id, 'read')
-                    continue
-
-                stream = Stream.query.filter_by(room_url=notification.room_url).first()
-                if stream and stream.id in assigned_streams:
-                    notification.read = True
-                    emit_notification_update(notification.id, 'read')
+                notification.read = True
+                emit_notification_update(notification.id, 'read')
 
         db.session.commit()
         return jsonify({"message": "All notifications marked as read"}), 200
     except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error marking all notifications as read: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/<int:notification_id>", methods=["DELETE"])
-
 def delete_notification(notification_id):
+    """Delete a notification"""
     try:
         notification = DetectionLog.query.get(notification_id)
         if not notification:
@@ -423,11 +430,13 @@ def delete_notification(notification_id):
         
         return jsonify({"message": "Notification deleted"}), 200
     except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error deleting notification: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/delete-all", methods=["DELETE"])
-
 def delete_all_notifications():
+    """Delete all notifications"""
     try:
         notification_ids = [n.id for n in DetectionLog.query.all()]
         DetectionLog.query.delete()
@@ -439,11 +448,12 @@ def delete_all_notifications():
         return jsonify({"message": "All notifications deleted"}), 200
     except Exception as e:
         db.session.rollback()
+        logging.error(f"Error deleting all notifications: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/forwarded", methods=["GET"])
-
 def get_forwarded_notifications():
+    """Fetch forwarded notifications"""
     try:
         forwarded = DetectionLog.query.filter(
             DetectionLog.assigned_agent.isnot(None)
@@ -458,11 +468,12 @@ def get_forwarded_notifications():
             'status': 'acknowledged' if n.read else 'pending'
         } for n in forwarded]), 200
     except Exception as e:
+        logging.error(f"Error fetching forwarded notifications: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @notification_bp.route("/api/notifications/<int:notification_id>/forward", methods=["POST"])
-
 def forward_notification(notification_id):
+    """Forward a notification to an agent"""
     try:
         data = request.get_json()
         agent_id = data.get("agent_id")
@@ -511,7 +522,7 @@ def forward_notification(notification_id):
         sys_msg = ChatMessage(
             sender_id=session['user_id'],
             receiver_id=agent.id,
-            message=f"📨 Forwarded {notification.event_type.replace('_', ' ').title()} Alert",
+            message=f"ð��¨ Forwarded {notification.event_type.replace('_', ' ').title()} Alert",
             details=message_details,
             is_system=True,
             timestamp=datetime.utcnow()
@@ -547,4 +558,5 @@ def forward_notification(notification_id):
         }), 200
     except Exception as e:
         db.session.rollback()
+        logging.error(f"Error forwarding notification: {str(e)}")
         return jsonify({"error": str(e)}), 500

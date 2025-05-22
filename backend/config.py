@@ -2,12 +2,21 @@ import os
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
-from extensions import db
+from extensions import db, socketio
 from services.notification_service import NotificationService
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
+import logging
 
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
 
 class Config:
     """Base configuration for all environments."""
@@ -20,21 +29,18 @@ class Config:
     if os.getenv('DATABASE_URL') and 'supabase' in os.getenv('DATABASE_URL'):
         db_uri = os.getenv('DATABASE_URL')
         masked_uri = db_uri[:db_uri.find('://') + 3] + '****:****@' + db_uri[db_uri.find('@') + 1:]
-        print(f"Using Supabase database: {masked_uri}")
+        logger.info(f"Using Supabase database: {masked_uri}")
         
-        # Handle SSL parameters
         ssl_params = []
         if 'sslmode' not in db_uri:
             ssl_params.append('sslmode=require')
         
         root_cert_path = os.getenv('PG_ROOT_CERT_PATH')
         if root_cert_path and os.path.exists(root_cert_path):
-            print(f"Using SSL root certificate: {root_cert_path}")
+            logger.info(f"Using SSL root certificate: {root_cert_path}")
             ssl_params.append(f'sslrootcert={root_cert_path}')
         else:
-            print("Using SSL without certificate verification")
-            if 'sslmode' not in db_uri:
-                ssl_params.append('sslmode=require')
+            logger.info("Using SSL without certificate verification")
         
         if ssl_params:
             connector = '&' if '?' in db_uri else '?'
@@ -46,27 +52,26 @@ class Config:
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 30,  # Supports higher concurrency, compatible with SQLAlchemy 2.0
-        'pool_recycle': 180,  # Refreshes connections every 3 minutes to avoid stale connections
-        'pool_pre_ping': True,  # Ensures valid connections, supported by SQLAlchemy
-        'max_overflow': 20,  # Handles traffic spikes, compatible with SQLAlchemy
-        'pool_use_lifo': True,  # LIFO for connection reuse, improves performance
-        'pool_timeout': 30,  # Timeout for acquiring connections, prevents hangs
+        'pool_size': 10,
+        'pool_recycle': 180,
+        'pool_pre_ping': False,
+        'max_overflow': 20,
+        'pool_use_lifo': True,
+        'pool_timeout': 30,
         'connect_args': {
-            'keepalives': 1,  # Supported by psycopg2 for stable connections
-            'keepalives_idle': 20,  # Faster reconnection for cloud environments
-            'keepalives_interval': 5,  # Faster keepalive checks
-            'keepalives_count': 5,  # Number of keepalive probes
-            'connect_timeout': 10,  # Prevents hanging on connection attempts
-            'application_name': 'jetcamstudio_app'  # Identifiable name for monitoring, supported by psycopg2
+            'keepalives': 1,
+            'keepalives_idle': 20,
+            'keepalives_interval': 5,
+            'keepalives_count': 5,
+            'connect_timeout': 10,
+            'application_name': 'jetcamstudio_app'
         },
-        'pool_logging_name': 'jetcamstudio_pool',  # Logs pool events for debugging
-        # 'echo_pool': 'debug'  # Enables pool event logging, compatible with SQLAlchemy
+        'pool_logging_name': 'jetcamstudio_pool',
     }
 
     # ─── CORS ────────────────────────────────────────────────────────────
     CORS_SUPPORTS_CREDENTIALS = True
-    CORS_ORIGINS = os.getenv('CORS_ORIGINS', 'https://monitor.jetcamstudio.com,*')
+    CORS_ORIGINS = os.getenv('CORS_ORIGINS', 'https://monitor.jetcamstudio.com,*').split(',')
 
     # ─── Monitoring Intervals ────────────────────────────────────────────
     STREAM_STATUS_CHECK_INTERVAL = int(os.getenv('STREAM_STATUS_CHECK_INTERVAL', '60'))
@@ -85,72 +90,114 @@ class Config:
     ENABLE_VIDEO_MONITORING = os.getenv('ENABLE_VIDEO_MONITORING', 'true').lower() == 'true'
     ENABLE_CHAT_MONITORING = os.getenv('ENABLE_CHAT_MONITORING', 'true').lower() == 'true'
 
-def create_app(config_class=Config):
+def validate_env_vars():
+    """Validate critical environment variables at startup."""
+    required_vars = ['FLASK_SECRET_KEY', 'DATABASE_URL']
+    for var in required_vars:
+        if not os.getenv(var):
+            logger.error(f"Missing required environment variable: {var}")
+            raise ValueError(f"Missing required environment variable: {var}")
+    try:
+        float(os.getenv('AUDIO_SAMPLE_DURATION', '10'))
+        logger.info("AUDIO_SAMPLE_DURATION is valid")
+    except ValueError:
+        logger.error("AUDIO_SAMPLE_DURATION must be a valid number")
+        raise ValueError("AUDIO_SAMPLE_DURATION must be a valid number")
+
+def configure_ssl_context():
+    """Configure SSL context for the Flask application."""
+    ssl_context = None
+    enable_ssl = os.getenv('ENABLE_SSL', 'false').lower() == 'true'
+    if enable_ssl:
+        cert_dir = os.getenv('CERT_DIR', '/home/ec2-user/LiveStream_Monitoring_Vue3_Flask/backend')
+        certfile = os.getenv('SSL_CERT_PATH', os.path.join(cert_dir, 'fullchain.pem'))
+        keyfile = os.getenv('SSL_KEY_PATH', os.path.join(cert_dir, 'privkey.pem'))
+        if os.path.exists(certfile) and os.path.exists(keyfile):
+            ssl_context = (certfile, keyfile)
+            logger.info(f"SSL Enabled with cert: {certfile} and key: {keyfile}")
+        else:
+            logger.error(f"SSL certificate files not found at {certfile} and {keyfile}")
+            raise FileNotFoundError("SSL certificate files not found")
+    return ssl_context
+
+def create_app(config_class=Config, blueprint=None):
+    """Create and configure Flask app."""
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class)
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = config_class.SQLALCHEMY_ENGINE_OPTIONS
+    app.config['MONITOR_HOST'] = os.getenv('MONITOR_HOST', 'localhost')
+    app.config['MONITOR_PORT'] = int(os.getenv('MONITOR_PORT', 5001))
+    app.config['MONITOR_TIMEOUT'] = int(os.getenv('MONITOR_TIMEOUT', 30))
+    app.config['MONITOR_RETRY_ATTEMPTS'] = int(os.getenv('MONITOR_RETRY_ATTEMPTS', 3))
+    app.config['MONITOR_RETRY_DELAY'] = int(os.getenv('MONITOR_RETRY_DELAY', 5))
+ 
 
     try:
         os.makedirs(app.instance_path, exist_ok=True)
     except OSError as e:
-        app.logger.warning(f"Could not create instance path: {e}")
+        logger.warning(f"Could not create instance path: {e}")
 
-    # ─── CORS Setup ─────────────────────────────────────────────────────
+    # Validate environment variables
+    validate_env_vars()
+
+    # Initialize extensions
+    db.init_app(app)
+    socketio.init_app(app, cors_allowed_origins=config_class.CORS_ORIGINS, async_mode='gevent')
+    
+    # Configure CORS
     CORS(
         app,
-        supports_credentials=app.config['CORS_SUPPORTS_CREDENTIALS'],
-        origins=[u.strip() for u in app.config['CORS_ORIGINS'].split(',')],
+        supports_credentials=config_class.CORS_SUPPORTS_CREDENTIALS,
+        origins=[u.strip() for u in config_class.CORS_ORIGINS],
         resources={r"/api/*": {}, r"/socket.io/*": {}}
     )
 
-    # ─── Initialize Extensions ───────────────────────────────────────────
-    try:
-        db.init_app(app)
-    except Exception as e:
-        app.logger.error(f"Database init failed: {e}")
-        raise
-
-    # ─── Set statement_timeout for each connection ───────────────────────
+    # Set statement_timeout for each connection
     @event.listens_for(Engine, "connect")
     def set_statement_timeout(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         try:
-            cursor.execute("SET statement_timeout = %s", [5000])  # 5 seconds in milliseconds
+            cursor.execute("SET statement_timeout = %s", [5000])
             cursor.close()
             dbapi_connection.commit()
         except Exception as e:
-            app.logger.error(f"Failed to set statement_timeout: {e}")
+            logger.error(f"Failed to set statement_timeout: {e}")
             cursor.close()
 
-    # ─── Initialize Notification Service ────────────────────────────────
+    # Initialize Notification Service
     with app.app_context():
         try:
             NotificationService.init(app)
-            NotificationService.start_scheduler()
-            app.logger.info("Notification service initialized")
+            NotificationService.start_scheduler(detection_only=(blueprint is not None))
+            logger.info("Notification service initialized")
         except Exception as e:
-            app.logger.error(f"Notification service init failed: {e}")
+            logger.error(f"Notification service init failed: {e}")
             raise
 
-    # ─── Register Blueprints ─────────────────────────────────────────────
-    from routes.auth_routes import auth_bp
-    from routes.agent_routes import agent_bp
-    from routes.stream_routes import stream_bp
-    from routes.assignment_routes import assignment_bp
-    from routes.dashboard_routes import dashboard_bp
-    from routes.detection_routes import detection_bp
-    from routes.health_routes import health_bp
-    from routes.keyword_object_routes import keyword_bp
-    from routes.messaging_routes import messaging_bp
-    from routes.notification_routes import notification_bp
+    # Register blueprint if provided (e.g., for monitor_app)
+    if blueprint:
+        app.register_blueprint(blueprint)
 
-    for bp in (
-        auth_bp, agent_bp, stream_bp, assignment_bp, dashboard_bp,
-        detection_bp, health_bp, keyword_bp, messaging_bp, notification_bp
-    ):
-        app.register_blueprint(bp)
+    # Register main app blueprints
+    else:
+        from routes.auth_routes import auth_bp
+        from routes.agent_routes import agent_bp
+        from routes.stream_routes import stream_bp
+        from routes.assignment_routes import assignment_bp
+        from routes.dashboard_routes import dashboard_bp
+        from routes.detection_routes import detection_bp
+        from routes.health_routes import health_bp
+        from routes.keyword_object_routes import keyword_bp
+        from routes.messaging_routes import messaging_bp
+        from routes.notification_routes import notification_bp
 
-    # ─── Error Handlers ─────────────────────────────────────────────────
+        for bp in (
+            auth_bp, agent_bp, stream_bp, assignment_bp, dashboard_bp,
+            detection_bp, health_bp, keyword_bp, messaging_bp, notification_bp
+        ):
+            app.register_blueprint(bp)
+
+    # Error Handlers
     @app.errorhandler(404)
     def not_found(err):
         return {"error": "Not Found"}, 404

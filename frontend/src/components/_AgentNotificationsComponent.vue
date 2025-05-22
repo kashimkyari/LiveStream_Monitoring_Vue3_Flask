@@ -699,7 +699,7 @@ const showToast = (message, type = 'info') => {
 
 const setupSocketConnection = () => {
   // Connect to socket server with namespace
-  socket.value = io('    https://monitor-backend.jetcamstudio.com:5000notifications', {
+  socket.value = io('     http://localhost:5000notifications', {
     path: '/ws',
     transports: ['websocket', 'polling'],
     reconnection: true,
