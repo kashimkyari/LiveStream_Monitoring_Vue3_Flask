@@ -420,7 +420,7 @@ export default {
     // Methods
     const initSocket = () => {
       // Connect to the backend at     https://monitor-backend.jetcamstudio.com:5000
-      socket.value = io('     https://monitor-backend.jetcamstudio.com:5000', {
+      socket.value = io('https://monitor-backend.jetcamstudio.com:5000/messages', {
         path: '/ws',
         transports: ['websocket'],
         secure: true

@@ -150,7 +150,7 @@ export function useMessageData(user) {
 
   // Initialize socket connection
   const initSocket = () => {
-    socket.value = io("     https://monitor-backend.jetcamstudio.com:5000messages", {
+    socket.value = io("https://monitor-backend.jetcamstudio.com:5000/messages", {
       path: "/ws",
       transports: ["websocket"],
     });

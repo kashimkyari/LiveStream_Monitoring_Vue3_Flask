@@ -586,7 +586,7 @@ export default {
       }
       handleVideoPlayback()
       // Start periodic status check
-      statusCheckInterval = setInterval(checkDetectionStatus, 15000)
+      statusCheckInterval = setInterval(checkDetectionStatus, 45000)
       // Initial status check
       checkDetectionStatus()
     })
