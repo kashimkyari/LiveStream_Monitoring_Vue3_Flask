@@ -1032,7 +1032,6 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 18px;
   background-color: var(--input-bg);
   border-bottom: 1px solid var(--input-border);
   z-index: 10;

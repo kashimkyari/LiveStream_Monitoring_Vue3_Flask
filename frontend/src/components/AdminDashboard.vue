@@ -470,8 +470,8 @@ export default {
 
 <style scoped>
 :root {
-  --sidebar-width-expanded: 250px;
-  --sidebar-width-collapsed: 50px;
+  --sidebar-width-expanded: 0px;
+  --sidebar-width-collapsed: 0px;
   --sidebar-mobile-height: 65px;
   --stream-base-width: 480px;
   --stream-base-height: 360px;
@@ -512,14 +512,11 @@ export default {
 .main-content {
   flex: 1;
   padding: 2rem;
-  margin-left: var(--sidebar-width-expanded);
   transition: margin-left 0.2s ease;
   will-change: margin-left;
 }
 
-.main-content.sidebar-minimized {
-  margin-left: var(--sidebar-width-collapsed);
-}
+
 
 .skeleton-loading {
   max-width: 100%;

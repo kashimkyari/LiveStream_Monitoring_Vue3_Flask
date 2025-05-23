@@ -1133,7 +1133,6 @@ const completeLogout = async () => {
 .settings-sidebar {
   width: 260px;
   background-color: var(--sidebar-bg);
-  padding: 2rem 1.5rem;
   box-shadow: 4px 0 12px rgba(0, 0, 0, 0.1);
 }
 

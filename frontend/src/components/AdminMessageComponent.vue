@@ -1526,7 +1526,7 @@ export default {
   grid-template-columns: 320px 1fr;
   gap: 1px;
   padding-right: 20px;
-  margin-left: 50px;
+  
 }
 
 .user-panel {

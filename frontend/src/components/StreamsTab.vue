@@ -675,7 +675,7 @@ export default {
   position: relative;
   padding-top: 1.5rem;
   width: auto;
-  padding-right: 20px;
+  
   
 }
 

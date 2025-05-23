@@ -1,12 +1,31 @@
 <template>
   <SpeedInsights />
   <div id="app" :data-theme="isDarkTheme ? 'dark' : 'light'" :class="{ 'mobile-view': isMobile }" ref="appContainer">
-    <!-- Loading spinner while checking authentication -->
+    <!-- Enhanced loading spinner with particle effects -->
     <div v-if="isCheckingAuth || (isLoggedIn && !userRole)" class="loading-overlay">
+      <!-- Particle background -->
+      <div class="particle-background" ref="particleBackground">
+        <div 
+          v-for="(style, index) in particleStyles" 
+          :key="index" 
+          class="background-particle"
+          :style="style"
+        ></div>
+      </div>
+      
       <div class="spinner-container" ref="spinnerContainer" @mouseenter="handleSpinnerHover"
         @mouseleave="handleSpinnerLeave">
-        <div class="spinner" ref="spinner">
-          <div class="spinner-circle" v-for="n in 12" :key="n" :style="`--i: ${n}`"></div>
+        <!-- Main glowing particle spinner -->
+        <div class="particle-spinner" ref="spinner">
+          <div class="orbit-ring"></div>
+          <div class="orbit-ring orbit-ring-2"></div>
+          <div 
+            v-for="n in 8" 
+            :key="n" 
+            class="spinner-particle" 
+            :style="`--i: ${n}; --delay: ${n * 0.15}s`"
+          ></div>
+          <div class="center-glow"></div>
         </div>
         <div class="spinner-text">{{ loadingMessage }}</div>
       </div>
@@ -79,6 +98,10 @@ import {
 import { faGoogle, faApple } from '@fortawesome/free-brands-svg-icons'
 import axios from 'axios'
 import anime from 'animejs/lib/anime.es.js'
+import { SpeedInsights } from '@vercel/speed-insights/vue'
+import { useToast } from 'vue-toastification'
+import 'vue-toastification/dist/index.css'
+import { useIsMobile } from './composables/useIsMobile'
 
 // Components
 import LoginComponent from './components/Login.vue'
@@ -89,13 +112,7 @@ import MobileAgentDashboard from './components/MobileAgentDashboard.vue'
 import MobileLoginComponent from './components/MobileLogin.vue'
 import MobileForgotPassword from './components/MobileForgotPassword.vue'
 
-// Toasts & utilities
-import { useToast } from 'vue-toastification'
-import 'vue-toastification/dist/index.css'
-import { useIsMobile } from './composables/useIsMobile'
-import { SpeedInsights } from '@vercel/speed-insights/vue';
-
-// Icon setup - added WiFi slash icon
+// Icon setup
 const faIcons = [
   faMoon, faSun, faSignOutAlt, faBroadcastTower, faTachometerAlt,
   faVideo, faExclamationTriangle, faChartLine, faCog, faUserLock,
@@ -117,6 +134,7 @@ const logoutButton = ref(null)
 const dashboardContainer = ref(null)
 const spinnerContainer = ref(null)
 const spinner = ref(null)
+const particleBackground = ref(null)
 const showDebugInfo = ref(false)
 const mobileAuthView = ref('login')
 const unreadNotificationCount = ref(0)
@@ -125,20 +143,18 @@ const sessionLastChecked = ref('Never')
 const loadingMessage = ref('Verifying session...')
 const maxRetryAttempts = 3
 const retryAttempts = ref(0)
-const retryDelay = 3000 // 3 seconds
+const retryDelay = 3000
 const sessionToken = ref(null)
 const sessionExpiry = ref(null)
+const particleStyles = ref([])
 
-// Local session storage keys
 const SESSION_TOKEN_KEY = 'session_token'
 const SESSION_EXPIRY_KEY = 'session_expiry'
 const USER_ROLE_KEY = 'userRole'
 const LAST_CHECKED_KEY = 'session_last_checked'
 
-// Composables
 const { isMobile } = useIsMobile()
 
-// Animation configurations
 const animationConfig = {
   basic: { duration: 800, easing: 'easeOutExpo' },
   mobile: { duration: 400, easing: 'easeOutExpo' }
@@ -147,10 +163,39 @@ const animationConfig = {
 const getAnimationParams = () =>
   isMobile.value ? animationConfig.mobile : animationConfig.basic
 
-// Spinner hover effects
+const generateParticleStyles = () => {
+  const styles = []
+  for (let i = 0; i < 50; i++) {
+    const size = Math.random() * 4 + 1
+    const x = Math.random() * 100
+    const y = Math.random() * 100
+    const duration = Math.random() * 20 + 10
+    const delay = Math.random() * 5
+    const opacity = Math.random() * 0.3 + 0.1
+    
+    styles.push({
+      width: `${size}px`,
+      height: `${size}px`,
+      left: `${x}%`,
+      top: `${y}%`,
+      animationDuration: `${duration}s`,
+      animationDelay: `${delay}s`,
+      opacity: opacity
+    })
+  }
+  return styles
+}
+
 const handleSpinnerHover = () => {
   anime({
-    targets: spinnerContainer.value.querySelectorAll('.spinner-circle'),
+    targets: spinnerContainer.value.querySelectorAll('.spinner-particle'),
+    scale: 1.3,
+    duration: 300,
+    easing: 'easeOutBack'
+  })
+  
+  anime({
+    targets: spinnerContainer.value.querySelector('.center-glow'),
     scale: 1.2,
     duration: 300,
     easing: 'easeOutBack'
@@ -159,21 +204,24 @@ const handleSpinnerHover = () => {
 
 const handleSpinnerLeave = () => {
   anime({
-    targets: spinnerContainer.value.querySelectorAll('.spinner-circle'),
+    targets: spinnerContainer.value.querySelectorAll('.spinner-particle'),
+    scale: 1,
+    duration: 300,
+    easing: 'easeOutBack'
+  })
+  
+  anime({
+    targets: spinnerContainer.value.querySelector('.center-glow'),
     scale: 1,
     duration: 300,
     easing: 'easeOutBack'
   })
 }
 
-// Provide theme state and updater
 provide('theme', isDarkTheme)
 provide('updateTheme', (isDark) => { isDarkTheme.value = isDark })
-
-// Provide toast to child components
 provide('toast', toast)
 
-// Theme handling - follow system preference
 const detectSystemTheme = () => {
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
   isDarkTheme.value = prefersDark
@@ -181,17 +229,14 @@ const detectSystemTheme = () => {
   document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light')
 }
 
-// Watch for changes in theme preference
 watch(isDarkTheme, (newValue) => {
   const theme = newValue ? 'dark' : 'light'
   document.documentElement.setAttribute('data-theme', theme)
   localStorage.setItem('themePreference', theme)
 })
 
-// Spinner animation
 const initSpinnerAnimation = () => {
   if (!spinnerContainer.value) return
-  const { duration } = getAnimationParams()
 
   anime({
     targets: spinnerContainer.value,
@@ -201,23 +246,42 @@ const initSpinnerAnimation = () => {
   })
 
   anime({
-    targets: spinnerContainer.value.querySelectorAll('.spinner-circle'),
+    targets: spinnerContainer.value.querySelectorAll('.spinner-particle'),
     scale: [0, 1],
     opacity: [0, 1],
-    delay: anime.stagger(duration / 8),
+    delay: anime.stagger(100),
+    duration: 600,
     easing: 'easeOutExpo'
   })
 
   anime({
-    targets: spinner.value,
-    rotate: '360deg',
-    duration: 2000,
-    loop: true,
-    easing: 'linear'
+    targets: spinnerContainer.value.querySelectorAll('.orbit-ring'),
+    scale: [0, 1],
+    opacity: [0, 1],
+    duration: 800,
+    easing: 'easeOutExpo'
   })
+
+  anime({
+    targets: spinnerContainer.value.querySelector('.center-glow'),
+    scale: [0, 1],
+    opacity: [0, 1],
+    duration: 600,
+    delay: 200,
+    easing: 'easeOutExpo'
+  })
+
+  if (particleBackground.value) {
+    anime({
+      targets: particleBackground.value.querySelectorAll('.background-particle'),
+      opacity: [0, 1],
+      delay: anime.stagger(50),
+      duration: 1000,
+      easing: 'easeOutExpo'
+    })
+  }
 }
 
-// Check if the network is online
 const checkNetworkStatus = () => {
   const online = navigator.onLine
   isOffline.value = !online
@@ -229,44 +293,33 @@ const checkNetworkStatus = () => {
   return online
 }
 
-// Network event listeners
 const handleNetworkChange = () => {
   const wasOffline = isOffline.value
   const online = checkNetworkStatus()
 
   if (online && wasOffline) {
     toast.info("You're back online. Syncing data...")
-    // Try to refresh session data when back online
     checkAuthentication(true)
   }
 }
 
-// Check if session token is expired
 const isSessionExpired = () => {
   if (!sessionExpiry.value) return true
   return new Date().getTime() > parseInt(sessionExpiry.value)
 }
 
-// Store session token in localStorage
 const storeSessionToken = (token, expiresIn = 86400) => {
   if (!token) return
 
   sessionToken.value = token
-  // Calculate expiry time (current time + expiresIn in ms)
   const expiryTime = new Date().getTime() + (expiresIn * 1000)
   sessionExpiry.value = expiryTime.toString()
 
-  // Store in localStorage for persistence
   localStorage.setItem(SESSION_TOKEN_KEY, token)
   localStorage.setItem(SESSION_EXPIRY_KEY, expiryTime.toString())
-
-  // Set for future API calls
   axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-
-  console.log(`Session token stored. Expires in ${expiresIn} seconds`)
 }
 
-// Try to restore session from localStorage
 const restoreSessionFromStorage = () => {
   const storedToken = localStorage.getItem(SESSION_TOKEN_KEY)
   const storedExpiry = localStorage.getItem(SESSION_EXPIRY_KEY)
@@ -281,26 +334,18 @@ const restoreSessionFromStorage = () => {
     sessionToken.value = storedToken
     sessionExpiry.value = storedExpiry
 
-    // Check if token is not expired
     if (!isSessionExpired()) {
-      // Set the token in the Authorization header
       axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
-
-      // If we have a valid stored role, use it
       if (storedRole) {
-        console.log('Restoring session from storage with role:', storedRole)
         userRole.value = storedRole
         return true
       }
-    } else {
-      console.log('Stored session token is expired')
     }
   }
 
   return false
 }
 
-// Authentication handling
 const hideSpinner = () => {
   anime({
     targets: spinnerContainer.value,
@@ -313,22 +358,18 @@ const hideSpinner = () => {
 
 const handleAuthSuccess = (user) => {
   isLoggedIn.value = true
-  // Set role based on username for admin, otherwise default to agent
   userRole.value = user.username === 'admin' ? 'admin' : 'agent'
   localStorage.setItem(USER_ROLE_KEY, userRole.value)
   animateControls()
 
-  // Force re-render by resetting a temporary state
   nextTick(() => {
     userRole.value = user.username === 'admin' ? 'admin' : 'agent'
   })
 
-  // Store session info
   if (user.token) {
     storeSessionToken(user.token, user.expiresIn || 86400)
   }
 
-  // Record the last time we checked the session
   const now = new Date().getTime()
   localStorage.setItem(LAST_CHECKED_KEY, now.toString())
   sessionLastChecked.value = new Date(now).toLocaleString()
@@ -336,62 +377,37 @@ const handleAuthSuccess = (user) => {
 
 const checkAuthentication = async (isRetry = false) => {
   try {
-    // If retrying, update loading message
     if (isRetry) {
       loadingMessage.value = `Reconnecting... (Attempt ${retryAttempts.value + 1}/${maxRetryAttempts})`
     } else {
       loadingMessage.value = 'Verifying session...'
     }
 
-    // Check if we're offline
     if (!checkNetworkStatus()) {
-      console.log("Device is offline, checking for stored session")
-
-      // Try to use stored session data
       if (restoreSessionFromStorage()) {
-        console.log("Using stored credentials in offline mode")
         isLoggedIn.value = true
         hideSpinner()
         return
       } else {
-        console.log("No valid stored session found for offline mode")
         isLoggedIn.value = false
         hideSpinner()
         return
       }
     }
 
-    // First try to use stored session if available
     const useStoredSession = restoreSessionFromStorage()
-    if (useStoredSession) {
-      console.log("Found stored session, validating with server...")
-    }
-
-    // Enable debug logging for session check
-    console.log("Checking authentication status with server")
-
     const { data } = await axios.get('/api/session')
-    console.log("Session check response:", data)
 
     if (data.isLoggedIn) {
-      console.log("User is logged in:", data.user)
       handleAuthSuccess(data.user)
     } else {
-      console.log("Server reports user is not logged in, checking localStorage fallback")
-
-      // If server says not logged in, but we restored from storage:
-      // Could be a cookie issue but token is still valid
       if (useStoredSession && !isSessionExpired()) {
-        console.log("Session token exists but server reports not logged in, trying token auth")
-
         try {
-          // Try to authenticate using the token directly
           const tokenAuthResponse = await axios.post('/api/auth/token-verify', {
             token: sessionToken.value
           })
 
           if (tokenAuthResponse.data && tokenAuthResponse.data.valid) {
-            console.log("Token is valid, session restored")
             handleAuthSuccess({
               role: userRole.value,
               token: tokenAuthResponse.data.refreshedToken || sessionToken.value,
@@ -404,35 +420,20 @@ const checkAuthentication = async (isRetry = false) => {
           console.error("Token verification failed:", tokenError)
         }
       }
-
-      // If we get here, session couldn't be recovered
       logout(false)
     }
   } catch (error) {
-    console.error("Auth check error:", error)
-    if (error.response) {
-      console.error("Error response:", error.response.data)
-    }
-
-    // Handle retry logic - especially important for mobile
     if (retryAttempts.value < maxRetryAttempts) {
       retryAttempts.value++
-      console.log(`Authentication check failed. Retrying (${retryAttempts.value}/${maxRetryAttempts})...`)
-
-      // Try to use stored credentials while waiting for retry
       if (restoreSessionFromStorage() && !isSessionExpired()) {
-        console.log("Using stored credentials while waiting for retry")
         isLoggedIn.value = true
         userRole.value = localStorage.getItem(USER_ROLE_KEY)
       }
-
       setTimeout(() => checkAuthentication(true), retryDelay)
       return
     }
 
-    // After max retries, check if we can use offline mode
     if (restoreSessionFromStorage() && !isSessionExpired()) {
-      console.log("Using stored credentials after max retries")
       isLoggedIn.value = true
       toast.warning("Connection issues detected. Using offline mode.")
     } else {
@@ -444,7 +445,6 @@ const checkAuthentication = async (isRetry = false) => {
   }
 }
 
-// Control animations
 const animateControls = () => {
   const { duration, easing } = getAnimationParams()
 
@@ -486,72 +486,29 @@ const animateControls = () => {
   }
 }
 
-// Start periodic session refresh
 const startSessionRefresh = () => {
-  // Check session every 5 minutes
   const REFRESH_INTERVAL = 5 * 60 * 1000
-
-  console.log(`Starting session refresh interval (every ${REFRESH_INTERVAL / 1000} seconds)`)
-
-  // Set up refresh interval
   const sessionInterval = setInterval(async () => {
-    // Skip refresh if offline
-    if (isOffline.value) {
-      console.log('Skipping session refresh - device is offline')
-      return
-    }
+    if (isOffline.value) return
 
-    console.log('Performing scheduled session refresh')
     try {
       const { data } = await axios.get('/api/session')
-
       if (data.isLoggedIn) {
-        console.log("Session refreshed successfully")
-
-        // Update token if provided
         if (data.user && data.user.token) {
           storeSessionToken(data.user.token, data.user.expiresIn || 86400)
         }
-
-        // Update last checked timestamp
         const now = new Date().getTime()
         localStorage.setItem(LAST_CHECKED_KEY, now.toString())
         sessionLastChecked.value = new Date(now).toLocaleString()
       } else {
-        console.warn("Session expired during refresh")
         toast.warning("Your session has expired. Please log in again.")
         logout(false)
       }
     } catch (error) {
       console.error("Session refresh error:", error)
-      // Don't log out on refresh errors, just keep the existing session
     }
   }, REFRESH_INTERVAL)
 
-  // Store reference to allow cleanup
-  return sessionInterval
-}
-
-// Event handlers
-const handleLoginSuccess = (userData) => {
-  console.log("Login success:", userData)
-
-  // Reset retry counter
-  retryAttempts.value = 0
-
-  handleAuthSuccess(userData)
-
-  // Show toast notification for successful login
-  toast.success("Welcome back!", {
-    timeout: 2000,
-    position: "top-center",
-    icon: true
-  })
-
-  // Start session refresh
-  const sessionInterval = startSessionRefresh()
-
-  // Clear session refresh on component unmount
   onUnmounted(() => {
     if (sessionInterval) {
       clearInterval(sessionInterval)
@@ -559,20 +516,26 @@ const handleLoginSuccess = (userData) => {
   })
 }
 
+const handleLoginSuccess = (userData) => {
+  retryAttempts.value = 0
+  handleAuthSuccess(userData)
+  toast.success("Welcome back!", {
+    timeout: 2000,
+    position: "top-center",
+    icon: true
+  })
+  startSessionRefresh()
+}
+
 const logout = (showAlert = true) => {
-  // Clear session data
   localStorage.removeItem(SESSION_TOKEN_KEY)
   localStorage.removeItem(SESSION_EXPIRY_KEY)
   localStorage.removeItem(USER_ROLE_KEY)
-
-  // Reset state
   isLoggedIn.value = false
   userRole.value = null
   sessionToken.value = null
   sessionExpiry.value = null
   delete axios.defaults.headers.common['Authorization']
-
-  // Show toast notification for logout
   if (showAlert) {
     toast.info("You have been logged out", {
       timeout: 2000,
@@ -582,19 +545,16 @@ const logout = (showAlert = true) => {
   }
 }
 
-// Lifecycle hooks
 onMounted(() => {
   detectSystemTheme()
-  // Listen for changes in system theme preference
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
     isDarkTheme.value = e.matches
   })
 
-  // Configure axios
-  axios.defaults.baseURL = "     https://monitor-backend.jetcamstudio.com:5000"
+  particleStyles.value = generateParticleStyles()
+  axios.defaults.baseURL = "https://monitor-backend.jetcamstudio.com:5000"
   axios.defaults.withCredentials = true
 
-  // Add request/response interceptors for debugging
   axios.interceptors.request.use(config => {
     console.log(`Making ${config.method.toUpperCase()} request to ${config.url}`)
     return config
@@ -614,11 +574,9 @@ onMounted(() => {
   document.documentElement.setAttribute('data-theme', isDarkTheme.value ? 'dark' : 'light')
   initSpinnerAnimation()
 
-  // Set debug flag based on query parameter
   const urlParams = new URLSearchParams(window.location.search)
   showDebugInfo.value = urlParams.get('debug') === 'true'
 
-  // Enable debug info when holding Shift+Alt+D
   window.addEventListener('keydown', (e) => {
     if (e.shiftKey && e.altKey && e.code === 'KeyD') {
       showDebugInfo.value = !showDebugInfo.value
@@ -626,19 +584,275 @@ onMounted(() => {
     }
   })
 
-  // Set up network status listeners
   window.addEventListener('online', handleNetworkChange)
   window.addEventListener('offline', handleNetworkChange)
-
-  // Check initial network status
   checkNetworkStatus()
-
-  // Delay checking authentication slightly to allow spinner animation
   setTimeout(checkAuthentication, 1500)
 })
 </script>
 
 <style>
 @import url('./styles/theme.css');
-/* Additional App-specific styles can be added here if needed */
+
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-primary);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  backdrop-filter: blur(10px);
+}
+
+.particle-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.background-particle {
+  position: absolute;
+  background: var(--accent-primary);
+  border-radius: 50%;
+  animation: float-randomly 15s infinite linear;
+  filter: blur(0.5px);
+}
+
+@keyframes float-randomly {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(calc(random() * 100px - 50px), calc(random() * 100px - 50px)) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.spinner-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  z-index: 1;
+  position: relative;
+}
+
+.particle-spinner {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.orbit-ring {
+  position: absolute;
+  border: 2px solid transparent;
+  border-top: 2px solid var(--accent-primary);
+  border-radius: 50%;
+  width: 100%;
+  height: 100%;
+  animation: spin 3s linear infinite;
+  opacity: 0.3;
+}
+
+.orbit-ring-2 {
+  width: 80%;
+  height: 80%;
+  border-top: 2px solid var(--accent-secondary);
+  animation: spin 2s linear infinite reverse;
+  opacity: 0.2;
+}
+
+.spinner-particle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: radial-gradient(circle, var(--accent-primary) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: orbit 4s linear infinite;
+  animation-delay: calc(var(--delay));
+  box-shadow: 
+    0 0 10px var(--accent-primary),
+    0 0 20px var(--accent-primary),
+    0 0 30px var(--accent-primary);
+  transform-origin: 60px;
+}
+
+.spinner-particle:nth-child(odd) {
+  background: radial-gradient(circle, var(--accent-secondary) 0%, transparent 70%);
+  box-shadow: 
+    0 0 10px var(--accent-secondary),
+    0 0 20px var(--accent-secondary),
+    0 0 30px var(--accent-secondary);
+  animation-direction: reverse;
+  animation-duration: 3s;
+}
+
+.center-glow {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: radial-gradient(circle, var(--accent-primary) 0%, var(--accent-secondary) 50%, transparent 100%);
+  border-radius: 50%;
+  animation: pulse-glow 2s ease-in-out infinite;
+  box-shadow: 
+    0 0 20px var(--accent-primary),
+    0 0 40px var(--accent-primary),
+    0 0 60px var(--accent-primary);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes orbit {
+  from {
+    transform: rotate(0deg) translateX(60px) rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg) translateX(60px) rotate(-360deg);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.7;
+  }
+}
+
+.spinner-text {
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  font-weight: 500;
+  text-align: center;
+  opacity: 0.8;
+  animation: text-fade 2s ease-in-out infinite;
+}
+
+@keyframes text-fade {
+  0%, 100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .particle-spinner {
+    width: 80px;
+    height: 80px;
+  }
+  
+  .spinner-particle {
+    width: 6px;
+    height: 6px;
+    transform-origin: 40px;
+  }
+  
+  .center-glow {
+    width: 12px;
+    height: 12px;
+  }
+  
+  .spinner-text {
+    font-size: 1rem;
+  }
+  
+  .background-particle {
+    animation-duration: 10s;
+  }
+}
+
+[data-theme="dark"] .background-particle {
+  filter: blur(0.5px) brightness(0.8);
+}
+
+[data-theme="dark"] .spinner-particle {
+  box-shadow: 
+    0 0 8px var(--accent-primary),
+    0 0 16px var(--accent-primary),
+    0 0 24px var(--accent-primary);
+}
+
+[data-theme="dark"] .center-glow {
+  box-shadow: 
+    0 0 15px var(--accent-primary),
+    0 0 30px var(--accent-primary),
+    0 0 45px var(--accent-primary);
+}
+
+[data-theme="light"] .loading-overlay {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+[data-theme="light"] .background-particle {
+  filter: blur(0.5px) brightness(1.2);
+}
+
+[data-theme="light"] .spinner-particle {
+  box-shadow: 
+    0 0 6px var(--accent-primary),
+    0 0 12px var(--accent-primary),
+    0 0 18px var(--accent-primary);
+}
+
+[data-theme="light"] .center-glow {
+  box-shadow: 
+    0 0 10px var(--accent-primary),
+    0 0 20px var(--accent-primary),
+    0 0 30px var(--accent-primary);
+}
+
+.particle-spinner,
+.background-particle,
+.spinner-particle {
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .background-particle {
+    animation: none;
+  }
+  
+  .orbit-ring,
+  .orbit-ring-2 {
+    animation-duration: 6s;
+  }
+  
+  .spinner-particle {
+    animation-duration: 8s;
+  }
+  
+  .center-glow {
+    animation: none;
+  }
+}
 </style>
