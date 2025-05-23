@@ -1,4 +1,4 @@
-<!-- <template> -->
+<template>
   <div :class="[
     'stream-card',
     { 'compact-view': isCompactView },

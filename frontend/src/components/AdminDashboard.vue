@@ -155,7 +155,6 @@ import CreateAgentModal from './CreateAgentModal.vue'
 import ConfirmationModal from './ConfirmationModal.vue'
 import AdminNotificationsPage from './AdminNotificationsPage.vue'
 import AdminSettingsPage from './AdminSettingsPage.vue'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import axios from 'axios'
 
 export default {
@@ -170,7 +169,6 @@ export default {
     CreateStreamModal,
     CreateAgentModal,
     ConfirmationModal,
-    FontAwesomeIcon,
     AdminNotificationsPage,
     AdminSettingsPage
   },
