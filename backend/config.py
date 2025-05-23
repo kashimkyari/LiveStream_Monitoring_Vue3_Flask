@@ -52,18 +52,18 @@ class Config:
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 20,  # Increased for better concurrency
-        'pool_recycle': 300,  # Extended to avoid frequent reconnections
-        'pool_pre_ping': True,  # Enabled to ensure connection health
-        'max_overflow': 10,  # Reduced to prevent resource exhaustion
+        'pool_size': 20,
+        'pool_recycle': 300,
+        'pool_pre_ping': True,
+        'max_overflow': 10,
         'pool_use_lifo': True,
-        'pool_timeout': 20,  # Reduced for faster failure detection
+        'pool_timeout': 20,
         'connect_args': {
             'keepalives': 1,
             'keepalives_idle': 30,
             'keepalives_interval': 10,
             'keepalives_count': 5,
-            'connect_timeout': 5,  # Reduced for faster connection attempts
+            'connect_timeout': 5,
             'application_name': 'jetcamstudio_app'
         },
         'pool_logging_name': 'jetcamstudio_pool',
@@ -76,7 +76,7 @@ class Config:
     REDIS_DB = int(os.getenv('REDIS_DB', 0))
     
     # Redis Cache Settings
-    CACHE_DEFAULT_TIMEOUT = int(os.getenv('CACHE_DEFAULT_TIMEOUT', 1800))  # 30 minutes
+    CACHE_DEFAULT_TIMEOUT = int(os.getenv('CACHE_DEFAULT_TIMEOUT', 1800))
     STREAM_STATUS_CACHE_TIMEOUT = int(os.getenv('STREAM_STATUS_CACHE_TIMEOUT', 300))
     DASHBOARD_STATS_CACHE_TIMEOUT = int(os.getenv('DASHBOARD_STATS_CACHE_TIMEOUT', 300))
     SESSION_CACHE_TIMEOUT = int(os.getenv('SESSION_CACHE_TIMEOUT', 86400))
@@ -117,7 +117,7 @@ def validate_env_vars():
         raise ValueError("AUDIO_SAMPLE_DURATION must be a valid number")
 
 def configure_ssl_context():
-    """Configure SSL context for the Flask application."""
+    """Configure SSL context for the main Flask application."""
     ssl_context = None
     enable_ssl = os.getenv('ENABLE_SSL', 'false').lower() == 'true'
     if enable_ssl:
@@ -126,10 +126,26 @@ def configure_ssl_context():
         keyfile = os.getenv('SSL_KEY_PATH', os.path.join(cert_dir, 'privkey.pem'))
         if os.path.exists(certfile) and os.path.exists(keyfile):
             ssl_context = (certfile, keyfile)
-            logger.info(f"SSL Enabled with cert: {certfile} and key: {keyfile}")
+            logger.info(f"Main app SSL enabled with cert: {certfile} and key: {keyfile}")
         else:
-            logger.error(f"SSL certificate files not found at {certfile} and {keyfile}")
-            raise FileNotFoundError("SSL certificate files not found")
+            logger.error(f"Main app SSL certificate files not found at {certfile} and {keyfile}")
+            raise FileNotFoundError("Main app SSL certificate files not found")
+    return ssl_context
+
+def configure_monitor_ssl_context():
+    """Configure SSL context for the monitoring Flask application."""
+    ssl_context = None
+    enable_ssl = os.getenv('ENABLE_SSL', 'false').lower() == 'true'
+    if enable_ssl:
+        cert_dir = os.getenv('MONITOR_CERT_DIR', '/etc/ssl/livemon_monitor')
+        certfile = os.getenv('MONITOR_SSL_CERT_PATH', os.path.join(cert_dir, 'monitor_cert.pem'))
+        keyfile = os.getenv('MONITOR_SSL_KEY_PATH', os.path.join(cert_dir, 'monitor_key.pem'))
+        if os.path.exists(certfile) and os.path.exists(keyfile):
+            ssl_context = (certfile, keyfile)
+            logger.info(f"Monitor app SSL enabled with cert: {certfile} and key: {keyfile}")
+        else:
+            logger.error(f"Monitor app SSL certificate files not found at {certfile} and {keyfile}")
+            raise FileNotFoundError("Monitor app SSL certificate files not found")
     return ssl_context
 
 def create_app(config_class=Config, blueprint=None):
@@ -177,7 +193,7 @@ def create_app(config_class=Config, blueprint=None):
     def set_statement_timeout(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         try:
-            cursor.execute("SET statement_timeout = %s", [3000])  # Reduced to 3 seconds
+            cursor.execute("SET statement_timeout = %s", [3000])
             cursor.close()
             dbapi_connection.commit()
         except Exception as e:

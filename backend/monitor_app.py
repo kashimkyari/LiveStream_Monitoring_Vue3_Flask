@@ -8,7 +8,7 @@ gevent.monkey.patch_all()
 import logging
 import os
 from dotenv import load_dotenv
-from config import create_app, configure_ssl_context
+from config import create_app, configure_monitor_ssl_context
 from extensions import db, socketio
 from monitoring import start_notification_monitor, initialize_monitoring
 from routes.monitor_routes import monitor_bp
@@ -30,15 +30,18 @@ app.config['PORT'] = int(os.getenv('MONITOR_PORT', 5001))
 # Main execution
 if __name__ == "__main__":
     try:
-        ssl_context = configure_ssl_context()
+        ssl_context = configure_monitor_ssl_context()
         server_mode = "HTTPS" if ssl_context else "HTTP"
         debug_mode = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
-        logger.info(f"Starting monitoring server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
+        logger.info(f"Starting monitoring server on port {app.config['PORT']} in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
+        if ssl_context:
+            logger.info(f"SSL enabled with certificate: {ssl_context[0]}")
+        else:
+            logger.warning("SSL disabled; running in HTTP mode")
 
         with app.app_context():
             db.create_all()
             logger.info("Database tables initialized")
-            # Initialize monitoring for detection-related alerts only
             initialize_monitoring()
             start_notification_monitor()
             logger.info("Started monitoring for detection-related alerts (audio, video, chat)")
@@ -56,5 +59,5 @@ if __name__ == "__main__":
 
         socketio.run(**socketio_kwargs)
     except Exception as e:
-        logger.error(f"Monitoring application startup failed: {str(e)}")
+        logger.error(f"Monitoring application startup failed: {str(e)}", exc_info=True)
         raise
