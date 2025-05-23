@@ -427,7 +427,7 @@ export default {
       });
 
       socket.value.on('connect', () => {
-        console.log('Connected to WebSocket server at     https://monitor-backend.jetcamstudio.com:5000');
+        console.log('Connected to WebSocket server at msg ws    https://monitor-backend.jetcamstudio.com:5000');
         isConnected.value = true;
 
         // Send pending messages if any
@@ -435,7 +435,7 @@ export default {
       });
 
       socket.value.on('disconnect', () => {
-        console.log('Disconnected from WebSocket server');
+        console.log('Disconnected from msg ws WebSocket server');
         isConnected.value = false;
       });
 

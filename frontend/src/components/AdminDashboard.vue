@@ -1,81 +1,102 @@
 <template>
   <div class="admin-container" :data-theme="isDarkTheme ? 'dark' : 'light'">
-    <AdminSidebar
-      :active-tab="activeTab"
-      :user="user"
-      :is-online="isOnline"
-      :notifications="notifications"
-      :messages="messages"
-      :message-unread-count="messageUnreadCount"
-      @tab-change="activeTab = $event"
-      @sidebar-toggle="handleSidebarToggle"
-    />
+    <div class="dashboard-wrapper">
+      <AdminSidebar
+        :active-tab="activeTab"
+        :user="user"
+        :is-online="isOnline"
+        :notifications="notifications"
+        :messages="messages"
+        :message-unread-count="messageUnreadCount"
+        @tab-change="activeTab = $event"
+        @sidebar-toggle="debouncedHandleSidebarToggle"
+      />
 
-    <main 
-      class="main-content" 
-      :class="{ 'sidebar-minimized': sidebarMinimized }"
-      ref="mainContent"
-    >
-      <div v-if="loading" class="loading-state">
-        <div class="loading-spinner"></div>
-        <p>Loading...</p>
-      </div>
+      <main 
+        class="main-content" 
+        :class="{ 'sidebar-minimized': sidebarMinimized }"
+        ref="mainContent"
+      >
+        <div v-if="loading || hasError" class="skeleton-loading">
+          <!-- Skeleton for Stats Section -->
+          <div class="skeleton-stats-section">
+            <div v-for="n in 3" :key="'stat-' + n" class="skeleton-stat-card">
+              <div class="skeleton-icon"></div>
+              <div class="skeleton-text skeleton-value"></div>
+              <div class="skeleton-text skeleton-label"></div>
+            </div>
+          </div>
 
-      <div v-else-if="hasError" class="error-state">
-        <h3>Something went wrong</h3>
-        <p>{{ errorMessage }}</p>
-        <button @click="fetchDashboardData" class="refresh-button">
-          <font-awesome-icon icon="sync" class="icon" /> Retry
-        </button>
-      </div>
+          <!-- Skeleton for Streams Section -->
+          <div class="skeleton-streams-section">
+            <div class="skeleton-section-header">
+              <div class="skeleton-text skeleton-header"></div>
+            </div>
+            <div class="skeleton-stream-container">
+              <div v-for="n in 3" :key="'stream-' + n" class="skeleton-stream-card">
+                <div class="skeleton-thumbnail"></div>
+                <div class="skeleton-content">
+                  <div class="skeleton-text skeleton-title"></div>
+                  <div class="skeleton-text skeleton-subtitle"></div>
+                  <div class="skeleton-text skeleton-details"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-      <template v-else>
-        <DashboardTab
-          v-show="activeTab === 'dashboard'"
-          :dashboard-stats="dashboardStats"
-          :streams="streams"
-          :detections="detections"
-          :agents="agents"  
-          @open-stream="openStreamDetails"
-        />
+        <template v-else>
+          <DashboardTab
+            v-show="activeTab === 'dashboard'"
+            :dashboard-stats="dashboardStats"
+            :streams="streams"
+            :detections="detections"
+            :agents="agents"  
+            @open-stream="openStreamDetails"
+          />
 
-        <StreamsTab
-          v-show="activeTab === 'streams'"
-          :streams="allStreams"
-          :agents="agents"
-          @create="showCreateStreamModal = true"
-          @edit="editStream"
-          @delete="confirmDeleteStream"
-          @view="openStreamDetails"
-          @refresh="refreshStream"
-          @stream-updated="handleStreamUpdated"
-          @stream-created="handleStreamCreated"
-          @stream-deleted="handleStreamDeleted"
-        />
+          <StreamsTab
+            v-show="activeTab === 'streams'"
+            :streams="allStreams"
+            :agents="agents"
+            @create="showCreateStreamModal = true"
+            @edit="editStream"
+            @delete="confirmDeleteStream"
+            @view="openStreamDetails"
+            @refresh="refreshStream"
+            @stream-updated="handleStreamUpdated"
+            @stream-created="handleStreamCreated"
+            @stream-deleted="handleStreamDeleted"
+          >
+            <button v-if="hasMoreStreams" @click="loadMoreStreams" class="load-more-button">
+              Load More
+            </button>
+          </StreamsTab>
 
-        <AgentsTab
-          v-show="activeTab === 'agents'"
-          :agents="agents"
-          @create="showCreateAgentModal = true"
-          @edit="editAgent"
-          @delete="confirmDeleteAgent"
-        />
+          <AgentsTab
+            v-show="activeTab === 'agents'"
+            :agents="agents"
+            @create="showCreateAgentModal = true"
+            @edit="editAgent"
+            @delete="confirmDeleteAgent"
+          />
 
-        <AdminMessageComponent
-          v-show="activeTab === 'messages'"
-          :user="user"
-        />
-        <AdminNotificationsPage
-          v-show="activeTab === 'notifications'"
-          :user="user"
-        />
+          <AdminMessageComponent
+            v-show="activeTab === 'messages'"
+            :user="user"
+          />
+          <AdminNotificationsPage
+            v-show="activeTab === 'notifications'"
+            :user="user"
+          />
 
-        <AdminSettingsPage
-          v-show="activeTab === 'settings'"
-          :user="user"
-        />
-      </template>
-    </main>
+          <AdminSettingsPage
+            v-show="activeTab === 'settings'"
+            :user="user"
+          />
+        </template>
+      </main>
+    </div>
 
     <!-- Modals -->
     <StreamDetailsModal
@@ -451,7 +472,7 @@ export default {
 
 <style scoped>
 :root {
-  --sidebar-width-expanded: 0px;
+  --sidebar-width-expanded: 250px;
   --sidebar-width-collapsed: 50px;
   --sidebar-mobile-height: 65px;
   --stream-base-width: 480px;
@@ -464,6 +485,7 @@ export default {
   --danger-rgb: 239, 68, 68;
   --warning-rgb: 245, 158, 11;
   --info-rgb: 14, 165, 233;
+  --skeleton-bg: rgba(200, 200, 200, 0.2);
 }
 
 [data-theme="dark"] {
@@ -473,6 +495,7 @@ export default {
   --danger-rgb: 248, 113, 113;
   --warning-rgb: 251, 191, 36;
   --info-rgb: 56, 189, 248;
+  --skeleton-bg: rgba(100, 100, 100, 0.2);
 }
 
 .admin-container {
@@ -480,42 +503,142 @@ export default {
   background-color: var(--bg-color);
   color: var(--text-color);
   overflow-x: hidden;
-  
+}
+
+.dashboard-wrapper {
+  display: flex;
+  flex-direction: row;
+  min-height: 100vh;
 }
 
 .main-content {
   flex: 1;
   padding: 2rem;
-  transition: margin-left 0.3s ease;
-  height: 90%;
-  will-change: margin-left, transform;
+  margin-left: var(--sidebar-width-expanded);
+  transition: margin-left 0.2s ease;
+  will-change: margin-left;
 }
 
-.error-state {
+.main-content.sidebar-minimized {
+  margin-left: var(--sidebar-width-collapsed);
+}
+
+.skeleton-loading {
   max-width: 100%;
   margin: 1rem auto;
   padding: 1.5rem;
-  text-align: center;
-  background-color: var(--error-bg);
-  border: 1px solid var(--error-border);
+}
+
+.skeleton-stats-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.skeleton-stat-card {
+  background: var(--skeleton-bg);
   border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  padding: 1.5rem;
+  height: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: pulse 1.5s infinite ease-in-out;
 }
 
-.error-state h3 {
+.skeleton-icon {
+  width: 24px;
+  height: 24px;
+  background: var(--skeleton-bg);
+  border-radius: 50%;
   margin-bottom: 0.5rem;
-  color: var(--text-color);
-  font-size: 1.25rem;
 }
 
-.error-state p {
+.skeleton-text {
+  background: var(--skeleton-bg);
+  border-radius: 4px;
+}
+
+.skeleton-value {
+  width: 60%;
+  height: 20px;
+  margin-bottom: 0.5rem;
+}
+
+.skeleton-label {
+  width: 40%;
+  height: 16px;
+}
+
+.skeleton-streams-section {
+  margin-top: 2rem;
+}
+
+.skeleton-section-header {
   margin-bottom: 1rem;
-  color: var(--text-color);
-  font-size: 1rem;
 }
 
-.refresh-button {
+.skeleton-header {
+  width: 200px;
+  height: 24px;
+  background: var(--skeleton-bg);
+  border-radius: 4px;
+}
+
+.skeleton-stream-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.skeleton-stream-card {
+  background: var(--skeleton-bg);
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  gap: 1rem;
+  height: 150px;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.skeleton-thumbnail {
+  width: 120px;
+  height: 90px;
+  background: var(--skeleton-bg);
+  border-radius: 4px;
+}
+
+.skeleton-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.skeleton-title {
+  width: 80%;
+  height: 20px;
+}
+
+.skeleton-subtitle {
+  width: 60%;
+  height: 16px;
+}
+
+.skeleton-details {
+  width: 40%;
+  height: 16px;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.load-more-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -528,62 +651,47 @@ export default {
   cursor: pointer;
   border: none;
   font-size: 1rem;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
+  margin: 1rem auto;
 }
 
-.refresh-button:hover {
+.load-more-button:hover {
   opacity: 0.9;
 }
 
-.icon {
-  font-size: 1rem;
-  display: inline-block;
-}
-
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  gap: 1rem;
-}
-
-.loading-spinner {
-  width: 3rem;
-  height: 3rem;
-  border: 0.25rem solid rgba(var(--primary-rgb), 0.1);
-  border-radius: 50%;
-  border-top-color: rgb(var(--primary-rgb));
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
 .fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity 0.2s ease;
 }
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
 
 @media (max-width: 768px) {
-  .admin-container {
+  .dashboard-wrapper {
     flex-direction: column;
   }
 
   .main-content {
-    margin-left: 0 !important;
+    margin-left: 0;
     height: calc(100vh - var(--sidebar-mobile-height));
-    transition: margin-top 0.3s ease;
+    transition: margin-top 0.2s ease;
+  }
+
+  .main-content.sidebar-minimized {
+    margin-left: 0;
+  }
+
+  .skeleton-stats-section {
+    grid-template-columns: 1fr;
+  }
+
+  .skeleton-stream-container {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (min-width: 769px) and (max-width: 1023px) {
-  .error-state {
+  .skeleton-loading {
     max-width: 600px;
   }
 }

@@ -1025,7 +1025,6 @@ export default {
   background-color: var(--bg-color);
   color: var(--text-color);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  margin-left: 50px;
 }
 
 /* Top Navigation Bar */

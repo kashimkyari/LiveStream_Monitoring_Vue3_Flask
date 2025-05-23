@@ -1,11 +1,11 @@
 # routes/notification_routes.py
-from flask import Blueprint, request, jsonify, session
-from extensions import db
+from flask import Blueprint, request, jsonify, session, current_app
+from extensions import db, redis_service
 from models import DetectionLog, User, Stream, Assignment
 from utils import login_required
+from utils.notifications import emit_notification, emit_notification_update
 from sqlalchemy import or_
 from datetime import datetime, timedelta
-from utils.notifications import emit_notification, emit_notification_update
 from sqlalchemy.orm import joinedload
 from services.notification_service import NotificationService
 import logging
@@ -123,6 +123,14 @@ def get_all_notifications():
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 50))
         
+        # Check Redis cache first
+        cache_key = f"notifications:user:{user_id}:role:{user_role}:page:{page}:per_page:{per_page}"
+        if current_app.config.get('REDIS_ENABLED') and redis_service.is_available():
+            cached_data = redis_service.cache_get(cache_key)
+            if cached_data:
+                return jsonify(cached_data), 200
+
+        # Original database query logic
         query = DetectionLog.query.options(joinedload(DetectionLog.assigned_user))
         
         if user_role == "agent":
@@ -146,7 +154,7 @@ def get_all_notifications():
             page=page, per_page=per_page, error_out=False
         ).items
         
-        return jsonify([{
+        response_data = [{
             "id": n.id,
             "event_type": n.event_type,
             "timestamp": n.timestamp.isoformat(),
@@ -156,7 +164,17 @@ def get_all_notifications():
             "streamer": n.details.get('streamer_name', 'Unknown'),
             "platform": n.details.get('platform', 'Unknown'),
             "assigned_agent": agent_cache.get(n.assigned_agent, "Unassigned") if n.assigned_agent else "Unassigned"
-        } for n in notifications]), 200
+        } for n in notifications]
+
+        # Cache the response
+        if current_app.config.get('REDIS_ENABLED') and redis_service.is_available():
+            redis_service.cache_set(
+                cache_key,
+                response_data,
+                expire=current_app.config.get('DASHBOARD_STATS_CACHE_TIMEOUT', 1800)
+            )
+
+        return jsonify(response_data), 200
     except Exception as e:
         logging.error(f"Error fetching notifications: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -522,7 +540,7 @@ def forward_notification(notification_id):
         sys_msg = ChatMessage(
             sender_id=session['user_id'],
             receiver_id=agent.id,
-            message=f"ð��¨ Forwarded {notification.event_type.replace('_', ' ').title()} Alert",
+            message=f"Ã°ï¿½ï¿½Â¨ Forwarded {notification.event_type.replace('_', ' ').title()} Alert",
             details=message_details,
             is_system=True,
             timestamp=datetime.utcnow()

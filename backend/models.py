@@ -42,12 +42,20 @@ class User(db.Model):
     def __repr__(self):
         return f"<User {self.username}>"
 
-    def serialize(self):
+    def serialize(self, minimal=False):
+        if minimal:
+            return {
+                "id": self.id,
+                "username": self.username,
+                "role": self.role,
+                "online": self.online
+            }
         return {
             "id": self.id,
             "username": self.username,
             "email": self.email,
             "role": self.role,
+            "online": self.online,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "telegram_username": self.telegram_username,
             "telegram_chat_id": self.telegram_chat_id
@@ -64,7 +72,7 @@ class Stream(db.Model):
     streamer_username = db.Column(db.String(100), index=True)
     type = db.Column(db.String(50), index=True)
     status = db.Column(db.String(20), default='offline', nullable=False, index=True)
-    is_monitored = db.Column(db.Boolean, default=False, nullable=False)
+    is_monitored = db.Column(db.Boolean, default=False, nullable=False, index=True)
 
     assignments = db.relationship('Assignment', back_populates='stream', lazy='selectin', cascade="all, delete")
 
@@ -75,12 +83,22 @@ class Stream(db.Model):
 
     __table_args__ = (
         db.Index('idx_streams_status_type', 'status', 'type'),
+        db.Index('idx_streams_status_monitored', 'status', 'is_monitored'),
     )
 
     def __repr__(self):
         return f"<Stream {self.room_url}>"
 
-    def serialize(self, include_relationships=True):
+    def serialize(self, include_relationships=True, minimal=False):
+        if minimal:
+            return {
+                "id": self.id,
+                "room_url": self.room_url,
+                "streamer_username": self.streamer_username,
+                "platform": self.type.capitalize() if self.type else None,
+                "status": self.status,
+                "is_monitored": self.is_monitored
+            }
         data = {
             "id": self.id,
             "room_url": self.room_url,
@@ -90,7 +108,7 @@ class Stream(db.Model):
             "is_monitored": self.is_monitored,
         }
         if include_relationships and hasattr(self, 'assignments'):
-            data["assignments"] = [assignment.serialize(include_relationships=False) for assignment in self.assignments]
+            data["assignments"] = [assignment.serialize(include_relationships=False, minimal=True) for assignment in self.assignments]
         return data
 
 class ChaturbateStream(Stream):
@@ -111,8 +129,10 @@ class ChaturbateStream(Stream):
     def __repr__(self):
         return f"<ChaturbateStream {self.room_url}>"
 
-    def serialize(self, include_relationships=True):
-        data = super().serialize(include_relationships=include_relationships)
+    def serialize(self, include_relationships=True, minimal=False):
+        data = super().serialize(include_relationships=include_relationships, minimal=minimal)
+        if minimal:
+            return data
         data.update({
             "platform": "Chaturbate",
             "chaturbate_m3u8_url": self.chaturbate_m3u8_url,
@@ -137,8 +157,10 @@ class StripchatStream(Stream):
     def __repr__(self):
         return f"<StripchatStream {self.room_url}>"
 
-    def serialize(self, include_relationships=True):
-        data = super().serialize(include_relationships=include_relationships)
+    def serialize(self, include_relationships=True, minimal=False):
+        data = super().serialize(include_relationships=include_relationships, minimal=minimal)
+        if minimal:
+            return data
         data.update({
             "platform": "Stripchat",
             "stripchat_m3u8_url": self.stripchat_m3u8_url,
@@ -151,8 +173,8 @@ class Assignment(db.Model):
     """
     __tablename__ = "assignments"
     id = db.Column(db.Integer, primary_key=True)
-    agent_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
-    stream_id = db.Column(db.Integer, db.ForeignKey('streams.id'), nullable=False, index=True)
+    agent_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    stream_id = db.Column(db.Integer, db.ForeignKey('streams.id', ondelete='CASCADE'), nullable=False, index=True)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     assigned_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
     notes = db.Column(db.Text, nullable=True)
@@ -160,19 +182,27 @@ class Assignment(db.Model):
     status = db.Column(db.String(20), default='active', index=True)
     assignment_metadata = db.Column(db.JSON, nullable=True)
 
-    agent = db.relationship('User', foreign_keys=[agent_id], back_populates='assignments', lazy='joined')
+    agent = db.relationship('User', foreign_keys=[agent_id], back_populates='assignments', lazy='selectin')
     stream = db.relationship('Stream', back_populates='assignments', lazy='selectin')
-    assigner = db.relationship('User', foreign_keys=[assigned_by], lazy='joined')
+    assigner = db.relationship('User', foreign_keys=[assigned_by], lazy='selectin')
 
     __table_args__ = (
         db.Index('idx_assignment_agent_stream', 'agent_id', 'stream_id'),
+        db.Index('idx_assignment_status', 'status'),
     )
 
     def __repr__(self):
         agent_username = self.agent.username if self.agent else "Unassigned"
         return f"<Assignment Agent:{agent_username} Stream:{self.stream_id}>"
 
-    def serialize(self, include_relationships=True):
+    def serialize(self, include_relationships=True, minimal=False):
+        if minimal:
+            return {
+                "id": self.id,
+                "agent_id": self.agent_id,
+                "stream_id": self.stream_id,
+                "status": self.status
+            }
         data = {
             "id": self.id,
             "agent_id": self.agent_id,
@@ -187,31 +217,15 @@ class Assignment(db.Model):
         }
         if include_relationships:
             if self.agent:
-                data["agent"] = {
-                    "id": self.agent.id,
-                    "username": self.agent.username,
-                    "email": self.agent.email,
-                    "role": self.agent.role,
-                    "telegram_username": self.agent.telegram_username,
-                }
+                data["agent"] = self.agent.serialize(minimal=True)
             else:
                 data["agent"] = None
             if self.stream:
-                data["stream"] = {
-                    "id": self.stream.id,
-                    "room_url": self.stream.room_url,
-                    "streamer_username": self.stream.streamer_username,
-                    "platform": self.stream.type.capitalize() if self.stream.type else None,
-                    "status": self.stream.status,
-                }
+                data["stream"] = self.stream.serialize(include_relationships=False, minimal=True)
             else:
                 data["stream"] = None
             if self.assigner:
-                data["assigner"] = {
-                    "id": self.assigner.id,
-                    "username": self.assigner.username,
-                    "role": self.assigner.role,
-                }
+                data["assigner"] = self.assigner.serialize(minimal=True)
             else:
                 data["assigner"] = None
         return data
@@ -227,9 +241,9 @@ class Log(db.Model):
     event_type = db.Column(db.String(50), index=True)
     details = db.Column(db.JSON)
     read = db.Column(db.Boolean, default=False, index=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
 
-    user = db.relationship('User', foreign_keys=[user_id], lazy='joined')
+    user = db.relationship('User', foreign_keys=[user_id], lazy='selectin')
 
     __table_args__ = (
         db.Index('idx_logs_room_event', 'room_url', 'event_type'),
@@ -239,7 +253,14 @@ class Log(db.Model):
     def __repr__(self):
         return f"<Log {self.event_type} @ {self.room_url}>"
 
-    def serialize(self):
+    def serialize(self, minimal=False):
+        if minimal:
+            return {
+                "id": self.id,
+                "timestamp": self.timestamp.isoformat(),
+                "event_type": self.event_type,
+                "read": self.read
+            }
         return {
             "id": self.id,
             "timestamp": self.timestamp.isoformat(),
@@ -295,20 +316,29 @@ class DetectionLog(db.Model):
     event_type = db.Column(db.String(50), nullable=False, index=True)
     details = db.Column(db.JSON, nullable=True)
     detection_image = db.Column(db.LargeBinary, nullable=True)
-    assigned_agent = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
-    assignment_id = db.Column(db.Integer, db.ForeignKey('assignments.id'), nullable=True, index=True)
+    assigned_agent = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    assignment_id = db.Column(db.Integer, db.ForeignKey('assignments.id', ondelete='SET NULL'), nullable=True, index=True)
     timestamp = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
-    sender_username = db.Column(db.String(100), nullable=True)
+    sender_username = db.Column(db.String(100), nullable=True, index=True)
     read = db.Column(db.Boolean, default=False, index=True)
 
     assignment = db.relationship("Assignment", backref=db.backref("detection_logs", lazy="dynamic"))
-    assigned_user = db.relationship("User", foreign_keys=[assigned_agent], back_populates='detection_logs', lazy='joined')
+    assigned_user = db.relationship("User", foreign_keys=[assigned_agent], back_populates='detection_logs', lazy='selectin')
 
     __table_args__ = (
         db.Index('idx_detection_logs_event_timestamp', 'event_type', 'timestamp'),
+        db.Index('idx_detection_logs_assigned_agent', 'assigned_agent'),
     )
 
-    def serialize(self):
+    def serialize(self, minimal=False):
+        if minimal:
+            return {
+                "id": self.id,
+                "room_url": self.room_url,
+                "event_type": self.event_type,
+                "timestamp": self.timestamp.isoformat(),
+                "read": self.read
+            }
         return {
             "id": self.id,
             "room_url": self.room_url,
@@ -331,7 +361,7 @@ class MessageAttachment(db.Model):
     path = db.Column(db.String(500), nullable=False)
     mime_type = db.Column(db.String(100), nullable=False)
     size = db.Column(db.Integer, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     
     user = db.relationship("User")
@@ -353,20 +383,29 @@ class MessageAttachment(db.Model):
 class ChatMessage(db.Model):
     __tablename__ = "chat_messages"
     id = db.Column(db.Integer, primary_key=True)
-    sender_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
-    receiver_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    receiver_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     message = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     read = db.Column(db.Boolean, default=False, index=True)
     is_system = db.Column(db.Boolean, default=False)
     details = db.Column(db.JSON)
-    attachment_id = db.Column(db.Integer, db.ForeignKey('message_attachments.id'), nullable=True)
+    attachment_id = db.Column(db.Integer, db.ForeignKey('message_attachments.id', ondelete='SET NULL'), nullable=True)
 
     sender = db.relationship("User", foreign_keys=[sender_id])
     receiver = db.relationship("User", foreign_keys=[receiver_id])
     attachment = db.relationship("MessageAttachment", foreign_keys=[attachment_id])
 
-    def serialize(self):
+    def serialize(self, minimal=False):
+        if minimal:
+            return {
+                "id": self.id,
+                "sender_id": self.sender_id,
+                "receiver_id": self.receiver_id,
+                "message": self.message,
+                "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+                "read": self.read
+            }
         result = {
             "id": self.id,
             "sender_id": self.sender_id,

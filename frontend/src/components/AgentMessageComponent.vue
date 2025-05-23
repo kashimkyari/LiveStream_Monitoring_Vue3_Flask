@@ -1612,7 +1612,6 @@ export default {
   overflow: hidden;
   box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
   position: relative;
-  margin-left: 60px;
 }
 
 /* User panel (sidebar) */

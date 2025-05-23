@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, session, make_response, current_app
-from extensions import db
+from extensions import db, redis_service
 from models import User, PasswordReset
 from utils import login_required
 from utils.enhanced_email import email_service, send_welcome_email, send_password_reset_email, generate_six_digit_token
@@ -57,6 +57,21 @@ def login():
             user.last_active = datetime.utcnow()
             db.session.commit()
             
+            # Cache user session data in Redis
+            if current_app.config.get('REDIS_ENABLED') and redis_service.is_available():
+                session_data = {
+                    "id": user.id,
+                    "username": user.username,
+                    "role": user.role,
+                    "telegram_username": user.telegram_username,
+                    "telegram_chat_id": user.telegram_chat_id
+                }
+                redis_service.set_user_session(
+                    user.id,
+                    session_data,
+                    expire=current_app.config.get('SESSION_CACHE_TIMEOUT', 86400)
+                )
+            
             response = jsonify({
                 "message": "Login successful",
                 "role": user.role,
@@ -110,6 +125,13 @@ def login():
 @auth_bp.route("/api/logout", methods=["POST"])
 def logout():
     current_app.logger.info(f"Logout attempt from: {request.remote_addr}, Session: {dict(session)}")
+    
+    # Clear cached user session from Redis
+    user_id = session.get("user_id")
+    if user_id and current_app.config.get('REDIS_ENABLED') and redis_service.is_available():
+        redis_service.clear_user_session(user_id)
+    
+    # Clear Flask session and cookies
     session.clear()
     response = jsonify({"message": "Logged out successfully"})
     session_cookie_name = current_app.config.get('SESSION_COOKIE_NAME', 'session')
@@ -158,8 +180,6 @@ def check_session():
         logging.error(f"Session check error: {str(e)}")
         db.session.rollback()
         return jsonify({"isLoggedIn": False, "message": "Server error"}), 500
-
-        
 
 # --------------------------------------------------------------------
 # Registration and Account Management Endpoints
@@ -434,7 +454,7 @@ def reset_password():
                                 </tr>
                                 <tr>
                                     <td class="footer" style="padding: 15px; background-color: #f5f5f5; text-align: center; font-size: 12px; color: #666666;">
-                                        <p style="margin: 0;">© {current_year} JetCam Studio. All rights reserved.</p>
+                                        <p style="margin: 0;">Â© {current_year} JetCam Studio. All rights reserved.</p>
                                         <p style="margin: 5px 0 0;">This is an automated message. Please do not reply.</p>
                                     </td>
                                 </tr>
@@ -539,7 +559,7 @@ def change_password():
                                 </tr>
                                 <tr>
                                     <td class="footer" style="padding: 15px; background-color: #f5f5f5; text-align: center; font-size: 12px; color: #666666;">
-                                        <p style="margin: 0;">© {current_year} JetCam Studio. All rights reserved.</p>
+                                        <p style="margin: 0;">Â© {current_year} JetCam Studio. All rights reserved.</p>
                                         <p style="margin: 5px 0 0;">This is an automated message. Please do not reply.</p>
                                     </td>
                                 </tr>
@@ -601,9 +621,7 @@ def update_profile():
         current_app.logger.error(f"Profile update error: {str(e)}")
         return jsonify({"message": "An error occurred updating your profile"}), 500
 
-# backend/routes/auth_routes.py
 @auth_bp.route('/api/user/telegram', methods=['GET'])
-
 def get_telegram_details():
     user = db.session.get(User, session["user_id"])
     if not user:
@@ -615,7 +633,6 @@ def get_telegram_details():
     }), 200
 
 @auth_bp.route('/api/user/telegram', methods=['POST'])
-
 def update_telegram_details():
     data = request.get_json()
     telegram_username = data.get('telegram_username', '').strip() if data.get('telegram_username') else None
@@ -629,7 +646,6 @@ def update_telegram_details():
     if telegram_username:
         if not telegram_username.startswith('@'):
             return jsonify({"message": "Telegram username must start with @"}), 400
-        # Check for uniqueness (excluding current user)
         if User.query.filter(User.telegram_username == telegram_username, User.id != user.id).first():
             return jsonify({"message": "Telegram username already taken"}), 400
         user.telegram_username = telegram_username

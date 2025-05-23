@@ -443,7 +443,7 @@ export default {
   flex-wrap: wrap;
   width: auto;
   padding-right: 20px;
-  margin-left: 60px;
+  
 }
 
 .tab-header {

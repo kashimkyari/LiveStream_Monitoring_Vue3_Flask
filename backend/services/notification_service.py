@@ -30,8 +30,8 @@ class NotificationService:
     scheduler = None
     notification_cache = {}
     notification_cache_lock = threading.Lock()
-    NOTIFICATION_DEBOUNCE = int(os.getenv('NOTIFICATION_DEBOUNCE', 600))  # 10 minutes
-    STREAM_STATUS_DEBOUNCE = int(os.getenv('STREAM_STATUS_DEBOUNCE', 7200))  # 2 hours
+    NOTIFICATION_DEBOUNCE = int(os.getenv('NOTIFICATION_DEBOUNCE', 300))  # 10 minutes
+    STREAM_STATUS_DEBOUNCE = int(os.getenv('STREAM_STATUS_DEBOUNCE', 1800))  # 2 hours
     stream_status_cache = {}
     status_aggregation_cache = {}
 
@@ -232,7 +232,7 @@ class NotificationService:
         assigned_agent = NotificationService.fetch_agent_username(agent_id) if agent_id else details.get('assigned_agent', 'Unassigned')
 
         message = (
-            f"🚨 New {event_type.replace('_', ' ').title()}\n"
+            f"🚨 ALERT: {event_type.replace('_', ' ').title()}\n"
             f"Platform: {platform or 'Unknown'}\n"
             f"Streamer: {streamer or 'Unknown'}\n"
             f"Assigned Agent: {assigned_agent}\n"
@@ -349,7 +349,7 @@ class NotificationService:
             assigned_agent = NotificationService.fetch_agent_username(agent_id) if agent_id else details.get('assigned_agent', 'Unassigned')
 
             msg = MIMEText(
-                f"New {event_type.replace('_', ' ').title()} Alert\n"
+                f"ALERT: {event_type.replace('_', ' ').title()} Alert\n"
                 f"Platform: {platform or 'Unknown'}\n"
                 f"Streamer: {streamer or 'Unknown'}\n"
                 f"Assigned Agent: {assigned_agent}\n"

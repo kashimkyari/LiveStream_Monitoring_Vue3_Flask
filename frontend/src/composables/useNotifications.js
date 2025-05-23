@@ -6,7 +6,7 @@ import axios from 'axios';
  * @param {string} apiUrl - The API URL to fetch notifications from
  * @returns {Object} - Notification related data and methods
  */
-export function useNotifications(apiUrl = '/api/notifications') {
+export function useNotifications(apiUrl = 'https://monitor-backend.jetcamstudio.com:5000/api/notifications') {
   const notifications = ref([]);
   const loading = ref(false);
   const error = ref(null);

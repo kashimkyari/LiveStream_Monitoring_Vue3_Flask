@@ -416,7 +416,6 @@ export default {
 .dashboard-tab {
   width: auto;
   padding-right: 20px;
-  margin-left: 60px;
 }
 
 .dashboard-header h2 {

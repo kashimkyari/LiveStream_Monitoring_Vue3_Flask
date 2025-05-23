@@ -49,3 +49,11 @@ free-proxy
 
 # Messaging and Notifications
 python-telegram-bot
+
+
+redis
+hiredis
+Flask-Session
+
+# Optional: For Redis monitoring and management
+redis-py-cluster

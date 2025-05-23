@@ -676,7 +676,7 @@ export default {
   padding-top: 1.5rem;
   width: auto;
   padding-right: 20px;
-  margin-left: 60px;
+  
 }
 
 .tab-header {

@@ -1,4 +1,3 @@
-// src/composables/useDashboardData.js
 import { ref } from 'vue'
 import axios from 'axios'
 
@@ -21,12 +20,41 @@ export function useDashboardData(router, toast) {
   const agents = ref([])
   const detections = ref({})
   
+  // Cache settings
+  const CACHE_KEY = 'dashboardData'
+  const CACHE_TIMEOUT = 5 * 60 * 1000 // 5 minutes in milliseconds
+
   // Methods
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (forceRefresh = false) => {
     try {
       loading.value = true
       hasError.value = false
-      
+
+      // Check LocalStorage for cached data
+      if (!forceRefresh) {
+        const cachedData = localStorage.getItem(CACHE_KEY)
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData)
+          const now = Date.now()
+          if (parsedData.timestamp && (now - parsedData.timestamp < CACHE_TIMEOUT)) {
+            // Use cached data
+            user.value = parsedData.user || {}
+            dashboardStats.value = parsedData.dashboardStats || {
+              ongoing_streams: 0,
+              total_detections: 0,
+              active_agents: 0
+            }
+            streams.value = parsedData.streams || []
+            allStreams.value = parsedData.allStreams || []
+            agents.value = parsedData.agents || []
+            detections.value = parsedData.detections || {}
+            loading.value = false
+            return
+          }
+        }
+      }
+
+      // Fetch fresh data
       const userResponse = await axios.get('/api/session')
       if (userResponse.data.isLoggedIn) {
         user.value = userResponse.data.user
@@ -56,8 +84,20 @@ export function useDashboardData(router, toast) {
       // Process detection data without relying on notifications
       // You might need to adapt this method to get detection data 
       // from a different API endpoint
-      
       detections.value = groupedDetections
+
+      // Cache the data in LocalStorage
+      const cacheData = {
+        timestamp: Date.now(),
+        user: user.value,
+        dashboardStats: dashboardStats.value,
+        streams: streams.value,
+        allStreams: allStreams.value,
+        agents: agents.value,
+        detections: detections.value
+      }
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
+
       loading.value = false
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error)
@@ -133,6 +173,18 @@ export function useDashboardData(router, toast) {
         
         streams.value = streams.value.map(updateFn)
         allStreams.value = allStreams.value.map(updateFn)
+        
+        // Update cache
+        const cacheData = {
+          timestamp: Date.now(),
+          user: user.value,
+          dashboardStats: dashboardStats.value,
+          streams: streams.value,
+          allStreams: allStreams.value,
+          agents: agents.value,
+          detections: detections.value
+        }
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
         
         toast.success('Stream refreshed successfully!')
       } else {

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 db = SQLAlchemy()
 migrate = Migrate()
-socketio = SocketIO(async_mode='eventlet')  # Use eventlet for async
+socketio = SocketIO(async_mode='gevent')  # Use gevent for async
 
 # Configure executors with larger pool size and proper shutdown
 executors = {
@@ -29,6 +29,14 @@ scheduler = BackgroundScheduler(
     }
 )
 
+# Import Redis service
+try:
+    from redis_service import redis_service
+    logger.info("Redis service imported successfully")
+except ImportError as e:
+    logger.warning(f"Redis service not available: {e}")
+    redis_service = None
+
 def init_extensions(app):
     try:
         logger.info("Initializing SQLAlchemy")
@@ -38,6 +46,16 @@ def init_extensions(app):
         logger.info("Initializing Flask-SocketIO")
         socketio.init_app(app)
         logger.info("Flask-SocketIO initialized successfully")
+        
+        # Initialize Redis if available
+        if redis_service:
+            logger.info("Initializing Redis service")
+            redis_service.init_app(app)
+            if redis_service.is_available():
+                logger.info("Redis service initialized successfully")
+            else:
+                logger.warning("Redis service unavailable - continuing without caching")
+        
     except Exception as e:
         logger.error(f"Error initializing extensions: {str(e)}")
         raise

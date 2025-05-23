@@ -2,7 +2,7 @@ import os
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
-from extensions import db, socketio
+from extensions import db, socketio, redis_service
 from services.notification_service import NotificationService
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
@@ -52,22 +52,34 @@ class Config:
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 10,
-        'pool_recycle': 180,
-        'pool_pre_ping': False,
-        'max_overflow': 20,
+        'pool_size': 20,  # Increased for better concurrency
+        'pool_recycle': 300,  # Extended to avoid frequent reconnections
+        'pool_pre_ping': True,  # Enabled to ensure connection health
+        'max_overflow': 10,  # Reduced to prevent resource exhaustion
         'pool_use_lifo': True,
-        'pool_timeout': 30,
+        'pool_timeout': 20,  # Reduced for faster failure detection
         'connect_args': {
             'keepalives': 1,
-            'keepalives_idle': 20,
-            'keepalives_interval': 5,
+            'keepalives_idle': 30,
+            'keepalives_interval': 10,
             'keepalives_count': 5,
-            'connect_timeout': 10,
+            'connect_timeout': 5,  # Reduced for faster connection attempts
             'application_name': 'jetcamstudio_app'
         },
         'pool_logging_name': 'jetcamstudio_pool',
     }
+
+    # ─── Redis Configuration ─────────────────────────────────────────────
+    REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+    REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
+    REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', None)
+    REDIS_DB = int(os.getenv('REDIS_DB', 0))
+    
+    # Redis Cache Settings
+    CACHE_DEFAULT_TIMEOUT = int(os.getenv('CACHE_DEFAULT_TIMEOUT', 1800))  # 30 minutes
+    STREAM_STATUS_CACHE_TIMEOUT = int(os.getenv('STREAM_STATUS_CACHE_TIMEOUT', 300))
+    DASHBOARD_STATS_CACHE_TIMEOUT = int(os.getenv('DASHBOARD_STATS_CACHE_TIMEOUT', 300))
+    SESSION_CACHE_TIMEOUT = int(os.getenv('SESSION_CACHE_TIMEOUT', 86400))
 
     # ─── CORS ────────────────────────────────────────────────────────────
     CORS_SUPPORTS_CREDENTIALS = True
@@ -131,7 +143,6 @@ def create_app(config_class=Config, blueprint=None):
     app.config['MONITOR_RETRY_ATTEMPTS'] = int(os.getenv('MONITOR_RETRY_ATTEMPTS', 3))
     app.config['MONITOR_RETRY_DELAY'] = int(os.getenv('MONITOR_RETRY_DELAY', 5))
  
-
     try:
         os.makedirs(app.instance_path, exist_ok=True)
     except OSError as e:
@@ -144,7 +155,17 @@ def create_app(config_class=Config, blueprint=None):
     db.init_app(app)
     socketio.init_app(app, cors_allowed_origins=config_class.CORS_ORIGINS, async_mode='gevent')
     
-    # Configure CORS
+    if redis_service:
+        redis_service.init_app(app)
+        if redis_service.is_available():
+            logger.info("Redis caching enabled")
+            app.config['REDIS_ENABLED'] = True
+        else:
+            logger.warning("Redis unavailable - running without caching")
+            app.config['REDIS_ENABLED'] = False
+    else:
+        app.config['REDIS_ENABLED'] = False
+    
     CORS(
         app,
         supports_credentials=config_class.CORS_SUPPORTS_CREDENTIALS,
@@ -152,19 +173,17 @@ def create_app(config_class=Config, blueprint=None):
         resources={r"/api/*": {}, r"/socket.io/*": {}}
     )
 
-    # Set statement_timeout for each connection
     @event.listens_for(Engine, "connect")
     def set_statement_timeout(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         try:
-            cursor.execute("SET statement_timeout = %s", [5000])
+            cursor.execute("SET statement_timeout = %s", [3000])  # Reduced to 3 seconds
             cursor.close()
             dbapi_connection.commit()
         except Exception as e:
             logger.error(f"Failed to set statement_timeout: {e}")
             cursor.close()
 
-    # Initialize Notification Service
     with app.app_context():
         try:
             NotificationService.init(app)
@@ -174,11 +193,8 @@ def create_app(config_class=Config, blueprint=None):
             logger.error(f"Notification service init failed: {e}")
             raise
 
-    # Register blueprint if provided (e.g., for monitor_app)
     if blueprint:
         app.register_blueprint(blueprint)
-
-    # Register main app blueprints
     else:
         from routes.auth_routes import auth_bp
         from routes.agent_routes import agent_bp
@@ -197,7 +213,6 @@ def create_app(config_class=Config, blueprint=None):
         ):
             app.register_blueprint(bp)
 
-    # Error Handlers
     @app.errorhandler(404)
     def not_found(err):
         return {"error": "Not Found"}, 404
