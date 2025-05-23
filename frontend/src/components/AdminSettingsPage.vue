@@ -219,7 +219,7 @@
                 <select v-model="deleteAssignmentId" required :disabled="isRemovingAssignment" aria-label="Select an assignment to remove">
                   <option value="" disabled>Select an Assignment</option>
                   <option v-for="assignment in assignments" :key="assignment.id" :value="assignment.id">
-                    {{ assignment.agent.username }} - {{ assignment.stream_url }}
+                    {{ assignment.agent_id }} - {{ assignment.stream_id }}
                   </option>
                 </select>
                 <button type="submit" class="btn-danger" :disabled="isRemovingAssignment">

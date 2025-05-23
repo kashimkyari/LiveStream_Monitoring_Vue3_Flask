@@ -59,7 +59,6 @@ import { computed, ref, onMounted, onUnmounted, nextTick, inject } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import anime from 'animejs/lib/anime.es.js'
-import axios from 'axios'
 import { 
   faTachometerAlt, 
   faVideo, 
@@ -135,7 +134,6 @@ export default {
     const settingsToggleRef = ref(null)
     const settingsPopupRef = ref(null)
     const showSettings = ref(false)
-    const modalsRef = ref(null)
     const footerRef = ref(null)
     const headerRef = ref(null)
     const mobileNavRef = ref(null)
@@ -149,22 +147,12 @@ export default {
       audioDetection: false
     })
     
-    // New refs for hamburger menu
-    const hamburgerButtonRef = ref(null)
-    const hamburgerPopupRef = ref(null)
-    const showHamburgerMenu = ref(false)
-    const refreshButtonRef = ref(null)
+
     
     // Refs for logout animation
     const showLogoutOverlay = ref(false)
-    const logoutOverlayRef = ref(null)
-    const logoutSpinnerRef = ref(null)
     const spinnerCircleRef = ref(null)
     
-    // Refs for modal buttons
-    const keywordButtonRef = ref(null)
-    const objectButtonRef = ref(null)
-    const telegramButtonRef = ref(null)
     
     // Toast notification
     const toastRef = ref(null)
@@ -173,10 +161,7 @@ export default {
     const toastType = ref('success')
     const toastTimeout = ref(null)
     
-    // Data for settings
-    const chatKeywords = ref([])
-    const flaggedObjects = ref([])
-    const telegramRecipients = ref([])
+ 
 
     // Agent tabs
     const agentTabs = computed(() => [
@@ -213,9 +198,7 @@ export default {
       isMobile.value = windowWidth.value <= 768
       
       // Close hamburger menu when switching to desktop
-      if (!isMobile.value && showHamburgerMenu.value) {
-        showHamburgerMenu.value = false
-      }
+      
     }
 
     const changeTab = (tabId, event) => {
@@ -231,193 +214,11 @@ export default {
       }, 150)
     }
 
-    const toggleSettings = () => {
-      // Close hamburger menu if it's open
-      if (showHamburgerMenu.value) {
-        toggleHamburgerMenu()
-      }
-      
-      showSettings.value = !showSettings.value
-      
-      if (showSettings.value) {
-        // Position the popup relative to the gear icon
-        nextTick(() => {
-          if (settingsToggleRef.value && settingsPopupRef.value) {
-            const toggleRect = settingsToggleRef.value.getBoundingClientRect()
-            
-            if (isMobile.value) {
-              // For mobile, position above the bottom navigation
-              settingsPopupRef.value.style.bottom = '70px'
-              settingsPopupRef.value.style.left = '16px'
-              settingsPopupRef.value.style.right = '16px'
-            } else {
-              const sidebarRect = sidebarRef.value.getBoundingClientRect()
-              
-              // Position to the right of the sidebar
-              settingsPopupRef.value.style.left = `${sidebarRect.width + 10}px`
-              // Align with gear icon vertically
-              settingsPopupRef.value.style.bottom = `${window.innerHeight - toggleRect.bottom}px`
-            }
-            
-            // Animate popup entrance
-            anime({
-              targets: settingsPopupRef.value,
-              translateX: ['-20px', '0px'],
-              opacity: [0, 1],
-              duration: 300,
-              easing: 'easeOutCubic'
-            })
-          }
-        })
-        
-        anime({
-          targets: settingsToggleRef.value,
-          rotate: '+=90',
-          duration: 400,
-          easing: 'easeInOutQuad'
-        })
-      } else {
-        // Animate popup exit
-        if (settingsPopupRef.value) {
-          anime({
-            targets: settingsPopupRef.value,
-            translateX: ['0px', '-20px'],
-            opacity: [1, 0],
-            duration: 250,
-            easing: 'easeInQuad',
-            complete: () => {
-              // Reset styles after animation completes
-              if (settingsPopupRef.value) {
-                settingsPopupRef.value.style.transform = ''
-              }
-            }
-          })
-        }
-        
-        anime({
-          targets: settingsToggleRef.value,
-          rotate: '-=90',
-          duration: 400,
-          easing: 'easeInOutQuad'
-        })
-      }
-    }
-    
-    // Removed custom gear icon animation as we're now using font-awesome icon
+ 
 
-    // New methods for hamburger menu
-    const toggleHamburgerMenu = () => {
-      // Close settings popup if it's open
-      if (showSettings.value) {
-        toggleSettings()
-      }
-      
-      showHamburgerMenu.value = !showHamburgerMenu.value
-      
-      if (showHamburgerMenu.value) {
-        // Position hamburger popup relative to button
-        nextTick(() => {
-          if (hamburgerButtonRef.value && hamburgerPopupRef.value) {
-            // Animate entrance
-            anime({
-              targets: hamburgerPopupRef.value,
-              translateY: ['20px', '0px'],
-              opacity: [0, 1],
-              duration: 300,
-              easing: 'easeOutCubic'
-            })
-            
-            // Animate hamburger button
-            anime({
-              targets: hamburgerButtonRef.value,
-              rotate: '90deg',
-              scale: [1, 1.1, 1],
-              duration: 500,
-              easing: 'easeOutElastic(1, 0.5)'
-            })
-          }
-        })
-      } else {
-        // Animate exit
-        if (hamburgerPopupRef.value) {
-          anime({
-            targets: hamburgerPopupRef.value,
-            translateY: ['0px', '20px'],
-            opacity: [1, 0],
-            duration: 250,
-            easing: 'easeInQuad'
-          })
-          
-          // Animate hamburger button
-          anime({
-            targets: hamburgerButtonRef.value,
-            rotate: '0deg',
-            scale: [1, 0.9, 1],
-            duration: 500,
-            easing: 'easeOutElastic(1, 0.5)'
-          })
-        }
-      }
-    }
-    
-    // Changed tab from menu
-    const changeTabFromMenu = (tabId) => {
-      emit('tab-change', tabId)
-      toggleHamburgerMenu()
-    }
-    
-    // Refresh dashboard from menu
-    const refreshDashboard = () => {
-      emit('refresh')
-      toggleHamburgerMenu()
-      
-      // Show toast feedback
-      showToastNotification('Refreshing dashboard...', 'info')
-    }
     
     // Show toast notification
-    const showToastNotification = (message, type = 'success') => {
-      // Clear any existing timeout
-      if (toastTimeout.value) {
-        clearTimeout(toastTimeout.value)
-      }
-      
-      // Set toast properties
-      toastMessage.value = message
-      toastType.value = type
-      showToast.value = true
-      
-      // Animate toast entrance
-      nextTick(() => {
-        if (toastRef.value) {
-          anime({
-            targets: toastRef.value,
-            translateY: ['20px', '0px'],
-            opacity: [0, 1],
-            duration: 300,
-            easing: 'easeOutQuad'
-          })
-        }
-      })
-      
-      // Auto-hide after delay
-      toastTimeout.value = setTimeout(() => {
-        if (toastRef.value) {
-          anime({
-            targets: toastRef.value,
-            translateY: ['0px', '20px'],
-            opacity: [1, 0],
-            duration: 300,
-            easing: 'easeInQuad',
-            complete: () => {
-              showToast.value = false
-            }
-          })
-        } else {
-          showToast.value = false
-        }
-      }, 3000)
-    }
+  
     
     // Compute toast icon based on type
     const toastIcon = computed(() => {
@@ -435,140 +236,11 @@ export default {
       }
     })
     
-    // Modal methods
-    const openAddKeywordModal = () => {
-      if (modalsRef.value) {
-        modalsRef.value.openKeywordModal()
-      }
-      toggleSettings()
-    }
+ 
     
-    const openAddObjectModal = () => {
-      if (modalsRef.value) {
-        modalsRef.value.openObjectModal()
-      }
-      toggleSettings()
-    }
-    
-    const openAddTelegramModal = () => {
-      if (modalsRef.value) {
-        modalsRef.value.openTelegramModal()
-      }
-      toggleSettings()
-    }
-    
-    // Mobile modal methods
-    const openHamburgerKeywordModal = () => {
-      if (modalsRef.value) {
-        modalsRef.value.openKeywordModal()
-      }
-      toggleHamburgerMenu()
-    }
-    
-    const openHamburgerObjectModal = () => {
-      if (modalsRef.value) {
-        modalsRef.value.openObjectModal()
-      }
-      toggleHamburgerMenu()
-    }
-    
-    const openHamburgerTelegramModal = () => {
-      if (modalsRef.value) {
-        modalsRef.value.openTelegramModal()
-      }
-      toggleHamburgerMenu()
-    }
 
-    // Logout with animation and redirect to App.vue
-    const logout = async () => {
-      showLogoutOverlay.value = true
-      
-      // Animate logout spinner
-      nextTick(() => {
-        if (logoutSpinnerRef.value) {
-          anime({
-            targets: logoutSpinnerRef.value,
-            opacity: [0, 1],
-            scale: [0.8, 1],
-            duration: 600,
-            easing: 'easeOutQuad'
-          })
-          
-          // Animate spinner rotation
-          anime({
-            targets: spinnerCircleRef.value,
-            strokeDashoffset: [anime.setDashoffset, 0],
-            duration: 1500,
-            easing: 'easeInOutSine',
-            loop: true
-          })
-        }
-      })
-      
-      try {
-        // Call the logout API endpoint
-        await axios.post('/api/logout')
-        console.log('Logout successful')
-      } catch (error) {
-        console.error('Logout API call failed:', error)
-        // Continue with local logout even if API call fails
-      }
-      
-      // Clear local storage and reset state
-      localStorage.removeItem('userRole')
-      
-      // Delay before redirecting to allow animation to complete
-      setTimeout(() => {
-        // Emit logout event for parent components
-        emit('logout')
-        
-        // Refresh the page to return to App.vue login screen
-        window.location.href = '/'
-      }, 1200)
-    }
+
     
-    // Save agent settings
-    const saveSettings = () => {
-      // In a real implementation, you would send these settings to the server
-      // For now, we'll just show a success notification
-      
-      // Close settings popup
-      toggleSettings()
-      
-      // Show success notification
-      showToastNotification('Settings saved successfully', 'success')
-    }
-    
-    // Fetch settings data
-    const fetchKeywords = async () => {
-      try {
-        const response = await axios.get('/api/agent/keywords')
-        chatKeywords.value = response.data || []
-      } catch (error) {
-        console.error('Error fetching keywords:', error)
-        showToastNotification('Failed to fetch keywords', 'error')
-      }
-    }
-    
-    const fetchObjects = async () => {
-      try {
-        const response = await axios.get('/api/agent/objects')
-        flaggedObjects.value = response.data || []
-      } catch (error) {
-        console.error('Error fetching objects:', error)
-        showToastNotification('Failed to fetch objects', 'error')
-      }
-    }
-    
-    const fetchTelegramRecipients = async () => {
-      try {
-        const response = await axios.get('/api/agent/telegram_recipients')
-        telegramRecipients.value = response.data || []
-      } catch (error) {
-        console.error('Error fetching telegram recipients:', error)
-        showToastNotification('Failed to fetch telegram recipients', 'error')
-      }
-    }
 
     // Animate sidebar elements on mount
     const animateSidebar = () => {
@@ -649,10 +321,7 @@ export default {
         updateActiveTab()
       })
       
-      // Fetch initial data
-      fetchKeywords()
-      fetchObjects()
-      fetchTelegramRecipients()
+ 
       
       // Setup occasional settings icon rotation animation
       setInterval(() => {
@@ -688,45 +357,21 @@ export default {
       settingsToggleRef,
       settingsPopupRef,
       showSettings,
-      modalsRef,
+      
       footerRef,
       headerRef,
-      mobileNavRef,
-      hamburgerButtonRef,
-      hamburgerPopupRef,
-      showHamburgerMenu,
-      refreshButtonRef,
-      showLogoutOverlay,
-      logoutOverlayRef,
-      logoutSpinnerRef,
+      mobileNavRef,      showLogoutOverlay,
+      
       spinnerCircleRef,
-      keywordButtonRef,
-      objectButtonRef,
-      telegramButtonRef,
       toastRef,
       showToast,
       toastMessage,
       toastType,
       toastIcon,
-      chatKeywords,
-      flaggedObjects,
-      telegramRecipients,
+      
       agentTabs,
       agentSettings,
       changeTab,
-      toggleSettings,
-      toggleHamburgerMenu,
-      changeTabFromMenu,
-      refreshDashboard,
-      showToastNotification,
-      openAddKeywordModal,
-      openAddObjectModal,
-      openAddTelegramModal,
-      openHamburgerKeywordModal,
-      openHamburgerObjectModal,
-      openHamburgerTelegramModal,
-      logout,
-      saveSettings
     }
   }
 }

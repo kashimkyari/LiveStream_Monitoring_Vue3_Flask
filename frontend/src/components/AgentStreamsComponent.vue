@@ -15,6 +15,15 @@
       />
     </div>
 
+    <!-- Skeleton for Stats Section -->
+    <div v-if="localIsLoading" class="stats-section skeleton">
+      <div v-for="n in 3" :key="'stat-skeleton-' + n" class="skeleton-stat-card">
+        <div class="skeleton-icon"></div>
+        <div class="skeleton-text skeleton-value"></div>
+        <div class="skeleton-text skeleton-label"></div>
+      </div>
+    </div>
+
     <!-- Search and Controls -->
     <div class="controls-section">
       <div class="search-box">
@@ -37,6 +46,17 @@
       </div>
     </div>
 
+    <!-- Skeleton for Controls Section -->
+    <div v-if="localIsLoading" class="controls-section skeleton">
+      <div class="search-box skeleton">
+        <div class="search-icon skeleton-icon"></div>
+        <div class="search-input skeleton-input"></div>
+      </div>
+      <div class="view-controls" style="display: flex; gap: 1rem;">
+        <div class="view-toggle-btn refresh-btn skeleton-button"></div>
+      </div>
+    </div>
+
     <!-- Refresh Feedback -->
     <div v-if="refreshMessages.length" class="refresh-messages">
       <div 
@@ -48,20 +68,15 @@
       </div>
     </div>
 
-    <!-- Stream sections -->
+    <!-- Streams section -->
     <div class="streams-section">
-      <!-- Online Streams -->
-      <div class="section-header" @click="toggleLiveCollapse">
-        <h3>Online Streams ({{ liveStreams.length }})</h3>
-        <font-awesome-icon :icon="isLiveCollapsed ? 'chevron-down' : 'chevron-up'" />
-      </div>
-      <div v-show="!isLiveCollapsed" :class="['stream-container', viewMode]">
+      <div class="stream-container" :class="viewMode">
         <StreamCard 
-          v-for="stream in filteredLiveStreams" 
+          v-for="stream in filteredStreams" 
           :key="stream.id"
           :stream="enhanceStreamWithUsername(stream)" 
           :detectionCount="getDetectionCount(stream)"
-          :totalStreams="liveStreams.length"
+          :totalStreams="localStreams.length"
           :agentUsername="stream.agent?.username"
           @click="openStreamDetails(stream)"
           @detection-toggled="handleDetectionToggled"
@@ -69,25 +84,18 @@
         />
       </div>
       
-      <!-- Offline Streams -->
-      <div class="section-header offline-section" @click="toggleOfflineCollapse">
-        <h3>Offline Streams ({{ offlineStreams.length }})</h3>
-        <font-awesome-icon :icon="isOfflineCollapsed ? 'chevron-down' : 'chevron-up'" />
+      <!-- Skeleton for Streams Section -->
+      <div v-if="localIsLoading" class="stream-container grid skeleton">
+        <div v-for="n in 3" :key="'stream-skeleton-' + n" class="skeleton-stream-card">
+          <div class="skeleton-stream-image"></div>
+          <div class="skeleton-stream-content">
+            <div class="skeleton-text skeleton-stream-title"></div>
+            <div class="skeleton-text skeleton-stream-info"></div>
+            <div class="skeleton-text skeleton-stream-info"></div>
+          </div>
+        </div>
       </div>
-      <div v-show="!isOfflineCollapsed" :class="['stream-container', viewMode]">
-        <StreamCard 
-          v-for="stream in filteredOfflineStreams" 
-          :key="stream.id"
-          :stream="enhanceStreamWithUsername(stream)" 
-          :detectionCount="getDetectionCount(stream)"
-          :totalStreams="offlineStreams.length"
-          :agentUsername="stream.agent?.username"
-          @click="openStreamDetails(stream)"
-          @detection-toggled="handleDetectionToggled"
-          @status-change="handleStreamStatusChange"
-        />
-      </div>
-      
+
       <!-- Empty State -->
       <div class="empty-state" v-if="localStreams.length === 0 && !localIsLoading">
         <font-awesome-icon icon="video-slash" class="empty-icon" />
@@ -97,7 +105,7 @@
     </div>
 
     <!-- Loading State -->
-    <div class="loading-overlay" v-if="localIsLoading">
+    <div class="loading-overlay" v-if="localIsLoading && !showSkeleton">
       <div class="loader-container">
         <div class="loader-circle"></div>
         <div class="loader-text">Loading streams...</div>
@@ -140,12 +148,10 @@ import {
   faExclamationTriangle,
   faSearch,
   faSyncAlt,
-  faChevronUp,
-  faChevronDown,
   faSpinner
 } from '@fortawesome/free-solid-svg-icons';
 
-library.add(faSync, faVideoSlash, faExclamationTriangle, faSearch, faSyncAlt, faChevronUp, faChevronDown, faSpinner);
+library.add(faSync, faVideoSlash, faExclamationTriangle, faSearch, faSyncAlt, faSpinner);
 
 export default {
   name: 'AgentStreamsComponent',
@@ -192,35 +198,25 @@ export default {
     const agentData = ref(null);
     const agents = ref([]);
     const searchQuery = ref('');
-    const isLiveCollapsed = ref(false);
-    const isOfflineCollapsed = ref(true);
     const notifications = ref([]);
     const refreshing = ref(false);
     const refreshMessages = ref([]);
+    const showSkeleton = ref(true); // Control skeleton visibility
 
     // Computed properties
-    const liveStreams = computed(() => {
-      return localStreams.value.filter(stream => isStreamLive(stream));
-    });
-    
-    const offlineStreams = computed(() => {
-      return localStreams.value.filter(stream => !isStreamLive(stream));
-    });
-
-    const filteredLiveStreams = computed(() => 
-      liveStreams.value.filter(s => 
+    const filteredStreams = computed(() => {
+      const filtered = localStreams.value.filter(s => 
         s.streamer_username.toLowerCase().includes(searchQuery.value.toLowerCase())
-      )
-    );
-
-    const filteredOfflineStreams = computed(() => 
-      offlineStreams.value.filter(s => 
-        s.streamer_username.toLowerCase().includes(searchQuery.value.toLowerCase())
-      )
-    );
+      );
+      return filtered.sort((a, b) => {
+        const aIsLive = isStreamLive(a);
+        const bIsLive = isStreamLive(b);
+        return (bIsLive - aIsLive) || (a.streamer_username.localeCompare(b.streamer_username));
+      });
+    });
 
     const stats = computed(() => [{
-      value: liveStreams.value.length,
+      value: localStreams.value.filter(stream => isStreamLive(stream)).length,
       label: 'Assigned Live Streams',
       icon: 'broadcast-tower'
     }, {
@@ -237,6 +233,14 @@ export default {
     }]);
 
     // Core functions
+    const isStreamLive = (stream) => {
+      if (!stream) return false;
+      const platform = stream.platform?.toLowerCase();
+      return platform === 'chaturbate' ? !!stream.chaturbate_m3u8_url :
+             platform === 'stripchat' ? !!stream.stripchat_m3u8_url :
+             false;
+    };
+
     const fetchCurrentAgent = async () => {
       try {
         const response = await axios.get('/api/session');
@@ -276,7 +280,6 @@ export default {
           }
         }
 
-        // Only fetch agents if necessary (e.g., for fallback username resolution)
         if (agents.value.length === 0) {
           await fetchAgents();
         }
@@ -296,6 +299,7 @@ export default {
         localError.value = 'Failed to load streams. Please try again.';
       } finally {
         localIsLoading.value = false;
+        showSkeleton.value = false; // Hide skeleton after loading
       }
     };
 
@@ -334,14 +338,6 @@ export default {
       }
       
       return enhanced;
-    };
-    
-    const isStreamLive = (stream) => {
-      if (!stream) return false;
-      const platform = stream.platform?.toLowerCase();
-      return platform === 'chaturbate' ? !!stream.chaturbate_m3u8_url :
-             platform === 'stripchat' ? !!stream.stripchat_m3u8_url :
-             false;
     };
     
     const openStreamDetails = (stream) => {
@@ -391,7 +387,7 @@ export default {
       refreshMessages.value = [];
 
       try {
-        for (const stream of liveStreams.value) {
+        for (const stream of localStreams.value) {
           try {
             let endpoint, payload;
             if (stream.platform === 'chaturbate') {
@@ -433,14 +429,6 @@ export default {
       }
     };
 
-    const toggleLiveCollapse = () => {
-      isLiveCollapsed.value = !isLiveCollapsed.value;
-    };
-
-    const toggleOfflineCollapse = () => {
-      isOfflineCollapsed.value = !isOfflineCollapsed.value;
-    };
-
     const handleDetectionToggled = ({ streamId, active }) => {
       const updatedStreams = localStreams.value.map(s => 
         s.id === streamId ? { ...s, isDetecting: active } : s
@@ -461,6 +449,7 @@ export default {
       props.detections[stream.room_url]?.length || 0;
 
     onMounted(async () => {
+      showSkeleton.value = true; // Show skeleton on mount
       await fetchAssignedStreams();
       await fetchNotifications();
     });
@@ -471,17 +460,12 @@ export default {
       selectedStream,
       selectedStreamDetections,
       isRefreshingStream,
-      liveStreams,
-      offlineStreams,
-      filteredLiveStreams,
-      filteredOfflineStreams,
+      filteredStreams,
       localStreams,
       localIsLoading,
       localError,
       stats,
       searchQuery,
-      isLiveCollapsed,
-      isOfflineCollapsed,
       fetchAssignedStreams,
       openStreamDetails,
       closeModal,
@@ -491,10 +475,9 @@ export default {
       handleStreamStatusChange,
       getDetectionCount,
       refreshStreams,
-      toggleLiveCollapse,
-      toggleOfflineCollapse,
       refreshing,
-      refreshMessages
+      refreshMessages,
+      showSkeleton
     };
   }
 }
@@ -520,7 +503,59 @@ export default {
   margin-bottom: 2rem;
 }
 
+.stats-section.skeleton {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.skeleton-stat-card {
+  background: var(--hover-color);
+  border-radius: 6px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100px;
+}
+
+.skeleton-icon {
+  width: 24px;
+  height: 24px;
+  background: var(--border-color);
+  border-radius: 50%;
+  margin-bottom: 0.5rem;
+  animation: pulse 1.5s infinite;
+}
+
+.skeleton-text {
+  background: var(--border-color);
+  border-radius: 4px;
+  animation: pulse 1.5s infinite;
+}
+
+.skeleton-value {
+  width: 60%;
+  height: 20px;
+  margin-bottom: 0.5rem;
+}
+
+.skeleton-label {
+  width: 80%;
+  height: 16px;
+}
+
 .controls-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+}
+
+.controls-section.skeleton {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -534,12 +569,26 @@ export default {
   max-width: 400px;
 }
 
+.search-box.skeleton {
+  position: relative;
+  flex: 1;
+  max-width: 400px;
+}
+
 .search-icon {
   position: absolute;
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
   opacity: 0.6;
+}
+
+.search-icon.skeleton-icon {
+  width: 16px;
+  height: 16px;
+  background: var(--border-color);
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
 }
 
 .search-input {
@@ -549,6 +598,14 @@ export default {
   border-radius: 6px;
   background: var(--input-bg);
   color: var(--text-color);
+}
+
+.search-input.skeleton-input {
+  width: 100%;
+  height: 36px;
+  background: var(--border-color);
+  border-radius: 6px;
+  animation: pulse 1.5s infinite;
 }
 
 .view-toggle-btn, .refresh-btn {
@@ -566,6 +623,14 @@ export default {
 .view-toggle-btn:disabled, .refresh-btn:disabled {
   background: var(--disabled-color);
   cursor: not-allowed;
+}
+
+.refresh-btn.skeleton-button {
+  width: 120px;
+  height: 36px;
+  background: var(--border-color);
+  border-radius: 6px;
+  animation: pulse 1.5s infinite;
 }
 
 .refresh-messages {
@@ -594,19 +659,6 @@ export default {
   color: var(--error-text);
 }
 
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin: 1.5rem 0 1rem;
-  cursor: pointer;
-}
-
-.section-header h3 {
-  margin: 0;
-  font-size: 1.25rem;
-}
-
 .stream-container {
   display: grid;
   gap: 1rem;
@@ -616,11 +668,49 @@ export default {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 }
 
+.stream-container.grid.skeleton {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
 .stream-container.list {
   grid-template-columns: 1fr;
   width: 100%;
   height: 20%;
   display: flex;  
+}
+
+.skeleton-stream-card {
+  background: var(--hover-color);
+  border-radius: 6px;
+  padding: 1rem;
+  display: flex;
+  gap: 1rem;
+  height: 150px;
+}
+
+.skeleton-stream-image {
+  width: 100px;
+  height: 100px;
+  background: var(--border-color);
+  border-radius: 6px;
+  animation: pulse 1.5s infinite;
+}
+
+.skeleton-stream-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.skeleton-stream-title {
+  width: 70%;
+  height: 20px;
+}
+
+.skeleton-stream-info {
+  width: 50%;
+  height: 16px;
 }
 
 .empty-state {
@@ -727,17 +817,23 @@ export default {
   background-color: var(--hover-color);
 }
 
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
 
 @media (max-width: 768px) {
-  .controls-section {
+  .controls-section, .controls-section.skeleton {
     flex-direction: column;
   }
   
-  .search-box {
+  .search-box, .search-box.skeleton {
     max-width: 100%;
   }
   
@@ -747,7 +843,7 @@ export default {
     gap: 0.5rem;
   }
   
-  .view-toggle-btn, .refresh-btn {
+  .view-toggle-btn, .refresh-btn, .skeleton-button {
     flex: 1;
     justify-content: center;
   }

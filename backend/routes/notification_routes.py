@@ -163,7 +163,7 @@ def get_all_notifications():
             "room_url": n.room_url,
             "streamer": n.details.get('streamer_name', 'Unknown'),
             "platform": n.details.get('platform', 'Unknown'),
-            "assigned_agent": agent_cache.get(n.assigned_agent, "Unassigned") if n.assigned_agent else "Unassigned"
+            
         } for n in notifications]
 
         # Cache the response
@@ -212,7 +212,6 @@ def create_notification():
             timestamp=current_time,
             details=data.get('details', {}),
             read=data.get('read', False),
-            assigned_agent=agent_id,
             assignment_id=assignment_id,
             detection_image=data.get('detection_image')
         )
@@ -231,8 +230,7 @@ def create_notification():
             "read": notification.read,
             "room_url": notification.room_url,
             "streamer": notification.details.get('streamer_name', 'Unknown'),
-            "platform": notification.details.get('platform', 'Unknown'),
-            "assigned_agent": assigned_agent_username
+            "platform": notification.details.get('platform', 'Unknown')
         }
         
         emit_notification(notification_data)

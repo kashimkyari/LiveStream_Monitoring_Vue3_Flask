@@ -1,4 +1,3 @@
-<!-- Enhanced AgentDashboard.vue -->
 <template>
   <div class="agent-container" ref="appContainer" :data-theme="isDarkTheme ? 'dark' : 'light'">
     <AgentSidebar 
@@ -6,27 +5,49 @@
       @tab-change="handleTabChange" 
       :isOnline="isOnline"
       :messageUnreadCount="stats.unreadMessages"
-      
     />
     
     <div class="main-content" :class="{ 'sidebar-minimized': sidebarMinimized }" ref="mainContent">
-      
-
       <div class="dashboard-content" ref="dashboardContent">
-        <!-- Dashboard Tab (Overview) -->
-   
-        
         <!-- Streams Tab -->
         <transition name="fade-slide" mode="out-in">
-          <AgentStreamsComponent
-            v-if="currentTab === 'streams'"
-            :streams="validatedStreams"
-            :isLoading="isLoadingStreams"
-            :error="streamErrors"
-            :lastRefreshed="lastRefresh"
-            @refresh-streams="refreshStreams"
-            @update-stream="updateStreamStatus"
-          />
+          <div v-if="currentTab === 'streams'">
+            <AgentStreamsComponent
+              v-if="dashboardReady && !isLoadingStreams"
+              :streams="validatedStreams"
+              :isLoading="isLoadingStreams"
+              :error="streamErrors"
+              :lastRefreshed="lastRefresh"
+              @refresh-streams="refreshStreams"
+              @update-stream="updateStreamStatus"
+            />
+            <!-- Skeleton Loading State -->
+            <div v-else class="skeleton-container">
+              <div class="dashboard-header skeleton-loading">
+                <h2 class="skeleton-header"></h2>
+              </div>
+              <div class="stats-section skeleton-loading">
+                <div class="skeleton-stat-card"></div>
+                <div class="skeleton-stat-card"></div>
+                <div class="skeleton-stat-card"></div>
+              </div>
+              <div class="controls-section skeleton-loading">
+                <div class="search-box">
+                  <div class="skeleton-search-input"></div>
+                </div>
+                <div class="view-controls">
+                  <div class="skeleton-refresh-btn"></div>
+                </div>
+              </div>
+              <div class="streams-section skeleton-loading">
+                <div class="stream-container grid">
+                  <div class="skeleton-stream-card"></div>
+                  <div class="skeleton-stream-card"></div>
+                  <div class="skeleton-stream-card"></div>
+                </div>
+              </div>
+            </div>
+          </div>
         </transition>
         
         <!-- Tasks Tab -->
@@ -65,17 +86,8 @@
             @update-user="fetchCurrentUser"
           />
         </transition>
-     
-     
       </div>
-      
-      
-      
-      <!-- Quick navigation menu -->
-    
     </div>
-    
-    <!-- Theme toggle button removed - now using App.vue's theme toggle -->
   </div>
 </template>
 
@@ -184,6 +196,7 @@ export default {
     const refreshInterval = ref(null)
     const showQuickNav = ref(false)
     const sidebarMinimized = ref(false)
+    const dashboardReady = ref(false) // New state to track dashboard readiness
     
     // Tooltip state
     const showTooltip = ref(false)
@@ -280,8 +293,6 @@ export default {
       }
     }
     
-    // Theme toggle function removed - using App.vue's toggle instead
-    
     // Toggle quick navigation menu
     const toggleQuickNav = () => {
       showQuickNav.value = !showQuickNav.value
@@ -368,9 +379,6 @@ export default {
     const checkMobile = () => {
       isMobile.value = window.innerWidth <= 768
     }
-    
-    // Handle sidebar toggle with animations (matches AdminDashboard approach)
-   
     
     // Handle tab change with animation
     const handleTabChange = (tab) => {
@@ -645,8 +653,6 @@ export default {
       }
       
       // Create an impressive transition effect
-      
-      // 1. First, prepare the content for exit animation
       anime({
         targets: currentTabEl,
         translateX: [0, -30],
@@ -655,10 +661,10 @@ export default {
         duration: 400,
         easing: 'easeInOutQuad',
         complete: () => {
-          // 2. Change the tab
+          // Change the tab
           handleTabChange(tab);
           
-          // 3. When the new tab is rendered, animate it in
+          // When the new tab is rendered, animate it in
           nextTick(() => {
             const newTabEl = dashboardContent.value.querySelector(':scope > *:not(.action-tooltip):not(.quick-nav-menu)');
             if (newTabEl) {
@@ -816,7 +822,7 @@ export default {
           
           // Fetch detections
           try {
-            const detectionsResponse = await axios.get(`/api/streams/${streamId}/detections`)
+            const detectionsResponse = await axios.get(`/api/detection-status/${streamId}`)
             updatedStream.detections = detectionsResponse.data || []
           } catch (detErr) {
             console.error(`Error fetching detections for stream ${streamId}:`, detErr)
@@ -868,16 +874,20 @@ export default {
       isLoadingStreams.value = true
       streamErrors.value = null
       
-      // Animate refresh button during loading
-      if (refreshButton.value) {
-        anime({
-          targets: refreshButton.value,
-          rotate: '360deg',
-          loop: true,
-          duration: 1000,
-          easing: 'linear'
-        })
-      }
+      // Animate skeleton loading
+      nextTick(() => {
+        const skeletonElements = document.querySelectorAll('.skeleton-loading');
+        if (skeletonElements.length) {
+          anime({
+            targets: skeletonElements,
+            opacity: [0.5, 1],
+            duration: 1000,
+            easing: 'easeInOutQuad',
+            loop: true,
+            direction: 'alternate'
+          });
+        }
+      });
       
       try {
         // Get all streams
@@ -904,7 +914,7 @@ export default {
         // Fetch detections for each stream
         for (const stream of validated) {
           try {
-            const detectionsResponse = await axios.get(`/api/streams/${stream.id}/detections`)
+            const detectionsResponse = await axios.get(`/api/detection-status/${stream.id}`)
             stream.detections = detectionsResponse.data || []
           } catch (detErr) {
             console.error(`Error fetching detections for stream ${stream.id}:`, detErr)
@@ -933,17 +943,8 @@ export default {
       } finally {
         isLoadingStreams.value = false
         
-        // Stop refresh button animation
-        if (refreshButton.value) {
-          anime.remove(refreshButton.value)
-          // Reset rotation
-          anime({
-            targets: refreshButton.value,
-            rotate: '0deg',
-            duration: 300,
-            easing: 'easeOutQuad'
-          })
-        }
+        // Stop skeleton animation
+        anime.remove('.skeleton-loading');
       }
     }
     
@@ -1005,8 +1006,6 @@ export default {
       }
     }
     
- 
-
     // Handle messages refresh with animation
     const handleMessagesRefresh = () => {
       // Animate refresh
@@ -1383,11 +1382,9 @@ export default {
         })
       }
       
-      // Animate sidebar entrance if visible - FIXED Bug in sidebar animation
+      // Animate sidebar entrance if visible
       if (sidebar.value && !isMobile.value) {
-        // Check if sidebar has the $el property and it has DOM elements
         if (sidebar.value.$el) {
-          // Safely query selector on the sidebar element
           const sidebarNavItems = sidebar.value.$el.querySelectorAll ? 
             sidebar.value.$el.querySelectorAll('.sidebar-nav-item') : 
             [];
@@ -1402,7 +1399,6 @@ export default {
               duration: 500
             });
           } else {
-            // If no nav items found, animate the sidebar element itself
             anime({
               targets: sidebar.value.$el,
               translateX: ['-20px', 0],
@@ -1448,8 +1444,12 @@ export default {
     }
     
     // Setup and cleanup
-    onMounted(() => {
+    onMounted(async () => {
       console.log('AgentDashboard mounted, theme:', appTheme.value);
+      
+      // Fetch critical data before rendering components
+      await fetchCurrentUser();
+      dashboardReady.value = true; // Set dashboard as ready after fetching user
       
       // Setup initial animations
       nextTick(() => {
@@ -1504,6 +1504,7 @@ export default {
       tooltipText,
       tooltipStyle,
       sidebarMinimized,
+      dashboardReady, // Expose new state
       
       // Computed
       formattedLastRefresh,
@@ -1528,7 +1529,6 @@ export default {
       
       // Methods
       handleTabChange,
-      
       navigateToTab,
       refreshDashboard,
       refreshStreams,
@@ -1597,6 +1597,7 @@ export default {
   --error-bg: rgba(239, 68, 68, 0.1);
   --active-bg: rgba(59, 130, 246, 0.2);
   --counter-bg: rgba(255, 255, 255, 0.1);
+  --skeleton-bg: rgba(255, 255, 255, 0.1);
 }
 
 .agent-container {
@@ -1614,16 +1615,75 @@ export default {
   flex: 1;
   padding: 1rem;
   height: 90%;
-
-  
 }
 
+/* Skeleton loading styles */
+.skeleton-container {
+  padding-right: 20px;
+  margin-left: 60px;
+}
 
+.skeleton-loading {
+  background: linear-gradient(90deg, var(--skeleton-bg, rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.2), var(--skeleton-bg, rgba(255, 255, 255, 0.1)));
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite linear;
+  border-radius: 6px;
+}
+
+[data-theme="dark"] .skeleton-loading {
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.1));
+  background-size: 1000px 100%;
+}
+
+.skeleton-header {
+  width: 200px;
+  height: 2rem;
+  margin: 0 0 2rem;
+}
+
+.skeleton-stat-card {
+  height: 100px;
+  border-radius: 6px;
+}
+
+.skeleton-search-input {
+  width: 100%;
+  height: 36px;
+  border-radius: 6px;
+}
+
+.skeleton-refresh-btn {
+  width: 100px;
+  height: 36px;
+  border-radius: 6px;
+}
+
+.skeleton-stream-card {
+  height: 200px;
+  border-radius: 6px;
+}
+
+.stats-section.skeleton-loading {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.controls-section.skeleton-loading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+}
+
+.stream-container.grid {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
 
 /* Dashboard header */
-
-
-
 .status-badge {
   display: flex;
   align-items: center;
@@ -1692,22 +1752,7 @@ export default {
   position: relative;
 }
 
-/* Loading and error states - match AdminDashboard */
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: auto;
-  transition: opacity 0.3s ease; /* Smooth transition for content */
-}
-
-.loading-state p {
-  margin-top: 1rem;
-  font-size: 1rem;
-  color: var(--text-color);
-}
-
+/* Error states */
 .error-state {
   max-width: 100%;
   margin: 1rem auto;
@@ -1750,15 +1795,6 @@ export default {
 
 .refresh-button:hover {
   opacity: 0.9;
-}
-
-.loading-spinner {
-  width: 3rem;
-  height: 3rem;
-  border: 0.25rem solid rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
-  border-top-color: var(--primary-color);
-  animation: spin 1s linear infinite;
 }
 
 /* Quick navigation for mobile */
@@ -2028,38 +2064,12 @@ export default {
   100% { background-color: transparent; }
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Tab transition animations - match AdminDashboard */
+/* Tab transition animations */
 .fade-enter-active, .fade-leave-active {
   transition: opacity 0.3s ease;
 }
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
-}
-
-/* Loading state animations */
-.loading-skeleton {
-  background: linear-gradient(90deg, 
-    rgba(255, 255, 255, 0.1), 
-    rgba(255, 255, 255, 0.2), 
-    rgba(255, 255, 255, 0.1)
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite linear;
-  border-radius: 4px;
-}
-
-.dark-theme .loading-skeleton {
-  background: linear-gradient(90deg, 
-    rgba(0, 0, 0, 0.1), 
-    rgba(0, 0, 0, 0.2), 
-    rgba(0, 0, 0, 0.1)
-  );
-  background-size: 1000px 100%;
 }
 
 /* Notification animation */
@@ -2082,7 +2092,7 @@ export default {
   animation: pulse 2s ease-in-out infinite;
 }
 
-/* Responsive styles - match AdminDashboard */
+/* Responsive styles */
 @media (max-width: 768px) {
   .agent-container {
     flex-direction: column;
@@ -2095,7 +2105,6 @@ export default {
     width: auto;
     height: 90%;
   }
-  
   
   .dashboard-header {
     padding: 12px 16px;
@@ -2121,7 +2130,6 @@ export default {
   .dashboard-content {
     height: 100%;
     width: auto;
-    
   }
   
   .theme-toggle {
@@ -2129,6 +2137,15 @@ export default {
     left: 16px;
     width: 36px;
     height: 36px;
+  }
+
+  .skeleton-container {
+    margin-left: 0;
+    padding-right: 16px;
+  }
+
+  .skeleton-stream-card {
+    height: 180px;
   }
 }
 </style>
