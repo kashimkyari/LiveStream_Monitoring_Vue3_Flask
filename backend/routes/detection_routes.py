@@ -21,7 +21,7 @@ def get_stream_url(stream):
     return getattr(stream, 'stream_url', getattr(stream, 'room_url', ''))
 
 # Get monitoring app URL from environment
-MONITOR_API_URL = os.getenv('MONITOR_API_URL', 'https://localhost:5001')
+MONITOR_API_URL = os.getenv('MONITOR_API_URL', 'https://monitor-backend.jetcamstudio.com:5001')
 
 @detection_bp.route("/detection-images/<filename>")
 def serve_detection_image(filename):

@@ -36,9 +36,7 @@ if __name__ == "__main__":
         logger.info(f"Starting monitoring server in {server_mode} mode with debug={'enabled' if debug_mode else 'disabled'}")
 
         with app.app_context():
-            db.create_all()
-            logger.info("Database tables initialized")
-            # Initialize monitoring for detection-related alerts only
+             # Initialize monitoring for detection-related alerts only
             initialize_monitoring()
             start_notification_monitor()
             logger.info("Started monitoring for detection-related alerts (audio, video, chat)")
