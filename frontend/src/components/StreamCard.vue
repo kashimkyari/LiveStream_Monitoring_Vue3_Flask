@@ -1,4 +1,4 @@
-<template>
+<!-- <template> -->
   <div :class="[
     'stream-card',
     { 'compact-view': isCompactView },
@@ -320,7 +320,7 @@ export default {
 
     const checkDetectionStatus = async () => {
       try {
-        const response = await axios.get(`/api/detection-status/${props.stream.id}`)
+        const response = await axios.get(`/api/monitor/detection-status/${props.stream.id}`)
         isDetecting.value = response.data.isDetecting
         isDetectionLoading.value = response.data.isDetectionLoading
         detectionError.value = response.data.detectionError
