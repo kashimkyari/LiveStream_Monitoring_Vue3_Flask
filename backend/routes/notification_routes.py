@@ -230,7 +230,7 @@ def create_notification():
             "read": notification.read,
             "room_url": notification.room_url,
             "streamer": notification.details.get('streamer_name', 'Unknown'),
-            "platform": notification.details.get('platform', 'Unknown')
+            "platform": notification.details.get('platform', 'Unknown'),
         }
         
         emit_notification(notification_data)

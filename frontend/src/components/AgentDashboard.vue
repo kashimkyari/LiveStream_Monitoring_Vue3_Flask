@@ -807,7 +807,7 @@ export default {
         if (streamIndex === -1) return
         
         // Get updated stream data
-        const response = await axios.get(`/api/streams/${streamId}`)
+        const response = await axios.get(`/api/detection-status/${streamId}`)
         if (response.data) {
           const updatedStream = response.data
           
